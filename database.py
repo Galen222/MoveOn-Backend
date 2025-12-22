@@ -7,10 +7,10 @@ Este módulo establece la conexión con PostgreSQL mediante SQLAlchemy y define
 la estructura de la tabla de usuarios.
 """
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, String, Date, DateTime, Boolean, func
+from sqlalchemy import create_engine, String, Date, DateTime, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 # Cargar variables desde el archivo .env para seguridad
@@ -37,7 +37,7 @@ class Base(DeclarativeBase):
 class Usuario(Base):
     """
     Modelo de SQLAlchemy para la tabla de usuarios.
-    
+
     Atributos:
         id: Identificador único autoincremental y clave primaria.
         nombre_usuario: Identificador único de acceso.
@@ -66,8 +66,8 @@ class Usuario(Base):
     foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
     
     # Metadatos automáticos del servidor
-    fecha_registro: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    fecha_eula: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    fecha_eula: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # Ajustes de privacidad del usuario
     perfil_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

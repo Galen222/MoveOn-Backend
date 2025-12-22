@@ -6,7 +6,7 @@ Endpoints de Usuario y Autenticación.
 Define las rutas para el handshake inicial, el registro con validación de 
 duplicados, el inicio de sesión y la gestión posterior del perfil de usuario.
 """
-from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 import database
@@ -14,6 +14,8 @@ import auth
 import schemas
 import shutil
 import os
+import glob
+import time
 
 router = APIRouter(tags=["Autenticación"])
 
@@ -38,16 +40,16 @@ def login(datos: schemas.LoginUsuario,
           db: Session = Depends(obtener_db), 
           _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Autentica al usuario y genera el token de acceso JWT final."""
-    # Búsqueda flexible por nombre o email
+    # Búsqueda flexible por nombre o email.
     usuario_encontrado = db.query(database.Usuario).filter(
         (database.Usuario.email == datos.identificador) | (database.Usuario.nombre_usuario == datos.identificador)
     ).first()
 
-    # Validación de existencia y coincidencia de hash de contraseña
+    # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado or not auth.comprobar_contraseña(datos.contraseña, str(usuario_encontrado.contraseña_encriptada)):
         raise HTTPException(status_code=401, detail="Error: Credenciales incorrectas")
     
-    # Generación del JWT de larga duración    
+    # Generación del JWT de larga duración.    
     token = auth.crear_token_acceso({"sub": usuario_encontrado.nombre_usuario})
     
     return {
@@ -60,16 +62,19 @@ def login(datos: schemas.LoginUsuario,
 def registro(datos: schemas.RegistroUsuario, 
              db: Session = Depends(obtener_db), 
              _auth_app=Depends(auth.verificar_sesion_aplicacion)):
-    """Registro de nuevo usuario."""
-    # Comprobar si el nombre de usuario ya está tomado
-    if db.query(database.Usuario).filter(database.Usuario.nombre_usuario == datos.nombre_usuario).first():
-        raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
+    
+    # Comprobar si el nombre de usuario ya está tomado o si el correo ya está registrado.
+    usuario_existente = db.query(database.Usuario).filter(
+        (database.Usuario.nombre_usuario == datos.nombre_usuario) | 
+        (database.Usuario.email == datos.email)
+    ).first()
 
-    # Comprobar si el correo ya está registrado
-    if db.query(database.Usuario).filter(database.Usuario.email == datos.email).first():
+    if usuario_existente:
+        if usuario_existente.nombre_usuario == datos.nombre_usuario:
+            raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
         raise HTTPException(status_code=400, detail="Error: El correo electrónico ya está registrado")
 
-    # Crear el objeto de base de datos con la contraseña ya cifrada
+    # Crear el objeto de base de datos con la contraseña ya cifrada.
     nuevo_usuario = database.Usuario(
         nombre_usuario=datos.nombre_usuario,
         nombre_real=datos.nombre_real,
@@ -86,7 +91,8 @@ def registro(datos: schemas.RegistroUsuario,
     return {"estatus": "success", "mensaje": "Usuario registrado correctamente"}
 
 @router.get("/perfil/informacion")
-def obtener_mi_perfil(db: Session = Depends(obtener_db), 
+def obtener_mi_perfil(request: Request,
+                      db: Session = Depends(obtener_db), 
                       _auth_app=Depends(auth.verificar_sesion_aplicacion),
                       usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """
@@ -99,13 +105,16 @@ def obtener_mi_perfil(db: Session = Depends(obtener_db),
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
 
+    url_base = str(request.base_url).rstrip("/")
+    url_foto = f"{url_base}/imagenes/{usuario.foto_perfil}" if usuario.foto_perfil else None
+
     return {
         "nombre_usuario": usuario.nombre_usuario,
         "nombre_real": usuario.nombre_real,
         "email": usuario.email,
         "fecha_nacimiento": usuario.fecha_nacimiento,
         "ciudad": usuario.ciudad,
-        "foto_perfil": f"http://127.0.0.1:8000/imagenes/{usuario.foto_perfil}" if usuario.foto_perfil else None,
+        "foto_perfil": url_foto,
         "perfil_visible": usuario.perfil_visible
     }
     
@@ -120,85 +129,109 @@ async def subir_foto_perfil(
     Sube o actualiza la foto de perfil del usuario localmente.
     Valida formato y tamaño máximo de 2MB.
     """
-    # 1. Validar que sea una imagen
+    # Validar que sea una imagen.
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Error: Solo se permiten imágenes JPG o PNG")
 
-    # 2. Validar tamaño máximo (2MB). Leemos el tamaño del archivo desde el descriptor
+    # Validar tamaño máximo (2MB). Leemos el tamaño del archivo desde el descriptor.
     archivo.file.seek(0, os.SEEK_END)
-    tamano_archivo = archivo.file.tell()
-    archivo.file.seek(0) # Volvemos al inicio para poder guardarlo después
+    tamano = archivo.file.tell()
+    # Volvemos al inicio para poder guardarlo después.
+    archivo.file.seek(0)
+    if tamano > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Error: La imagen supera los 2MB")
 
-    if tamano_archivo > 2 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Error: La imagen es demasiado pesada (máximo 2MB)")
+    # Limpiar fotos antiguas usando el patrón del nombre de usuario
+    patron_antiguo = os.path.join("uploads", f"perfil_{usuario_actual}_*")
+    for archivo_antiguo in glob.glob(patron_antiguo):
+        try:
+            os.remove(archivo_antiguo)
+        except OSError:
+            pass 
 
-    # 3. Definir nombre único y extensión segura para Pylance
-    nombre_original = archivo.filename if archivo.filename else "foto.jpg"
-    extension = nombre_original.split(".")[-1]
-    nombre_archivo = f"perfil_{usuario_actual}.{extension}"
+    # Nombre con timestamp para evitar caché de imagenes
+    _, extension = os.path.splitext(archivo.filename or ".jpg")
+    timestamp = int(time.time())
+    nombre_archivo = f"perfil_{usuario_actual}_{timestamp}{extension.lower()}"
     ruta_final = os.path.join("uploads", nombre_archivo)
 
-    # 4. Guardar el archivo físicamente en la carpeta uploads
+    # Guardar el archivo físicamente en la carpeta uploads.
     try:
         with open(ruta_final, "wb") as buffer:
             shutil.copyfileobj(archivo.file, buffer)
     except Exception:
-        raise HTTPException(status_code=500, detail="Error al guardar la imagen en el servidor")
+        raise HTTPException(status_code=500, detail="Error: No se ha podido guardar la imagen en el servidor")
 
-    # 5. Actualizar la base de datos con protección para Pylance
+    # Actualizar la base de datos.
     usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
-    
     if not usuario:
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado en la base de datos")
-
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+    
     usuario.foto_perfil = nombre_archivo
     db.commit()
 
-    return {
-        "estatus": "success",
-        "mensaje": "Foto de perfil actualizada",
-        "url_foto": f"/imagenes/{nombre_archivo}"
-    }
-
-    return {
-        "estatus": "success",
-        "mensaje": "Foto de perfil actualizada",
-        "url_foto": f"/imagenes/{nombre_archivo}"
-    }
-    
+    return {"estatus": "success", "mensaje": "Foto de perfil actualizada correctamente"}
+   
 @router.patch("/perfil/actualizar")
 def actualizar_perfil(datos: schemas.ActualizarPerfil, 
                       db: Session = Depends(obtener_db), 
                       _auth_app=Depends(auth.verificar_sesion_aplicacion),
                       usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """
-    Permite al usuario modificar su perfil.
-    Utiliza el token JWT para identificar al usuario de forma segura.
+    Permite al usuario modificar su perfil de forma selectiva.
     """
     usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first() 
     
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    if datos.nombre_real: usuario.nombre_real = datos.nombre_real
-    if datos.ciudad: usuario.ciudad = datos.ciudad
-    if datos.foto_perfil: usuario.foto_perfil = datos.foto_perfil
-    if datos.perfil_visible is not None: usuario.perfil_visible = datos.perfil_visible
+    # Actualización selectiva de campos
+    if datos.nombre_real: 
+        usuario.nombre_real = datos.nombre_real
+    
+    if datos.email:
+    # Buscar si el email lo tiene OTRO usuario distinto al actual
+        duplicado = db.query(database.Usuario).filter(
+            database.Usuario.email == datos.email,
+            database.Usuario.nombre_usuario != usuario_actual
+    ).first()
+        if duplicado:
+            raise HTTPException(status_code=400, detail="Error: El nuevo correo ya está registrado")
+        usuario.email = datos.email
+
+    if datos.contraseña:
+        # Si cambia contraseña, se debe hashear de nuevo
+        usuario.contraseña_encriptada = auth.encriptar_contraseña(datos.contraseña)
+
+    if datos.fecha_nacimiento:
+        usuario.fecha_nacimiento = datos.fecha_nacimiento
+
+    if datos.ciudad: 
+        usuario.ciudad = datos.ciudad
+
+    if datos.perfil_visible is not None: 
+        usuario.perfil_visible = datos.perfil_visible
 
     db.commit()
-    return {"estatus": "success", "mensaje": "Perfil del usuario actualizado correctamente"}
+    return {"estatus": "success", "mensaje": "Perfil actualizado correctamente"}
 
 @router.delete("/perfil/borrar")
 def borrar_perfil(db: Session = Depends(obtener_db), 
                   _auth_app=Depends(auth.verificar_sesion_aplicacion),
                   usuario_actual: str = Depends(auth.obtener_usuario_actual)):
-    """
-    Elimina la cuenta del usuario autenticado permanentemente.
-    """
     usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
     
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: El usuario no existe")
+
+    # Eliminación física de la foto de perfil del servidor
+    if usuario.foto_perfil and usuario.foto_perfil != "default_avatar.png":
+        ruta_foto = os.path.join("uploads", usuario.foto_perfil)
+        if os.path.exists(ruta_foto):
+            try:
+                os.remove(ruta_foto)
+            except OSError:
+                pass
 
     db.delete(usuario)
     db.commit()
