@@ -6,12 +6,14 @@ Endpoints de Usuario y Autenticación.
 Define las rutas para el handshake inicial, el registro con validación de 
 duplicados, el inicio de sesión y la gestión posterior del perfil de usuario.
 """
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import Optional
 import database
 import auth
 import schemas
+import shutil
+import os
 
 router = APIRouter(tags=["Autenticación"])
 
@@ -103,10 +105,67 @@ def obtener_mi_perfil(db: Session = Depends(obtener_db),
         "email": usuario.email,
         "fecha_nacimiento": usuario.fecha_nacimiento,
         "ciudad": usuario.ciudad,
-        "foto_perfil": usuario.foto_perfil,
+        "foto_perfil": f"http://127.0.0.1:8000/imagenes/{usuario.foto_perfil}" if usuario.foto_perfil else None,
         "perfil_visible": usuario.perfil_visible
     }
+    
+@router.post("/perfil/foto")
+async def subir_foto_perfil(
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual),
+    archivo: UploadFile = File(...)
+):
+    """
+    Sube o actualiza la foto de perfil del usuario localmente.
+    Valida formato y tamaño máximo de 2MB.
+    """
+    # 1. Validar que sea una imagen
+    if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
+        raise HTTPException(status_code=400, detail="Error: Solo se permiten imágenes JPG o PNG")
 
+    # 2. Validar tamaño máximo (2MB). Leemos el tamaño del archivo desde el descriptor
+    archivo.file.seek(0, os.SEEK_END)
+    tamano_archivo = archivo.file.tell()
+    archivo.file.seek(0) # Volvemos al inicio para poder guardarlo después
+
+    if tamano_archivo > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Error: La imagen es demasiado pesada (máximo 2MB)")
+
+    # 3. Definir nombre único y extensión segura para Pylance
+    nombre_original = archivo.filename if archivo.filename else "foto.jpg"
+    extension = nombre_original.split(".")[-1]
+    nombre_archivo = f"perfil_{usuario_actual}.{extension}"
+    ruta_final = os.path.join("uploads", nombre_archivo)
+
+    # 4. Guardar el archivo físicamente en la carpeta uploads
+    try:
+        with open(ruta_final, "wb") as buffer:
+            shutil.copyfileobj(archivo.file, buffer)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Error al guardar la imagen en el servidor")
+
+    # 5. Actualizar la base de datos con protección para Pylance
+    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado en la base de datos")
+
+    usuario.foto_perfil = nombre_archivo
+    db.commit()
+
+    return {
+        "estatus": "success",
+        "mensaje": "Foto de perfil actualizada",
+        "url_foto": f"/imagenes/{nombre_archivo}"
+    }
+
+    return {
+        "estatus": "success",
+        "mensaje": "Foto de perfil actualizada",
+        "url_foto": f"/imagenes/{nombre_archivo}"
+    }
+    
 @router.patch("/perfil/actualizar")
 def actualizar_perfil(datos: schemas.ActualizarPerfil, 
                       db: Session = Depends(obtener_db), 
