@@ -4,18 +4,19 @@
 Configuración de la Base de Datos y Modelos.
 
 Este módulo establece la conexión con PostgreSQL mediante SQLAlchemy y define
-la estructura de la tabla de usuarios utilizando variables de entorno.
+la estructura de la tabla de usuarios.
 """
 import os
+from datetime import datetime, date
+from typing import Optional
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, String, Date, DateTime, Boolean, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-# Cargar variables desde el archivo .env
+# Cargar variables desde el archivo .env para seguridad
 load_dotenv()
 
-# Configuración de credenciales de la base de datos
+# Configuración de credenciales de la base de datos extraídas del entorno
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
@@ -28,24 +29,54 @@ DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NA
 # Configuración del motor de SQLAlchemy y la sesión
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """Clase base para todos los modelos con soporte de tipado moderno."""
+    pass
 
 class Usuario(Base):
     """
     Modelo de SQLAlchemy para la tabla de usuarios.
     
-    Attributes:
-        id: Identificador único autoincremental.
-        nombre: Nombre de usuario único para inicio de sesión.
-        email: Correo electrónico único.
-        contraseña_encriptada: Hash de la contraseña generado con bcrypt.
+    Atributos:
+        id: Identificador único autoincremental y clave primaria.
+        nombre_usuario: Identificador único de acceso.
+        nombre_real: Nombre y apellidos reales del usuario (alfanumérico).
+        email: Dirección de correo electrónico única y validada.
+        contraseña_encriptada: Hash seguro generado mediante bcrypt.
+        fecha_nacimiento: Fecha de nacimiento para control de edad mínima.
+        ciudad: Ubicación geográfica opcional proporcionada por el usuario.
+        foto_perfil: Ruta o nombre del archivo de imagen (predeterminado o subido).
+        fecha_registro: Marca de tiempo automática de la creación de cuenta.
+        fecha_eula: Registro de cuándo el usuario aceptó los términos de servicio.
+        perfil_visible: Ajuste de privacidad para mostrar u ocultar datos a terceros.
     """
     __tablename__ = "usuarios"
-    id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    contraseña_encriptada = Column(String)
+    
+    # Identificadores y datos de acceso
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    nombre_usuario: Mapped[str] = mapped_column(String, unique=True, index=True)
+    nombre_real: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    contraseña_encriptada: Mapped[str] = mapped_column(String, nullable=False)
+    
+    # Información personal y perfil
+    fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
+    ciudad: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
+    
+    # Metadatos automáticos del servidor
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    fecha_eula: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    
+    # Ajustes de privacidad del usuario
+    perfil_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 def init_db():
-    """Crea las tablas físicamente en la base de datos de Postgres si no existen."""
+    """
+    Inicialización de la base de datos.
+    
+    Crea físicamente las tablas definidas en los modelos de SQLAlchemy 
+    si estas no existen previamente en la base de datos PostgreSQL.
+    """
     Base.metadata.create_all(bind=engine)

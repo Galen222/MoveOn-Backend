@@ -9,8 +9,8 @@ import database
 
 app = FastAPI(
     title="MoveOn API",
-    description="Backend modular con seguridad Handshake + JWT",
-    version="0.1.2"
+    description="Backend de la aplicación MoveOn",
+    version="0.1.4"
 )
 
 # Inicializar base de datos
