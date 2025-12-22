@@ -23,5 +23,5 @@ app.add_exception_handler(RequestValidationError, manejador_validacion_personali
 app.include_router(users.router)
 
 @app.get("/")
-def leer_raiz():
+def home():
     return {"estado": "en linea", "aplicacion": "MoveOn API"}

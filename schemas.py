@@ -1,8 +1,6 @@
 """
 Esquemas de Validación de Datos (Pydantic V2).
 
-Se han movido las validaciones de longitud dentro de los field_validators 
-para asegurar que los mensajes de error sean siempre en español.
 """
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import re
