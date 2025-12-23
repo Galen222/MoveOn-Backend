@@ -105,10 +105,10 @@ class LoginUsuario(BaseModel):
 
     @field_validator('identificador', mode='before')
     @classmethod
-    def identificador_a_minusculas(cls, valor: Any) -> Any:
+    def limpiar_identificador(cls, valor: Any) -> Any:
         if isinstance(valor, str):
-            """Convierte el identificador a minúsculas por si el usuario usa su email para loguearse."""        
-            valor_limpio = valor.lower().strip()
+            # Quitar espacios.
+            valor_limpio = valor.strip()
             if not valor_limpio:
                 raise ValueError('Error: El identificador no puede estar vacío')
             return valor_limpio
