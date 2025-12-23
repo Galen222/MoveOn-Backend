@@ -56,6 +56,8 @@ class RegistroUsuario(BaseModel):
     @field_validator('nombre_usuario')
     @classmethod
     def validar_nombre_usuario(cls, valor: str) -> str:
+        # Quitar espacios.
+        valor = valor.strip()
         # Validación de longitud mínima.
         if len(valor) < 5:
             raise ValueError('Error: El nombre de usuario debe tener al menos 5 caracteres')

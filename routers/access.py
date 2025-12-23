@@ -36,7 +36,7 @@ def login(datos: schemas.LoginUsuario,
 
     # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado or not auth.comprobar_contraseña(datos.contraseña, str(usuario_encontrado.contraseña_encriptada)):
-        raise HTTPException(status_code=401, detail="Error: Datos Invalidos")
+        raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
     
     # Generación del JWT de larga duración.
     token = auth.crear_token_acceso({"sub": usuario_encontrado.nombre_usuario})

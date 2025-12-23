@@ -13,19 +13,26 @@ import schemas
 class UserService:
     def buscar_por_identificador(self, db: Session, identificador: str):
         """Búsqueda flexible por nombre o email (Lógica de login)."""
+        # Convertir ambos lados a minúsculas durante la consulta SQL
+        identificador_limpio = identificador.strip()
         return db.query(database.Usuario).filter(
-            (database.Usuario.email == identificador) | (database.Usuario.nombre_usuario == identificador)
+            # El email se compara en minúsculas
+            (database.Usuario.email == identificador_limpio.lower()) | 
+            # El nombre de usuario se compara TAL CUAL (sensible a mayúsculas)
+            (database.Usuario.nombre_usuario == identificador_limpio)
         ).first()
 
     def registrar_nuevo_usuario(self, db: Session, datos: schemas.RegistroUsuario):
         """Registro de nuevo usuario con validación de duplicados."""
+        # Buscar si existe ignorando mayúsculas/minúsculas
         usuario_existente = db.query(database.Usuario).filter(
-            (database.Usuario.nombre_usuario == datos.nombre_usuario) | 
-            (database.Usuario.email == datos.email)
-        ).first()
+            (database.Usuario.nombre_usuario.ilike(datos.nombre_usuario)) | 
+            (database.Usuario.email == datos.email.lower())
+        ).first()       
 
         if usuario_existente:
-            if usuario_existente.nombre_usuario == datos.nombre_usuario:
+            # Comprobación específica para el mensaje de error
+            if usuario_existente.nombre_usuario.lower() == datos.nombre_usuario.lower():
                 raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya existe")
             raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
 
