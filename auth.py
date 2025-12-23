@@ -19,11 +19,17 @@ from typing import Optional, Any
 load_dotenv()
 
 # Parámetros de configuración del sistema de tokens
-SECRET_KEY = os.getenv("SECRET_KEY", "")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY no configurada en el entorno")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
-APP_ID_SECRET = os.getenv("APP_ID_SECRET", "")
-APP_SESSION_SECRET = os.getenv("APP_SESSION_SECRET", "")
+APP_ID_SECRET = os.getenv("APP_ID_SECRET")
+if not APP_ID_SECRET:
+    raise RuntimeError("APP_ID_SECRET no configurada en el entorno")
+APP_SESSION_SECRET = os.getenv("APP_SESSION_SECRET")
+if not APP_SESSION_SECRET:
+    raise RuntimeError("APP_SESSION_SECRET no configurada en el entorno")
 
 # Instancia de seguridad que activa el botón "Authorize" en Swagger
 security_scheme = HTTPBearer()

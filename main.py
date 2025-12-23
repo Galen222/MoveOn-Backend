@@ -6,7 +6,7 @@ Punto de Entrada Principal - MoveOn API.
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from routers import users
+from routers import users, access
 from exceptions import manejador_validacion_personalizado
 import database
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +15,7 @@ import os
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.1.5"
+    version="0.1.6"
 )
 
 # Configuración de CORS para permitir peticiones desde la App móvil
@@ -35,6 +35,7 @@ app.add_exception_handler(RequestValidationError, manejador_validacion_personali
 
 # Incluir rutas
 app.include_router(users.router)
+app.include_router(access.router)
 
 # Crear la carpeta para guardar imagenes si no existe
 if not os.path.exists("uploads"):

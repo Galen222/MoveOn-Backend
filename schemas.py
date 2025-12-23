@@ -80,7 +80,7 @@ class RegistroUsuario(BaseModel):
     @field_validator('email', mode='wrap')
     @classmethod
     def validar_email_mensaje_custom(cls, v, handler):
-        """Recoge errores de EmailStr para devolver un mensaje en el formato estandar utilizado."""
+        """Recoge errores de EmailStr para devolver un mensaje en el formato utilizado."""
         try:
             return handler(v)
         except Exception:
@@ -104,13 +104,16 @@ class LoginUsuario(BaseModel):
     @field_validator('identificador', mode='before')
     @classmethod
     def identificador_a_minusculas(cls, valor: Any) -> Any:
-        """Convierte el identificador a minúsculas por si el usuario usa su email para loguearse."""
         if isinstance(valor, str):
-            return valor.lower().strip()
+            """Convierte el identificador a minúsculas por si el usuario usa su email para loguearse."""        
+            valor_limpio = valor.lower().strip()
+            if not valor_limpio:
+                raise ValueError('Error: El identificador no puede estar vacío')
+            return valor_limpio
         return valor
 
 class ActualizarPerfil(BaseModel):
-    """Esquema para actualizaciones parciales del perfil."""
+    """Esquema para actualizaciones del perfil de usuario."""
     nombre_real: Optional[str] = None
     email: Optional[EmailStr] = None
     contraseña: Optional[str] = None

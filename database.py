@@ -80,3 +80,11 @@ def init_db():
     si estas no existen previamente en la base de datos PostgreSQL.
     """
     Base.metadata.create_all(bind=engine)
+    
+def obtener_db():
+    """Dependencia para la conexión a la base de datos."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
