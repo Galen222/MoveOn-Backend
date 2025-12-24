@@ -8,7 +8,7 @@ Servicio para manejar la validación y procesamiento de archivos.
 import os
 import time
 import glob
-import re
+import hashlib
 from typing import Optional
 from fastapi import UploadFile, HTTPException, Request
 import cloudinary.uploader
@@ -72,13 +72,11 @@ async def procesar_subida(archivo: UploadFile, usuario_actual: str) -> str:
 
 async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     """Lógica de guardado local segura."""
-    # Eliminar en el usuario cualquier caracter que no sea alfanumérico, guion bajo o guion por seguridad.
-    usuario = re.sub(r'[^a-zA-Z0-9_-]', '', usuario_actual)
     
-    if not usuario:
-        raise HTTPException(status_code=400, detail="Error: Identificador de usuario inválido")
+    # Genera un HASH SHA-256 para el nombre del archivo de la foto de perfil.
+    nombre_seguro = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
-    # Usar el content_type validado previamente ignorando la extensión que el usuario envió en el filename.
+    # Definir extensión segura basada en content_type
     mapa_extensiones = {
         "image/jpeg": ".jpg",
         "image/jpg": ".jpg",
@@ -86,20 +84,22 @@ async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     }
     extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 
-    # Usar usuario sanitizado para buscar y borrar archivos antiguos.
-    patron_antiguo = os.path.join("uploads", f"perfil_{usuario}_*")
+    # Buscar archivos que contengan el hash.
+    patron_antiguo = os.path.join("uploads", f"perfil_{nombre_seguro}_*")
     for archivo_antiguo in glob.glob(patron_antiguo):
-        try: os.remove(archivo_antiguo)
-        except OSError: pass
+        try: 
+            os.remove(archivo_antiguo)
+        except OSError: 
+            pass
 
-    # Construir la ruta final con el usuario sanitizado.
-    nombre_archivo = f"perfil_{usuario}_{int(time.time())}{extension}"
+    # Construir la ruta final usando el hash.
+    nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
     ruta_final = os.path.join("uploads", nombre_archivo)
 
     try:
         await archivo.seek(0)
         contenido = await archivo.read()
-        # Aquí 'ruta_final' ya no contiene caracteres controlados por el usuario sin filtrar.
+
         with open(ruta_final, "wb") as buffer:
             buffer.write(contenido)
     except Exception:
@@ -108,12 +108,16 @@ async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     return nombre_archivo
 
 async def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
-    """Lógica de guardado en Cloudinary."""
+    """Lógica de guardado en Cloudinary usando Hash."""
     try:
+        # Generar el hash del usuario
+        usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
+
         resultado = cloudinary.uploader.upload(
             archivo.file,
             folder="perfiles",
-            public_id=f"perfil_{usuario_actual}",
+            # Usar el hash en lugar del nombre de usuario legible
+            public_id=f"perfil_{usuario_hash}",
             overwrite=True,
             resource_type="image"
         )
@@ -122,28 +126,28 @@ async def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
         raise HTTPException(status_code=500, detail="Error: No se ha podido subir la imagen a la nube")
 
 def borrar_foto(foto_perfil: str, usuario_actual: str):
-    """Lógica de borrado permanente segura."""    
+    """Lógica de borrado permanente segura usando Hashing."""    
     storage = settings.STORAGE_TYPE
     
-    # Sanitizamos el usuario igual que en guardar_local
-    usuario_safe = re.sub(r'[^a-zA-Z0-9_-]', '', usuario_actual)
+    # Generar el mismo hash que se usa al guardar
+    usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
     if storage != "cloudinary" and foto_perfil and foto_perfil != "default_avatar.png":
-        # SEGURIDAD: Usamos os.path.basename para ignorar cualquier ruta de directorios (../) 
-        # que pudiera venir en el nombre del archivo.
+        # Usar basename por precaución (limpia rutas como ../)
         nombre_archivo_seguro = os.path.basename(foto_perfil)
-        
-        # Construimos la ruta
         ruta_foto = os.path.join("uploads", nombre_archivo_seguro)
         
-        # Verificación extra: Aseguramos que el archivo a borrar realmente pertenece a este usuario
-        if f"perfil_{usuario_safe}" in nombre_archivo_seguro:
+        # Solo borrar la foto si el nombre del archivo contiene el hash de este usuario.
+        if f"perfil_{usuario_hash}" in nombre_archivo_seguro:
             if os.path.exists(ruta_foto):
-                try: os.remove(ruta_foto)
-                except OSError: pass
+                try: 
+                    os.remove(ruta_foto)
+                except OSError: 
+                    pass
                 
     if storage == "cloudinary":
         try:
-            # Usamos el usuario sanitizado también para la nube
-            cloudinary.uploader.destroy(f"perfiles/perfil_{usuario_safe}")
-        except: pass
+            # Usar el mismo hash para borrar en la nube
+            cloudinary.uploader.destroy(f"perfiles/perfil_{usuario_hash}")
+        except: 
+            pass
