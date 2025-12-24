@@ -9,19 +9,10 @@ from fastapi import HTTPException
 import database
 import auth
 import schemas
+import random
+from services.email_service import EmailService
 
 class UserService:
-    def buscar_por_identificador(self, db: Session, identificador: str):
-        """Búsqueda flexible por nombre o email (Lógica de login)."""
-        # Convertir ambos lados a minúsculas durante la consulta SQL
-        identificador_limpio = identificador.strip()
-        return db.query(database.Usuario).filter(
-            # El email se compara en minúsculas
-            (database.Usuario.email == identificador_limpio.lower()) | 
-            # El nombre de usuario se compara TAL CUAL (sensible a mayúsculas)
-            (database.Usuario.nombre_usuario == identificador_limpio)
-        ).first()
-
     def registrar_nuevo_usuario(self, db: Session, datos: schemas.RegistroUsuario):
         """Registro de nuevo usuario con validación de duplicados."""
         # Buscar si existe ignorando mayúsculas/minúsculas
@@ -86,3 +77,4 @@ class UserService:
         db.delete(usuario)
         db.commit()
         return {"estatus": "success", "mensaje": "Tu cuenta ha sido eliminada permanentemente"}
+

@@ -50,6 +50,8 @@ class Usuario(Base):
         fecha_registro: Marca de tiempo automática de la creación de cuenta.
         fecha_eula: Registro de cuándo el usuario aceptó los términos de servicio.
         perfil_visible: Ajuste de privacidad para mostrar u ocultar datos a terceros.
+        codigo_recuperacion: Código unico y temporal para recuperación de contraseña.
+        codigo_expiracion: Tiempo de expiración del código de recuperación.
     """
     __tablename__ = "usuarios"
     
@@ -71,6 +73,10 @@ class Usuario(Base):
     
     # Ajustes de privacidad del usuario
     perfil_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    
+    # Recuperación de contraseña
+    codigo_recuperacion: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 def init_db():
     """

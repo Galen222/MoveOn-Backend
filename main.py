@@ -15,7 +15,7 @@ import os
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.1.6"
+    version="0.1.7"
 )
 
 # Configuración de CORS para permitir peticiones desde la App móvil

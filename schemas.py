@@ -154,3 +154,18 @@ class ActualizarPerfil(BaseModel):
     @classmethod
     def puente_fecha_edit(cls, v):
         return validar_fecha_nacimiento_logica(v) if v is not None else v
+    
+class SolicitarRecuperacion(BaseModel):
+    """Esquema para pedir el código enviando solo el email."""
+    email: EmailStr
+
+class ConfirmarRecuperacion(BaseModel):
+    """Esquema para cambiar la contraseña usando el código recibido."""
+    email: EmailStr
+    codigo: str = Field(..., min_length=6, max_length=6)
+    nueva_contraseña: str
+
+    @field_validator('nueva_contraseña')
+    @classmethod
+    def validar_nueva_pass(cls, v):
+        return validar_contraseña_logica(v)

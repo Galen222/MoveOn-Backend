@@ -11,12 +11,12 @@ from sqlalchemy.orm import Session
 import auth
 import schemas
 from database import obtener_db
-from services.user_service import UserService
+from services.access_service import AccessService
 
 router = APIRouter(tags=["Seguridad"])
 
 # Instancia de servicio
-user_service = UserService()
+access_service = AccessService()
 
 @router.get("/handshake")
 def handshake(x_app_id: str = Header(None)):
@@ -32,7 +32,7 @@ def login(datos: schemas.LoginUsuario,
           _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Autentica al usuario y genera el token de acceso JWT final."""
     # Búsqueda flexible por nombre o email.
-    usuario_encontrado = user_service.buscar_por_identificador(db, datos.identificador)
+    usuario_encontrado = access_service.buscar_por_identificador(db, datos.identificador)
 
     # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado or not auth.comprobar_contraseña(datos.contraseña, str(usuario_encontrado.contraseña_encriptada)):
@@ -46,3 +46,17 @@ def login(datos: schemas.LoginUsuario,
         "nombre_usuario": usuario_encontrado.nombre_usuario,
         "token_acceso": token
     }
+
+@router.post("/contraseña/solicitar")
+async def solicitar_codigo(datos: schemas.SolicitarRecuperacion, 
+                     db: Session = Depends(obtener_db),
+                     _auth_app=Depends(auth.verificar_sesion_aplicacion)):
+    """Paso 1: Solicitar código de 6 dígitos al email."""
+    return await access_service.generar_codigo_recuperacion(db, datos.email)
+
+@router.post("/contraseña/confirmar")
+def confirmar_codigo(datos: schemas.ConfirmarRecuperacion, 
+                     db: Session = Depends(obtener_db),
+                     _auth_app=Depends(auth.verificar_sesion_aplicacion)):
+    """Paso 2: Enviar código y nueva contraseña para resetear."""
+    return access_service.resetear_contraseña(db, datos)
