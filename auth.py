@@ -12,26 +12,17 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from fastapi import HTTPException, Header, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from dotenv import load_dotenv
-from typing import Optional, Any
+from typing import Any
+from config import settings
 
-# Carga de configuración de seguridad
-load_dotenv()
+# Parámetros de configuración del sistema de tokens,
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+APP_ID_SECRET = settings.APP_ID_SECRET
+APP_SESSION_SECRET = settings.APP_SESSION_SECRET
 
-# Parámetros de configuración del sistema de tokens
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY no configurada en el entorno")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
-APP_ID_SECRET = os.getenv("APP_ID_SECRET")
-if not APP_ID_SECRET:
-    raise RuntimeError("APP_ID_SECRET no configurada en el entorno")
-APP_SESSION_SECRET = os.getenv("APP_SESSION_SECRET")
-if not APP_SESSION_SECRET:
-    raise RuntimeError("APP_SESSION_SECRET no configurada en el entorno")
-
-# Instancia de seguridad que activa el botón "Authorize" en Swagger
+# Instancia de seguridad que activa el botón "Authorize" en Swagger.
 security_scheme = HTTPBearer()
 
 def encriptar_contraseña(contraseña: str) -> str:
@@ -44,7 +35,7 @@ def comprobar_contraseña(contraseña_plana: str, contraseña_encriptada: str) -
     return bcrypt.checkpw(contraseña_plana.encode('utf-8'), contraseña_encriptada.encode('utf-8'))
 
 def crear_token_aplicacion() -> str:
-    """Genera un token JWT de corta duración (5 min) para el apretón de manos inicial."""
+    """Genera un token JWT de corta duración (5 minutos) para el apretón de manos inicial."""
     expiracion = datetime.now(timezone.utc) + timedelta(minutes=5)
     datos_a_cifrar = {"exp": expiracion, "aud": "moveon_app"}
     return jwt.encode(datos_a_cifrar, str(APP_SESSION_SECRET), algorithm=ALGORITHM)
@@ -73,7 +64,7 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
     Extrae el usuario validando el token. 
     Usa la dependencia de FastAPI para capturar el token del botón Authorize.
     """
-    # El token ya viene limpio sin la palabra "Bearer" gracias a HTTPAuthorizationCredentials
+    # El token ya viene limpio sin la palabra "Bearer" gracias a HTTPAuthorizationCredentials.
     token = res.credentials
 
     try:

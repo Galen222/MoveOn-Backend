@@ -1,3 +1,5 @@
+# exceptions.py
+
 """
 Módulo de Manejo de Excepciones Personalizadas.
 """
@@ -8,8 +10,13 @@ from typing import Any
 async def manejador_validacion_personalizado(request: Request, exc: Any):
     """
     Intercepta errores de validación y limpia los prefijos técnicos.
-    Usamos 'Any' para evitar conflictos de tipos con Pylance.
+    Uso 'Any' para evitar conflictos de tipos con Pylance.
     """
+    # Esto se hizo solo en pricipio para poner bonito el mensaje de error 
+    # si el email no pasa la validación ya que lo valida una libreria
+    # y el mensaje que proporciona no es igual a los creados por mi
+    # en el resto de errores de validación.
+    
     errores_limpios = []
     
     # Verifica que 'exc' tenga el método errors (propio de RequestValidationError)

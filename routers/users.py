@@ -6,19 +6,14 @@ Endpoints de Gestión de Perfil de Usuario.
 Define las rutas para el registro de nuevos usuarios y la gestión 
 posterior del perfil (consulta, actualización, foto y borrado).
 """
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request
+from fastapi import APIRouter, Depends, File, UploadFile, Request
 from sqlalchemy.orm import Session
 import auth
 import schemas
-from services.file_service import FileService
-from services.user_service import UserService
+from services import user_service, file_service
 from database import obtener_db
 
 router = APIRouter(tags=["Usuarios"])
-
-# Instancias de servicios
-file_service = FileService()
-user_service = UserService()
 
 @router.post("/registro")
 def registro(datos: schemas.RegistroUsuario, 
@@ -32,7 +27,7 @@ def informacion_perfil(request: Request,
                       db: Session = Depends(obtener_db), 
                       _auth_app=Depends(auth.verificar_sesion_aplicacion),
                       usuario_actual: str = Depends(auth.obtener_usuario_actual)):
-    """Obtiene los datos del perfil. Maneja URLs locales o de Cloudinary."""
+    """Obtiene los datos del perfil. Maneja para la imagen de perfil URLs locales o de Cloudinary."""
     usuario = user_service.obtener_perfil(db, usuario_actual)
     
     return {
@@ -55,7 +50,6 @@ async def foto_perfil(
     await file_service.validar_seguridad(archivo)
     usuario = user_service.obtener_perfil(db, usuario_actual)
     
-
     # Se procesa la subida.
     nueva_ruta_foto = await file_service.procesar_subida(archivo, usuario_actual)
     
@@ -64,7 +58,7 @@ async def foto_perfil(
     db.commit()
     
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
-   
+
 @router.patch("/perfil/actualizar")
 def actualizar_perfil(datos: schemas.ActualizarPerfil, 
                       db: Session = Depends(obtener_db), 

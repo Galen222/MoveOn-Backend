@@ -17,8 +17,21 @@ def validar_nombre_real_logica(v: str) -> str:
     """Regla para el nombre real: longitud y símbolos."""
     if len(v) < 3:
         raise ValueError('Error: El nombre real es demasiado corto')
-    if not re.match("^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]*$", v):
-        raise ValueError('Error: El nombre real no puede contener símbolos')
+    
+    # REGEX:
+    # ^ inicio
+    # [ ... ] lista de caracteres permitidos
+    # a-zA-Z : letras inglesas
+    # áéíóúÁÉÍÓÚñÑ : letras españolas comunes
+    # üÜ : diéresis
+    # \s : espacios
+    # ' : apóstrofe (ej. O'Connor)
+    # - : guiones (ej. Ana-Maria)
+    # + : uno o más caracteres
+    # $ : fin
+    if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$", v):
+        raise ValueError('Error: El nombre no puede contener números ni símbolos especiales')
+        
     return v
 
 def validar_contraseña_logica(v: str) -> str:

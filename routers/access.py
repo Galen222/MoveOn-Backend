@@ -11,19 +11,17 @@ from sqlalchemy.orm import Session
 import auth
 import schemas
 from database import obtener_db
-from services.access_service import AccessService
+from services import access_service
+from config import settings
 
 router = APIRouter(tags=["Seguridad"])
-
-# Instancia de servicio
-access_service = AccessService()
 
 @router.get("/handshake")
 def handshake(x_app_id: str = Header(None)):
     """Valida la App de Android y entrega un token de sesión temporal."""
-    if x_app_id != auth.APP_ID_SECRET:
+    if x_app_id != settings.APP_ID_SECRET:
         raise HTTPException(status_code=403, detail="Error: El acceso no proviene de la aplicación MoveOn")
-    # Crea el token de corta duración
+    # Crea el token de corta duración.
     return {"app_session_token": auth.crear_token_aplicacion()}
 
 @router.post("/login")
@@ -51,12 +49,12 @@ def login(datos: schemas.LoginUsuario,
 async def solicitar_codigo(datos: schemas.SolicitarRecuperacion, 
                      db: Session = Depends(obtener_db),
                      _auth_app=Depends(auth.verificar_sesion_aplicacion)):
-    """Paso 1: Solicitar código de 6 dígitos al email."""
+    """Solicitar código de 6 dígitos al email."""
     return await access_service.generar_codigo_recuperacion(db, datos.email)
 
 @router.post("/contraseña/confirmar")
 def confirmar_codigo(datos: schemas.ConfirmarRecuperacion, 
                      db: Session = Depends(obtener_db),
                      _auth_app=Depends(auth.verificar_sesion_aplicacion)):
-    """Paso 2: Enviar código y nueva contraseña para resetear."""
+    """Enviar código y nueva contraseña para resetear."""
     return access_service.resetear_contraseña(db, datos)

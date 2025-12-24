@@ -6,25 +6,14 @@ Configuración de la Base de Datos y Modelos.
 Este módulo establece la conexión con PostgreSQL mediante SQLAlchemy y define
 la estructura de la tabla de usuarios.
 """
-import os
 from datetime import datetime, date, timezone
 from typing import Optional
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, String, Date, DateTime, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
-
-# Cargar variables desde el archivo .env para seguridad
-load_dotenv()
-
-# Configuración de credenciales de la base de datos extraídas del entorno
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("DB_NAME")
+from config import settings
 
 # Construcción de la URL de conexión para PostgreSQL
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DATABASE_URL = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
 
 # Configuración del motor de SQLAlchemy y la sesión
 engine = create_engine(DATABASE_URL)
@@ -58,11 +47,11 @@ class Usuario(Base):
     # Identificadores y datos de acceso
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     nombre_usuario: Mapped[str] = mapped_column(String, unique=True, index=True)
-    nombre_real: Mapped[str] = mapped_column(String, nullable=False)
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     contraseña_encriptada: Mapped[str] = mapped_column(String, nullable=False)
     
     # Información personal y perfil
+    nombre_real: Mapped[str] = mapped_column(String, nullable=False)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
     ciudad: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
