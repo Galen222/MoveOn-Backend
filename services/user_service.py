@@ -30,7 +30,7 @@ def registrar_nuevo_usuario(db: Session, datos: schemas.RegistroUsuario):
         email=datos.email,
         contraseña_encriptada=auth.encriptar_contraseña(datos.contraseña),
         fecha_nacimiento=datos.fecha_nacimiento,
-        ciudad=datos.ciudad,
+        provincia=datos.provincia,
         perfil_visible=datos.perfil_visible
     )
     
@@ -64,7 +64,7 @@ def actualizar_perfil_usuario(db: Session, usuario: database.Usuario, datos: sch
     if datos.contraseña:
         usuario.contraseña_encriptada = auth.encriptar_contraseña(datos.contraseña)
     if datos.fecha_nacimiento: usuario.fecha_nacimiento = datos.fecha_nacimiento
-    if datos.ciudad: usuario.ciudad = datos.ciudad
+    if datos.provincia: usuario.provincia = datos.provincia
     if datos.perfil_visible is not None: usuario.perfil_visible = datos.perfil_visible
 
     db.commit()

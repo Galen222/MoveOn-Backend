@@ -34,7 +34,7 @@ class Usuario(Base):
         email: Dirección de correo electrónico única y validada.
         contraseña_encriptada: Hash seguro generado mediante bcrypt.
         fecha_nacimiento: Fecha de nacimiento para control de edad mínima.
-        ciudad: Ubicación geográfica opcional proporcionada por el usuario.
+        provincia: Ubicación geográfica opcional proporcionada por el usuario.
         foto_perfil: Ruta o nombre del archivo de imagen (predeterminado o subido).
         fecha_registro: Marca de tiempo automática de la creación de cuenta.
         fecha_eula: Registro de cuándo el usuario aceptó los términos de servicio.
@@ -51,9 +51,9 @@ class Usuario(Base):
     contraseña_encriptada: Mapped[str] = mapped_column(String, nullable=False)
     
     # Información personal y perfil
-    nombre_real: Mapped[str] = mapped_column(String, nullable=False)
+    nombre_real: Mapped[str] = mapped_column(String, nullable=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
-    ciudad: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    provincia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
     
     # Metadatos automáticos del servidor

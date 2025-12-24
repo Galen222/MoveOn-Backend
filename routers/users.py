@@ -35,7 +35,7 @@ def informacion_perfil(request: Request,
         "nombre_real": usuario.nombre_real,
         "email": usuario.email,
         "fecha_nacimiento": usuario.fecha_nacimiento,
-        "ciudad": usuario.ciudad,
+        "provincia": usuario.provincia,
         "foto_perfil": file_service.construir_url_foto(usuario.foto_perfil, request),
         "perfil_visible": usuario.perfil_visible
     }

@@ -87,7 +87,7 @@ async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
         with open(ruta_final, "wb") as buffer:
             buffer.write(contenido)
     except Exception:
-        raise HTTPException(status_code=500, detail="Error al guardar la imagen localmente")
+        raise HTTPException(status_code=500, detail="Error: No se ha podido guardar la imagen localmente")
     
     return nombre_archivo
 
@@ -103,7 +103,7 @@ async def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
         )
         return resultado.get("secure_url")
     except Exception:
-        raise HTTPException(status_code=500, detail="Error al subir la imagen a la nube")
+        raise HTTPException(status_code=500, detail="Error: No se ha podido subir la imagen a la nube")
 
 def borrar_foto(foto_perfil: str, usuario_actual: str):
     """Lógica de borrado permanente."""    
