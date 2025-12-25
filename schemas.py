@@ -11,49 +11,7 @@ from datetime import date
 from typing import Optional, Any
 import re
 from enum import Enum
-
-# Funciones de lógica de validación
-
-def validar_nombre_real_logica(v: str) -> str:
-    """Regla para el nombre real: longitud y símbolos."""
-    if len(v) < 3:
-        raise ValueError('Error: El nombre real es demasiado corto')
-    
-    # REGEX:
-    # ^ inicio
-    # [ ... ] lista de caracteres permitidos
-    # a-zA-Z : letras inglesas
-    # áéíóúÁÉÍÓÚñÑ : letras españolas comunes
-    # üÜ : diéresis
-    # \s : espacios
-    # ' : apóstrofe (ej. O'Connor)
-    # - : guiones (ej. Ana-Maria)
-    # + : uno o más caracteres
-    # $ : fin
-    if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$", v):
-        raise ValueError('Error: El nombre no puede contener números ni símbolos especiales')
-        
-    return v
-
-def validar_contraseña_logica(v: str) -> str:
-    """Regla para contraseña: longitud, mayúscula y número."""
-    if len(v) < 8:
-        raise ValueError('Error: La contraseña debe tener al menos 8 caracteres')
-    if not any(char.isupper() for char in v):
-        raise ValueError('Error: La contraseña debe incluir al menos una letra mayúscula')
-    if not any(char.isdigit() for char in v):
-        raise ValueError('Error: La contraseña debe incluir al menos un número')
-    return v
-
-def validar_fecha_nacimiento_logica(v: date) -> date:
-    """Regla para edad mínima (13 años) y evitar fechas futuras."""
-    hoy = date.today()
-    if v > hoy:
-        raise ValueError('Error: La fecha de nacimiento no puede ser en el futuro')
-    edad = hoy.year - v.year - ((hoy.month, hoy.day) < (v.month, v.day))
-    if edad < 13:
-        raise ValueError('Error: Debes tener al menos 13 años para registrarte')
-    return v
+from utils import validators
 
 class ProvinciaEspaña(str, Enum):
     # Andalucía
@@ -172,7 +130,7 @@ class RegistroUsuario(BaseModel):
     def validar_nombre_real_registro(cls, v):
         if v is None: return v
         v = v.strip() 
-        return validar_nombre_real_logica(v)
+        return validators.validar_nombre_real_logica(v)
     
     @field_validator('email', mode='before')
     @classmethod
@@ -186,50 +144,35 @@ class RegistroUsuario(BaseModel):
     @classmethod
     def validar_email_registro_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: El formato del correo electrónico no es válido')
+        return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
 
     @field_validator('contraseña')
     @classmethod
     def validar_contraseña_registro(cls, v):
-        return validar_contraseña_logica(v)
+        return validators.validar_contraseña_logica(v)
 
     @field_validator('fecha_nacimiento', mode='wrap')
     @classmethod
     def validar_fecha_nacimiento_registro_custom(cls, v, handler):
         """Intercepta el formato de fecha para devolver un mensaje en el formato estandar."""
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: La fecha debe tener formato AAAA-MM-DD')
+        return validators.interceptar_error_pydantic(v, handler,'Error: La fecha debe tener formato AAAA-MM-DD')
 
     @field_validator('fecha_nacimiento')
     @classmethod
     def validar_fecha_nacimiento_registro(cls, v):
-        return validar_fecha_nacimiento_logica(v)
+        return validators.validar_fecha_nacimiento_logica(v)
 
     @field_validator('provincia', mode='wrap')
     @classmethod
     def validar_provincia_custom(cls, v, handler):
         """Intercepta el error de Enum para devolver un mensaje en el formato estandar."""
-        if v is None:
-            return v
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: La ubicación seleccionada no es válida')
+        return validators.interceptar_error_pydantic(v, handler,'Error: La ubicación seleccionada no es válida')
 
     @field_validator('perfil_visible', mode='wrap')
     @classmethod
     def validar_perfil_visible_registro_custom(cls, v, handler):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
-        if v is None: return v
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: El formato de perfil visible no es válido')        
+        return validators.interceptar_error_pydantic(v, handler,'Error: El formato de perfil visible no es válido')        
 
 class LoginUsuario(BaseModel):
     """Esquema para validar las credenciales en el inicio de sesión."""
@@ -272,7 +215,7 @@ class ActualizarPerfil(BaseModel):
     def validar_nombre_real_actualizacion(cls, v):
         if v is None: return v
         v = v.strip() 
-        return validar_nombre_real_logica(v)
+        return validators.validar_nombre_real_logica(v)
 
     @field_validator('email', mode='before')
     @classmethod
@@ -286,53 +229,35 @@ class ActualizarPerfil(BaseModel):
     @classmethod
     def validar_email_actualizacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
-        if v is None: 
-            return v
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: El formato del correo electrónico no es válido')
+        return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
 
     @field_validator('contraseña')
     @classmethod
     def validar_contraseña_actualizacion(cls, v):
-        return validar_contraseña_logica(v) if v is not None else v
+        return validators.validar_contraseña_logica(v) if v is not None else v
 
     @field_validator('fecha_nacimiento', mode='wrap')
     @classmethod
     def validar_fecha_nacimiento_actualizacion_custom(cls, v, handler):
         """Intercepta el formato de fecha para devolver un mensaje en el formato estandar."""        
-        if v is None: return v
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: La fecha debe tener formato AAAA-MM-DD')
+        return validators.interceptar_error_pydantic(v, handler,'Error: La fecha debe tener formato AAAA-MM-DD')
 
     @field_validator('fecha_nacimiento')
     @classmethod
     def validar_fecha_nacimiento_actualizacion(cls, v):
-        return validar_fecha_nacimiento_logica(v) if v is not None else v
+        return validators.validar_fecha_nacimiento_logica(v) if v is not None else v
 
     @field_validator('provincia', mode='wrap')
     @classmethod
     def validar_provincia_actualizacion_custom(cls, v, handler):
         """Intercepta el error de Enum para para devolver un mensaje en el formato estandar."""
-        if v is None:
-            return v
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: La ubicación seleccionada no es válida')
+        return validators.interceptar_error_pydantic(v, handler,'Error: La ubicación seleccionada no es válida')
         
     @field_validator('perfil_visible', mode='wrap')
     @classmethod
     def validar_perfil_visible_actualizacion_custom(cls, v, handler):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""        
-        if v is None: return v
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: El formato de perfil visible no es válido')        
+        return validators.interceptar_error_pydantic(v, handler,'Error: El formato de perfil visible no es válido')        
     
 class SolicitarRecuperacion(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
@@ -351,10 +276,7 @@ class SolicitarRecuperacion(BaseModel):
     @classmethod
     def validar_email_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: El formato del correo electrónico no es válido')
+        return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
 
 class ConfirmarRecuperacion(BaseModel):
     """Esquema para cambiar la contraseña usando el código recibido."""
@@ -378,7 +300,7 @@ class ConfirmarRecuperacion(BaseModel):
     @field_validator('nueva_contraseña')
     @classmethod
     def validar_nueva_contraseña_recuperacion(cls, v):
-        return validar_contraseña_logica(v)
+        return validators.validar_contraseña_logica(v)
     
     @field_validator('codigo', mode='before')
     @classmethod
@@ -397,7 +319,4 @@ class ConfirmarRecuperacion(BaseModel):
     @classmethod
     def validar_email_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
-        try:
-            return handler(v)
-        except Exception:
-            raise ValueError('Error: El formato del correo electrónico no es válido')
+        return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')

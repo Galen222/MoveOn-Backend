@@ -12,6 +12,7 @@ import auth
 import schemas
 from services import user_service, file_service
 from database import obtener_db
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(tags=["Usuarios"])
 
@@ -48,14 +49,17 @@ async def foto_perfil(
     archivo: UploadFile = File(...)
 ):
     await file_service.validar_seguridad(archivo)
-    usuario = user_service.obtener_perfil(db, usuario_actual)
+    # Ejecutar la consulta bloqueante en un hilo separado
+    usuario = await run_in_threadpool(user_service.obtener_perfil, db, usuario_actual)
     
     # Se procesa la subida.
     nueva_ruta_foto = await file_service.procesar_subida(archivo, usuario_actual)
     
     # Si la subida fue exitosa, se actualiza la base de datos.
     usuario.foto_perfil = nueva_ruta_foto
-    db.commit()
+    
+    # Ejecutar el commit bloqueante en un hilo separado
+    await run_in_threadpool(db.commit)
     
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 

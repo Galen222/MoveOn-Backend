@@ -6,13 +6,14 @@ Endpoints de Seguridad de Aplicación y Autenticación.
 Gestiona el apretón de manos (handshake) inicial para validar la App 
 y el inicio de sesión de usuarios para obtener tokens de acceso.
 """
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy.orm import Session
 import auth
 import schemas
 from database import obtener_db
 from services import access_service
 from config import settings
+from limiter_config import limiter
 
 router = APIRouter(tags=["Seguridad"])
 
@@ -25,7 +26,9 @@ def handshake(x_app_id: str = Header(None)):
     return {"app_session_token": auth.crear_token_aplicacion()}
 
 @router.post("/login")
-def login(datos: schemas.LoginUsuario, 
+@limiter.limit("5/minute") # Limite 5 intentos por minuto
+def login(request: Request,
+          datos: schemas.LoginUsuario, 
           db: Session = Depends(obtener_db), 
           _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Autentica al usuario y genera el token de acceso JWT final."""

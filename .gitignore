@@ -11,3 +11,7 @@ __pycache__/
 
 # Environment variables
 .env
+
+# Carpeta de fotos de perfil
+uploads/
+.uploads/

@@ -73,6 +73,8 @@ async def procesar_subida(archivo: UploadFile, usuario_actual: str) -> str:
 async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     """Lógica de guardado local segura."""
     
+    # Usar la variable de settings.
+    carpeta_imagenes = settings.UPLOAD_DIR
     # Genera un HASH SHA-256 para el nombre del archivo de la foto de perfil.
     nombre_seguro = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
@@ -85,7 +87,7 @@ async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 
     # Buscar archivos que contengan el hash.
-    patron_antiguo = os.path.join("uploads", f"perfil_{nombre_seguro}_*")
+    patron_antiguo = os.path.join(carpeta_imagenes, f"perfil_{nombre_seguro}_*")
     for archivo_antiguo in glob.glob(patron_antiguo):
         try: 
             os.remove(archivo_antiguo)
@@ -94,7 +96,7 @@ async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
 
     # Construir la ruta final usando el hash.
     nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
-    ruta_final = os.path.join("uploads", nombre_archivo)
+    ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
 
     try:
         await archivo.seek(0)
@@ -127,15 +129,16 @@ async def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
 
 def borrar_foto(foto_perfil: str, usuario_actual: str):
     """Lógica de borrado permanente segura usando Hashing."""    
+    # Usar las variables de settings.
     storage = settings.STORAGE_TYPE
-    
+    carpeta_imagenes = settings.UPLOAD_DIR
     # Generar el mismo hash que se usa al guardar
     usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
     if storage != "cloudinary" and foto_perfil and foto_perfil != "default_avatar.png":
         # Usar basename por precaución (limpia rutas como ../)
         nombre_archivo_seguro = os.path.basename(foto_perfil)
-        ruta_foto = os.path.join("uploads", nombre_archivo_seguro)
+        ruta_foto = os.path.join(carpeta_imagenes, nombre_archivo_seguro)
         
         # Solo borrar la foto si el nombre del archivo contiene el hash de este usuario.
         if f"perfil_{usuario_hash}" in nombre_archivo_seguro:

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # Almacenamiento
     STORAGE_TYPE: str = "local"
+    UPLOAD_DIR: str = "uploads"
     
     # Cloudinary
     # Es mejor ponerles un valor por defecto para que no fallen si usas modo local
