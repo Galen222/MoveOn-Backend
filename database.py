@@ -8,7 +8,7 @@ la estructura de la tabla de usuarios.
 """
 from datetime import datetime, date, timezone
 from typing import Optional
-from sqlalchemy import create_engine, String, Date, DateTime, Boolean
+from sqlalchemy import create_engine, String, Date, DateTime, Boolean, Integer, Float
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import settings
 
@@ -33,7 +33,10 @@ class Usuario(Base):
         nombre_real: Nombre y apellidos reales del usuario (alfanumérico).
         email: Dirección de correo electrónico única y validada.
         contraseña_encriptada: Hash seguro generado mediante bcrypt.
-        fecha_nacimiento: Fecha de nacimiento para control de edad mínima.
+        fecha_nacimiento: Fecha de nacimiento para control de edad mínima y control de calorias.
+        genero: hombre, mujer u otro para control de calorias detallado.
+        altura: altura personal para control de calorias detallado.        
+        peso: peso personal para control de calorias detallado.
         provincia: Ubicación geográfica opcional proporcionada por el usuario.
         foto_perfil: Ruta o nombre del archivo de imagen (predeterminado o subido).
         fecha_registro: Marca de tiempo automática de la creación de cuenta.
@@ -53,6 +56,9 @@ class Usuario(Base):
     # Información personal y perfil
     nombre_real: Mapped[str] = mapped_column(String, nullable=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
+    genero: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    altura: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    peso: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     provincia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
     

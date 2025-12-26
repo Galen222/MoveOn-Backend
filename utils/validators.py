@@ -56,3 +56,17 @@ def validar_fecha_nacimiento_logica(v: date) -> date:
     if edad < 13:
         raise ValueError('Error: Debes tener al menos 13 años para registrarte')
     return v
+
+def validar_altura_logica(v: int) -> int:
+    """Valida la altura en cm."""
+    if v is None: return v
+    if not (50 <= v <= 300):
+        raise ValueError('Error: La altura debe estar entre 50cm y 300cm')
+    return v
+
+def validar_peso_logica(v: float) -> float:
+    """Valida el peso en kg."""
+    if v is None: return v
+    if not (20 <= v <= 300):
+        raise ValueError('Error: El peso debe estar entre 20kg y 300kg')
+    return v

@@ -85,6 +85,11 @@ class ProvinciaEspaña(str, Enum):
     CEUTA = "Ceuta"
     MELILLA = "Melilla"
 
+class GeneroUsuario(str, Enum):
+    HOMBRE = "Hombre"
+    MUJER = "Mujer"
+    OTRO = "Otro"
+
 class RegistroUsuario(BaseModel):
     """
     Esquema para validar los campos en el registro de un nuevo usuario.
@@ -94,6 +99,9 @@ class RegistroUsuario(BaseModel):
     contraseña: str = Field(...)
     nombre_real: Optional[str] = None
     fecha_nacimiento: date
+    genero: Optional[GeneroUsuario] = None
+    altura: Optional[int] = None
+    peso: Optional[float] = None    
     provincia: Optional[ProvinciaEspaña] = None
     perfil_visible: bool = Field(default=True)
     
@@ -161,10 +169,38 @@ class RegistroUsuario(BaseModel):
     @classmethod
     def validar_fecha_nacimiento_registro(cls, v):
         return validators.validar_fecha_nacimiento_logica(v)
+    
+    @field_validator('genero', mode='wrap')
+    @classmethod
+    def validar_genero_registro_custom(cls, v, handler):
+        """Intercepta el genero para devolver un mensaje en el formato estandar."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: El género seleccionado no es válido')
+
+    @field_validator('altura', mode='wrap')
+    @classmethod
+    def validar_altura_registro_custom(cls, v, handler):
+        """Intercepta la altura para devolver un mensaje en el formato estandar."""
+        return validators.interceptar_error_pydantic(v, handler,'Error: La altura debe ser un número entero en centimetros')
+
+    @field_validator('altura')
+    @classmethod
+    def validar_altura_registro(cls, v):
+        return validators.validar_altura_logica(v)
+
+    @field_validator('peso', mode='wrap')
+    @classmethod
+    def validar_peso_registro_custom(cls, v, handler):
+        """Intercepta el peso para devolver un mensaje en el formato estandar."""
+        return validators.interceptar_error_pydantic(v, handler,'Error: El peso debe ser un número en kilos')
+
+    @field_validator('peso')
+    @classmethod
+    def validar_peso_registro(cls, v):
+        return validators.validar_peso_logica(v)
 
     @field_validator('provincia', mode='wrap')
     @classmethod
-    def validar_provincia_custom(cls, v, handler):
+    def validar_provincia_registro_custom(cls, v, handler):
         """Intercepta el error de Enum para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(v, handler,'Error: La ubicación seleccionada no es válida')
 
@@ -207,6 +243,9 @@ class ActualizarPerfil(BaseModel):
     email: Optional[EmailStr] = None
     contraseña: Optional[str] = None
     fecha_nacimiento: Optional[date] = None
+    genero: Optional[GeneroUsuario] = None
+    altura: Optional[int] = None
+    peso: Optional[float] = None    
     provincia: Optional[ProvinciaEspaña] = None
     perfil_visible: Optional[bool] = None
 
@@ -247,6 +286,34 @@ class ActualizarPerfil(BaseModel):
     def validar_fecha_nacimiento_actualizacion(cls, v):
         return validators.validar_fecha_nacimiento_logica(v) if v is not None else v
 
+    @field_validator('genero', mode='wrap')
+    @classmethod
+    def validar_genero_actualizacion_custom(cls, v, handler):
+        """Intercepta el genero para devolver un mensaje en el formato estandar."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: El género seleccionado no es válido')
+
+    @field_validator('altura', mode='wrap')
+    @classmethod
+    def validar_altura_actualizacion_custom(cls, v, handler):
+        """Intercepta la altura para devolver un mensaje en el formato estandar."""
+        return validators.interceptar_error_pydantic(v, handler,'Error: La altura debe ser un número entero en cm')
+
+    @field_validator('altura')
+    @classmethod
+    def validar_altura_actualizacion(cls, v):
+        return validators.validar_altura_logica(v)
+
+    @field_validator('peso', mode='wrap')
+    @classmethod
+    def validar_peso_actualizacion_custom(cls, v, handler):
+        """Intercepta el peso para devolver un mensaje en el formato estandar."""
+        return validators.interceptar_error_pydantic(v, handler,'Error: El peso debe ser un número en kilos')
+
+    @field_validator('peso')
+    @classmethod
+    def validar_peso_actualizacion(cls, v):
+        return validators.validar_peso_logica(v)
+
     @field_validator('provincia', mode='wrap')
     @classmethod
     def validar_provincia_actualizacion_custom(cls, v, handler):
@@ -265,19 +332,27 @@ class SolicitarRecuperacion(BaseModel):
     
     @model_validator(mode='before')
     @classmethod
-    def validar_email_recuperacion(cls, values: Any) -> Any:
+    def validar_campos_requeridos_solicitar_recuperacion(cls, values: Any) -> Any:
         """Revisa que se reciban todos los campos obligatorios."""          
         if isinstance(values, dict):
             if 'email' not in values or not values['email']:
                 raise ValueError('Error: El email es obligatorio')
         return values
     
+    @field_validator('email', mode='before')
+    @classmethod
+    def validar_email_solicitar_recuperacion(cls, valor: Any) -> Any:
+        """Convierte el email a minúsculas antes de procesar."""
+        if isinstance(valor, str):
+            return valor.lower().strip()
+        return valor
+    
     @field_validator('email', mode='wrap')
     @classmethod
-    def validar_email_recuperacion_custom(cls, v, handler):
+    def validar_email_solicitar_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
-
+    
 class ConfirmarRecuperacion(BaseModel):
     """Esquema para cambiar la contraseña usando el código recibido."""
     email: EmailStr
@@ -286,7 +361,7 @@ class ConfirmarRecuperacion(BaseModel):
     
     @model_validator(mode='before')
     @classmethod
-    def validar_campos_recuperacion(cls, values: Any) -> Any:
+    def validar_campos_confirmar_recuperacion(cls, values: Any) -> Any:
         """Revisa que se reciban todos los campos obligatorios."""          
         if isinstance(values, dict):
             if 'email' not in values or not values['email']:
@@ -299,12 +374,12 @@ class ConfirmarRecuperacion(BaseModel):
     
     @field_validator('nueva_contraseña')
     @classmethod
-    def validar_nueva_contraseña_recuperacion(cls, v):
+    def validar_nueva_contraseña_confirmar_recuperacion(cls, v):
         return validators.validar_contraseña_logica(v)
     
     @field_validator('codigo', mode='before')
     @classmethod
-    def limpiar_codigo(cls, v) -> Any:
+    def limpiar_codigo_confirmar_recuperacion(cls, v) -> Any:
         if isinstance(v, str):
             #Quitar espacios delante y detrás.
             valor_limpio = v.strip()
@@ -312,11 +387,21 @@ class ConfirmarRecuperacion(BaseModel):
                 raise ValueError('Error: El código no puede estar vacío')
             if len(valor_limpio) != 6:
                 raise ValueError('Error: El código debe tener exactamente 6 caracteres')
+            if not valor_limpio.isdigit():
+                raise ValueError('Error: El código debe contener solo números')
             return valor_limpio
         return v
     
+    @field_validator('email', mode='before')
+    @classmethod
+    def validar_email_confirmar_recuperacion(cls, valor: Any) -> Any:
+        """Convierte el email a minúsculas antes de procesar."""
+        if isinstance(valor, str):
+            return valor.lower().strip()
+        return valor
+    
     @field_validator('email', mode='wrap')
     @classmethod
-    def validar_email_recuperacion_custom(cls, v, handler):
+    def validar_email_confirmar_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
