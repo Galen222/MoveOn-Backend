@@ -13,6 +13,8 @@ import schemas
 from services import user_service, file_service
 from database import obtener_db
 from fastapi.concurrency import run_in_threadpool
+from typing import List, Optional
+from schemas import ProvinciaEspaña
 
 router = APIRouter(tags=["Usuarios"])
 
@@ -84,3 +86,31 @@ def borrar_perfil(db: Session = Depends(obtener_db),
     
     file_service.borrar_foto(usuario.foto_perfil, usuario_actual)
     return user_service.eliminar_cuenta(db, usuario)
+
+@router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
+def obtener_ranking(
+    request: Request,
+    provincia: Optional[ProvinciaEspaña] = None, # filtro por provincia opcional.
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+):
+    """
+    Devuelve el TOP 15 de usuarios con más puntos (KM recorridos).
+    Permite filtrar por provincia de foma opcional.
+    """
+    # Obtener los datos
+    ranking = user_service.obtener_ranking(db, provincia)
+    
+    # Procesar la URL de las fotos para que la App pueda descargarlas.
+    ranking_final = []
+    for item in ranking:
+        # Usar el servicio existente para crear la URL correcta.
+        url_foto = file_service.construir_url_foto(item["foto_perfil"], request)
+        
+        ranking_final.append({
+            "nombre_usuario": item["nombre_usuario"],
+            "foto_perfil": url_foto,
+            "total_puntos": item["total_puntos"]
+        })
+        
+    return ranking_final

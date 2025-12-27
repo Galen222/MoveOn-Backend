@@ -530,7 +530,12 @@ class RespuestaObtenerActividad(BaseModel):
     class Config:
         from_attributes = True
         populate_by_name = True
-        
+
+class ObtenerRanking(BaseModel):
+    nombre_usuario: str
+    foto_perfil: Optional[str] = None
+    total_puntos: int
+
 class RespuestaGenerica(BaseModel):
     estatus: str
     mensaje: str

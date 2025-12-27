@@ -27,6 +27,10 @@ def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActi
         fecha_ruta=datos.fecha_ruta
     )
 
+    # Sumamos los metros recorridos de la actividad a los metros totales que tiene el usuario
+    metros_actuales = usuario.total_metros if usuario.total_metros else 0.0
+    usuario.total_metros = metros_actuales + datos.distancia
+
     # Se guarda en BD.
     db.add(nueva_actividad)
     db.commit()
@@ -84,6 +88,13 @@ def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
     if not actividad:
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
+    # Se resta la distancia en metros recorrida de la ruta al borrarla.
+    if usuario.total_metros:
+        usuario.total_metros -= actividad.distancia
+        # Evitar números negativos por errores de redondeo flotante
+        if usuario.total_metros < 0: 
+            usuario.total_metros = 0.0
+
     db.delete(actividad)
     db.commit()
     return {"estatus": "success", "mensaje": "Actividad eliminada"}
@@ -98,6 +109,9 @@ def eliminar_actividades(db: Session, usuario_actual: str):
     num_borrados = db.query(database.Actividad)\
         .filter(database.Actividad.usuario_id == usuario.id)\
         .delete(synchronize_session=False)
+        
+    # Borrar todos los metros recorridos de las actividades del usuario.
+    usuario.total_metros = 0.0
 
     db.commit()
     

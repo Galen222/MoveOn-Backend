@@ -5,10 +5,12 @@ Servicio de Gestión de Usuarios.
 Encapsula la lógica de negocio de registro y actualización de perfil.
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from fastapi import HTTPException
 import database
 import auth
 import schemas
+from typing import Optional
 
 def registrar_nuevo_usuario(db: Session, datos: schemas.Registro):
     """Registro de nuevo usuario con validación de duplicados."""
@@ -81,3 +83,44 @@ def eliminar_cuenta(db: Session, usuario: database.Usuario):
     db.delete(usuario)
     db.commit()
     return {"estatus": "success", "mensaje": "Tu cuenta ha sido eliminada permanentemente"}
+
+def obtener_ranking(db: Session, provincia: Optional[str] = None):
+    """
+    Obtiene el Ranking de los usuarios con más kilometros recorridos.
+    """
+    
+    # Query sobre la tabla Usuarios
+    query = db.query(
+        database.Usuario.nombre_usuario,
+        database.Usuario.foto_perfil,
+        database.Usuario.total_metros
+    )
+
+    # Filtro opcional
+    if provincia:
+        query = query.filter(database.Usuario.provincia == provincia)
+
+    # Ordenar por el campo pre-calculado.
+    # Filtrar que total_metros > 0 para no llenar el ranking de usuarios inactivos.
+    # Filtrar que solo los usuarios con perfil publico aparezcan en el ranking.
+    resultados = query.filter(
+            database.Usuario.total_metros > 0,
+            database.Usuario.perfil_visible == True
+        )\
+        .order_by(desc(database.Usuario.total_metros))\
+        .limit(15)\
+        .all()
+    
+    # Convertir Metros a Puntos
+    ranking_procesado = []
+    for nombre, foto, total_metros in resultados:
+        # 1 KM = 1 Punto (División entera).
+        puntos = int(total_metros / 1000)
+        
+        ranking_procesado.append({
+            "nombre_usuario": nombre,
+            "foto_perfil": foto, 
+            "total_puntos": puntos
+        })
+        
+    return ranking_procesado

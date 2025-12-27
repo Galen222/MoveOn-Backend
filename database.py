@@ -42,6 +42,7 @@ class Usuario(Base):
         peso: peso personal para control de calorias detallado.
         provincia: Ubicación geográfica opcional proporcionada por el usuario.
         foto_perfil: Ruta o nombre del archivo de imagen (predeterminado o subido).
+        total_metros: Distancia total recorrida para calcular el Ranking.
         fecha_registro: Marca de tiempo automática de la creación de cuenta.
         fecha_eula: Registro de cuándo el usuario aceptó los términos de servicio.
         perfil_visible: Ajuste de privacidad para mostrar u ocultar datos a terceros.
@@ -64,6 +65,7 @@ class Usuario(Base):
     peso: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     provincia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
+    total_metros: Mapped[float] = mapped_column(Float, default=0.0, index=True)
     
     # Metadatos automáticos del servidor
     fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
