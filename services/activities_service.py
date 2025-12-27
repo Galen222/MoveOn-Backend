@@ -34,17 +34,34 @@ def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActi
     
     return nueva_actividad
 
+def obtener_actividad(db: Session, usuario_actual: str, id_actividad: int):
+    # Burcar usuario
+    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+
+    # Buscar la actividad asegurando que pertenezca a este usuario
+    actividad = db.query(database.Actividad).filter(
+        database.Actividad.id == id_actividad,
+        database.Actividad.usuario_id == usuario.id
+    ).first()
+
+    if not actividad:
+        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+
+    return actividad
+
 def obtener_actividades(db: Session, usuario_actual: str, skip: int, limit: int):
     """
     Obtiene la lista paginada de actividades de un usuario específico.
     """
-    # Se Busca el usuario para obtener su ID
+    # Se Busca el usuario para obtener su ID.
     usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
     
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    # Se Hace la query filtrando por ese ID de usuario
+    # Se Hace la query filtrando por ese ID de usuario.
     actividades = db.query(database.Actividad)\
         .filter(database.Actividad.usuario_id == usuario.id)\
         .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())\
@@ -70,3 +87,21 @@ def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
     db.delete(actividad)
     db.commit()
     return {"estatus": "success", "mensaje": "Actividad eliminada"}
+
+def eliminar_actividades(db: Session, usuario_actual: str):
+    # Buscar usuario
+    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+
+    # Borrado masivo. Buscar todas las actividades donde el usuario_id coincida y borrarlas de golpe.
+    num_borrados = db.query(database.Actividad)\
+        .filter(database.Actividad.usuario_id == usuario.id)\
+        .delete(synchronize_session=False)
+
+    db.commit()
+    
+    return {
+        "estatus": "success", 
+        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {num_borrados} actividades."
+    }
