@@ -96,6 +96,33 @@ def obtener_perfil_publico(db: Session, nombre_objetivo: str):
 
     return usuario
 
+# ... imports (asegúrate de que Usuario esté importado)
+
+def buscar_usuario(db: Session, termino_busqueda: str):
+    """
+    Busca usuarios cuyo nombre_usuario contenga el término.
+    Filtros:
+    1. Coincidencia parcial (ilike)
+    2. Perfil visible (Privacidad)
+    3. Límite de 20 (Rendimiento)
+    """
+    # Limpiamos espacios
+    termino = termino_busqueda.strip()
+    
+    # Si la búsqueda está vacía, devolvemos lista vacía para no traer toda la DB
+    if not termino:
+        return []
+
+    resultados = db.query(database.Usuario).filter(
+        # ILIKE: Busca coincidencias sin importar mayúsculas/minúsculas
+        # %termino% significa: contiene el texto en cualquier parte
+        database.Usuario.nombre_usuario.ilike(f"%{termino}%"),
+        # PRIVACIDAD: Solo usuarios visibles
+        database.Usuario.perfil_visible == True
+    ).limit(20).all()
+    
+    return resultados
+
 def eliminar_cuenta(db: Session, usuario: database.Usuario):
     """Elimina permanentemente el registro de la base de datos."""
     db.delete(usuario)

@@ -365,6 +365,13 @@ class InformacionPerfilPublico(BaseModel):
     foto_perfil: Optional[str] = None
     total_puntos: int
 
+class BusquedaUsuario(BaseModel):
+    """
+    Esquema para resultados de la barra de búsqueda.
+    """
+    nombre_usuario: str
+    foto_perfil: Optional[str] = None
+
 class SolicitarContraseña(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
     email: EmailStr

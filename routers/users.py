@@ -6,7 +6,7 @@ Endpoints de Gestión de Perfil de Usuario.
 Define las rutas para el registro de nuevos usuarios y la gestión 
 posterior del perfil (consulta, actualización, foto y borrado).
 """
-from fastapi import APIRouter, Depends, File, UploadFile, Request
+from fastapi import APIRouter, Depends, File, UploadFile, Request, Query
 from sqlalchemy.orm import Session
 import auth
 import schemas
@@ -46,12 +46,13 @@ def informacion_perfil(request: Request,
         "perfil_visible": usuario.perfil_visible
     }
 
-@router.get("/perfil/publico/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
-def ver_perfil_publico(
-    nombre_usuario: str, # El usuario a ver.
+@router.get("/perfil/informacion/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
+def informacion_perfil_publico(
+nombre_usuario: str,
     request: Request,
     db: Session = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
     Permite ver la ficha reducida de otro usuario si este tiene el perfil visible.
@@ -113,12 +114,41 @@ def borrar_perfil(db: Session = Depends(obtener_db),
     file_service.borrar_foto(usuario.foto_perfil, usuario_actual)
     return user_service.eliminar_cuenta(db, usuario)
 
+@router.get("/perfil/buscar", response_model=List[schemas.BusquedaUsuario])
+def buscar_perfil(
+    request: Request,
+    # 'q' es el parámetro de la URL: /perfil/buscar?q=pepe
+    # min_length=3 valida que escriban al menos 3 letras antes de molestar a la base de datos
+    q: str = Query(..., min_length=3, description="Término de búsqueda (min 3 caracteres)"),
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+):
+    """
+    Busca usuarios por nombre (coincidencia parcial).
+    Solo devuelve usuarios con perfil público.
+    """
+    resultados = user_service.buscar_usuario(db, q)
+    
+    # Procesamos para añadir la URL completa de la foto
+    lista_final = []
+    for usuario in resultados:
+        url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)
+        
+        lista_final.append({
+            "nombre_usuario": usuario.nombre_usuario,
+            "foto_perfil": url_foto
+        })
+        
+    return lista_final
+
 @router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
 def obtener_ranking(
-    request: Request,
-    provincia: Optional[ProvinciaEspaña] = None, # filtro por provincia opcional.
+request: Request,
+    provincia: Optional[ProvinciaEspaña] = None,
     db: Session = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
     Devuelve el TOP 15 de usuarios con más puntos (KM recorridos).
