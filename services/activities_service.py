@@ -36,7 +36,22 @@ def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActi
     db.commit()
     db.refresh(nueva_actividad)
     
-    return nueva_actividad
+    # Se calculan los puntos para el Ranking
+    puntos_actualizados = int(usuario.total_metros / 1000)
+
+    respuesta = {
+        "id": nueva_actividad.id,
+        "tipo": nueva_actividad.tipo,
+        "distancia": nueva_actividad.distancia,
+        "duracion": nueva_actividad.duracion,
+        "calorias_quemadas": nueva_actividad.calorias_quemadas,
+        "ruta_polilinea": nueva_actividad.ruta_polilinea,
+        "ruta_mapa_url": nueva_actividad.ruta_mapa_url,
+        "fecha_ruta": nueva_actividad.fecha_ruta,
+        "nuevo_total_puntos": puntos_actualizados
+    }
+    
+    return respuesta
 
 def obtener_actividad(db: Session, usuario_actual: str, id_actividad: int):
     # Burcar usuario

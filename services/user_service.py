@@ -78,6 +78,24 @@ def actualizar_perfil_usuario(db: Session, usuario: database.Usuario, datos: sch
     db.commit()
     return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
 
+def obtener_perfil_publico(db: Session, nombre_objetivo: str):
+    """
+    Busca un usuario por nombre para mostrar su ficha pública.
+    Solo devuelve datos si el usuario existe y tiene perfil_visible=True.
+    """
+    usuario = db.query(database.Usuario).filter(
+        database.Usuario.nombre_usuario == nombre_objetivo
+    ).first()
+
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+
+    # LÓGICA DE PRIVACIDAD
+    if not usuario.perfil_visible:
+        raise HTTPException(status_code=403, detail="Error: Este perfil es privado")
+
+    return usuario
+
 def eliminar_cuenta(db: Session, usuario: database.Usuario):
     """Elimina permanentemente el registro de la base de datos."""
     db.delete(usuario)

@@ -45,7 +45,33 @@ def informacion_perfil(request: Request,
         "foto_perfil": file_service.construir_url_foto(usuario.foto_perfil, request),
         "perfil_visible": usuario.perfil_visible
     }
+
+@router.get("/perfil/publico/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
+def ver_perfil_publico(
+    nombre_usuario: str, # El usuario a ver.
+    request: Request,
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+):
+    """
+    Permite ver la ficha reducida de otro usuario si este tiene el perfil visible.
+    Calcula los puntos de ese usuario en tiempo real basándose en los metros acumulados.
+    """
+    # Obtener el usuario.
+    usuario_objetivo = user_service.obtener_perfil_publico(db, nombre_usuario)
     
+    # Calcular puntos (1 KM = 1 Punto).
+    metros = usuario_objetivo.total_metros if usuario_objetivo.total_metros else 0
+    puntos = int(metros / 1000)
+
+    # Devolver solo los datos públicos.
+    return {
+        "nombre_usuario": usuario_objetivo.nombre_usuario,
+        "provincia": usuario_objetivo.provincia,
+        "foto_perfil": file_service.construir_url_foto(usuario_objetivo.foto_perfil, request),
+        "total_puntos": puntos
+    }
+
 @router.post("/perfil/foto", response_model=schemas.RespuestaGenerica)
 async def foto_perfil(
     db: Session = Depends(obtener_db),

@@ -354,7 +354,17 @@ class ActualizarPerfil(BaseModel):
     def validar_perfil_visible_actualizacion_custom(cls, v, handler):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato de perfil visible no es válido')        
-    
+
+class InformacionPerfilPublico(BaseModel):
+    """
+    Esquema reducido para ver el perfil de otro usuario.
+    Oculta datos sensibles (email, peso, fecha nacimiento, etc).
+    """
+    nombre_usuario: str
+    provincia: Optional[str] = None
+    foto_perfil: Optional[str] = None
+    total_puntos: int
+
 class SolicitarContraseña(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
     email: EmailStr
@@ -526,6 +536,8 @@ class RespuestaObtenerActividad(BaseModel):
     ruta_polilinea: Optional[str] = None
     ruta_mapa_url: Optional[str] = None
     fecha_ruta: datetime
+    # Cuando se guarda la actividad se mandan los puntos actuales.
+    nuevo_total_puntos: Optional[int] = None 
     
     class Config:
         from_attributes = True
