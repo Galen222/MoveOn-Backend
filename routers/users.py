@@ -16,19 +16,19 @@ from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(tags=["Usuarios"])
 
-@router.post("/registro")
-def registro(datos: schemas.RegistroUsuario, 
+@router.post("/registro", response_model=schemas.RespuestaRegistro)
+def registro(datos: schemas.Registro, 
              db: Session = Depends(obtener_db), 
              _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Registro de nuevo usuario con validación de duplicados."""
     return user_service.registrar_nuevo_usuario(db, datos)
 
-@router.get("/perfil/informacion")
+@router.get("/perfil/informacion", response_model=schemas.RespuestaInformacionPerfil) 
 def informacion_perfil(request: Request,
                       db: Session = Depends(obtener_db), 
                       _auth_app=Depends(auth.verificar_sesion_aplicacion),
                       usuario_actual: str = Depends(auth.obtener_usuario_actual)):
-    """Obtiene los datos del perfil. Maneja para la imagen de perfil URLs locales o de Cloudinary."""
+    """Obtiene los datos del perfil."""
     usuario = user_service.obtener_perfil(db, usuario_actual)
     
     return {
@@ -44,7 +44,7 @@ def informacion_perfil(request: Request,
         "perfil_visible": usuario.perfil_visible
     }
     
-@router.post("/perfil/foto")
+@router.post("/perfil/foto", response_model=schemas.RespuestaGenerica)
 async def foto_perfil(
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
@@ -66,7 +66,7 @@ async def foto_perfil(
     
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
-@router.patch("/perfil/actualizar")
+@router.patch("/perfil/actualizar", response_model=schemas.RespuestaGenerica)
 def actualizar_perfil(datos: schemas.ActualizarPerfil, 
                       db: Session = Depends(obtener_db), 
                       _auth_app=Depends(auth.verificar_sesion_aplicacion),
@@ -75,7 +75,7 @@ def actualizar_perfil(datos: schemas.ActualizarPerfil,
     usuario = user_service.obtener_perfil(db, usuario_actual)
     return user_service.actualizar_perfil_usuario(db, usuario, datos)
 
-@router.delete("/perfil/borrar")
+@router.delete("/perfil/borrar", response_model=schemas.RespuestaGenerica)
 def borrar_perfil(db: Session = Depends(obtener_db), 
                   _auth_app=Depends(auth.verificar_sesion_aplicacion),
                   usuario_actual: str = Depends(auth.obtener_usuario_actual)):

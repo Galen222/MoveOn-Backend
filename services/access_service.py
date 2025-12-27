@@ -37,7 +37,7 @@ async def generar_codigo_recuperacion(db: Session, email: str):
     
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
 
-def resetear_contraseña(db: Session, datos: schemas.ConfirmarRecuperacion):
+def resetear_contraseña(db: Session, datos: schemas.ConfirmarContraseña):
     """Valida el OTP y actualiza la contraseña."""
     usuario = db.query(database.Usuario).filter(
         database.Usuario.email == datos.email.lower(),

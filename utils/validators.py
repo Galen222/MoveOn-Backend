@@ -1,7 +1,7 @@
 # utils/validators.py
 
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any
 
 def interceptar_error_pydantic(valor: Any, handler, mensaje_error: str):
@@ -69,4 +69,43 @@ def validar_peso_logica(v: float) -> float:
     if v is None: return v
     if not (20 <= v <= 300):
         raise ValueError('Error: El peso debe estar entre 20kg y 300kg')
+    return v
+
+def validar_fecha_ruta_logica(v: datetime) -> datetime:
+    """Lógica: No se pueden guardar actividades del futuro."""
+    if v:
+
+        ahora = datetime.now(v.tzinfo if v.tzinfo else None)
+        # CAMBIO: Se da 10 minutos de margen por si el reloj del móvil está adelantado.
+        margen = ahora + timedelta(minutes=10)
+        if v > margen:
+            raise ValueError('Error: La fecha de la actividad no puede ser en el futuro')
+    return v
+
+def validar_distancia_logica(v: float) -> float:
+    """Lógica: Nadie corre más de 300km en una sola sesión (Sanity Check)."""
+    # 300,000 metros = 300km
+    if v > 300000:
+        raise ValueError('Error: La distancia parece incorrecta (máximo 300km)')
+    return v
+
+def validar_duracion_logica(v: int) -> int:
+    """Lógica: Una actividad no suele durar más de 24 horas seguidas."""
+    # 86400 segundos = 24 horas
+    if v > 86400:
+        raise ValueError('Error: La duración excede el límite de 24 horas')
+    return v
+
+def validar_calorias_logica(v: int) -> int:
+    """Lógica: Quemar más de 10.000 calorías en una sesión es fisiológicamente improbable."""
+    if v > 10000:
+        raise ValueError('Error: Las calorías parecen incorrectas (máximo 10.000)')
+    return v
+
+def validar_polilinea_logica(v: str) -> str:
+    """Lógica: La polilínea no puede ser muy corta si existe."""
+    if v is None:
+        return None 
+    if len(v) < 5:
+        raise ValueError('Error: La ruta parece inválida')
     return v

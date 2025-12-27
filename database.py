@@ -8,12 +8,15 @@ la estructura de la tabla de usuarios.
 """
 from datetime import datetime, date, timezone
 from typing import Optional
-from sqlalchemy import create_engine, String, Date, DateTime, Boolean, Integer, Float
+from sqlalchemy import create_engine, String, Date, DateTime, Boolean, Integer, Float, ForeignKey, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import settings
+from urllib.parse import quote_plus
 
 # Construcción de la URL de conexión para PostgreSQL
-DATABASE_URL = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+user_safe = quote_plus(settings.DB_USER)
+pass_safe = quote_plus(settings.DB_PASSWORD)
+DATABASE_URL = f"postgresql://{user_safe}:{pass_safe}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
 
 # Configuración del motor de SQLAlchemy y la sesión
 engine = create_engine(DATABASE_URL)
@@ -25,7 +28,7 @@ class Base(DeclarativeBase):
 
 class Usuario(Base):
     """
-    Modelo de SQLAlchemy para la tabla de usuarios.
+    Modelo para la tabla de usuarios.
 
     Atributos:
         id: Identificador único autoincremental y clave primaria.
@@ -72,6 +75,41 @@ class Usuario(Base):
     # Recuperación de contraseña
     codigo_recuperacion: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+class Actividad(Base):
+    """
+    Modelo para registrar las actividades deportivas.
+    Relación 1:N con Usuario (Un usuario tiene muchas actividades).
+    
+    Atributos:
+        usuario_id: Identificador único del usuario y clave primaria.
+        tipo: Tipo de actividad realizada en la ruta.
+        distancia: Distancia recorrida en la ruta en metros.
+        duracion: Tiempo haciendo la ruta en segundos.
+        calorias_quemadas: Total de calorias quemadas durante la ruta.
+        ruta_polilinea: Ruta realizada en formato string de Google Maps.
+        ruta_mapa_url: URL con la ruta generada a traves de la polilinea.
+        fecha_ruta: fecha en la que se realizo la ruta.
+    """
+    __tablename__ = "actividades"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    
+    # Datos de ruta.
+    tipo: Mapped[str] = mapped_column(String, nullable=False)
+    distancia: Mapped[float] = mapped_column(Float, nullable=False)
+    duracion: Mapped[int] = mapped_column(Integer, nullable=False)
+    calorias_quemadas: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Datos de la ruta (Geometría).
+    # Uso Text porque la polyline puede ser muy larga.
+    ruta_polilinea: Mapped[Optional[str]] = mapped_column(Text, nullable=True) 
+    
+    # Instantanea del mapa
+    ruta_mapa_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    fecha_ruta: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))    
 
 def init_db():
     """

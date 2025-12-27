@@ -10,7 +10,7 @@ import database
 import auth
 import schemas
 
-def registrar_nuevo_usuario(db: Session, datos: schemas.RegistroUsuario):
+def registrar_nuevo_usuario(db: Session, datos: schemas.Registro):
     """Registro de nuevo usuario con validación de duplicados."""
     # Buscar si existe ignorando mayúsculas/minúsculas
     usuario_existente = db.query(database.Usuario).filter(

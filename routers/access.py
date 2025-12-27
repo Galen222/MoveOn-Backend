@@ -17,7 +17,7 @@ from limiter_config import limiter
 
 router = APIRouter(tags=["Seguridad"])
 
-@router.get("/handshake")
+@router.get("/handshake", response_model=schemas.RespuestaGenerica)
 def handshake(x_app_id: str = Header(None)):
     """Valida la App de Android y entrega un token de sesión temporal."""
     if x_app_id != settings.APP_ID_SECRET:
@@ -25,10 +25,10 @@ def handshake(x_app_id: str = Header(None)):
     # Crea el token de corta duración.
     return {"app_session_token": auth.crear_token_aplicacion()}
 
-@router.post("/login")
-@limiter.limit("5/minute") # Limite 5 intentos por minuto
+@router.post("/login", response_model=schemas.RespuestaLogin)
+@limiter.limit("20/minute") # Limite 20 intentos por minuto
 def login(request: Request,
-          datos: schemas.LoginUsuario, 
+          datos: schemas.Login, 
           db: Session = Depends(obtener_db), 
           _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Autentica al usuario y genera el token de acceso JWT final."""
@@ -48,15 +48,15 @@ def login(request: Request,
         "token_acceso": token
     }
 
-@router.post("/contraseña/solicitar")
-async def solicitar_codigo(datos: schemas.SolicitarRecuperacion, 
+@router.post("/contraseña/solicitar", response_model=schemas.RespuestaGenerica)
+async def solicitar_contraseña(datos: schemas.SolicitarContraseña, 
                      db: Session = Depends(obtener_db),
                      _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Solicitar código de 6 dígitos al email."""
     return await access_service.generar_codigo_recuperacion(db, datos.email)
 
-@router.post("/contraseña/confirmar")
-def confirmar_codigo(datos: schemas.ConfirmarRecuperacion, 
+@router.post("/contraseña/confirmar", response_model=schemas.RespuestaGenerica)
+def confirmar_contraseña(datos: schemas.ConfirmarContraseña, 
                      db: Session = Depends(obtener_db),
                      _auth_app=Depends(auth.verificar_sesion_aplicacion)):
     """Enviar código y nueva contraseña para resetear."""

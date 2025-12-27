@@ -7,7 +7,7 @@ Define la estructura de los datos que entran y salen de la API,
 asegurando que cumplan con las reglas de negocio antes de tocar la DB.
 """
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Any
 import re
 from enum import Enum
@@ -90,7 +90,11 @@ class GeneroUsuario(str, Enum):
     MUJER = "Mujer"
     OTRO = "Otro"
 
-class RegistroUsuario(BaseModel):
+class TipoActividad(str, Enum):
+    CAMINAR = "Caminar"    
+    CORRER = "Correr"
+
+class Registro(BaseModel):
     """
     Esquema para validar los campos en el registro de un nuevo usuario.
     """
@@ -210,7 +214,12 @@ class RegistroUsuario(BaseModel):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato de perfil visible no es válido')        
 
-class LoginUsuario(BaseModel):
+class RespuestaRegistro(BaseModel):
+    estatus: str
+    mensaje: str
+    nombre_usuario: str
+
+class Login(BaseModel):
     """Esquema para validar las credenciales en el inicio de sesión."""
     identificador: str 
     contraseña: str
@@ -237,6 +246,26 @@ class LoginUsuario(BaseModel):
             return valor_limpio
         return valor
 
+class RespuestaLogin(BaseModel):
+    estatus: str
+    nombre_usuario: str
+    token_acceso: str
+    
+class RespuestaInformacionPerfil(BaseModel):
+    nombre_usuario: str
+    nombre_real: Optional[str] = None
+    email: EmailStr
+    fecha_nacimiento: date
+    genero: Optional[str] = None
+    altura: Optional[int] = None
+    peso: Optional[float] = None        
+    provincia: Optional[str] = None
+    foto_perfil: Optional[str] = None
+    perfil_visible: bool
+
+    class Config:
+        from_attributes = True
+        
 class ActualizarPerfil(BaseModel):
     """Esquema para actualizaciones del perfil de usuario."""
     nombre_real: Optional[str] = None
@@ -326,7 +355,7 @@ class ActualizarPerfil(BaseModel):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato de perfil visible no es válido')        
     
-class SolicitarRecuperacion(BaseModel):
+class SolicitarContraseña(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
     email: EmailStr
     
@@ -353,7 +382,7 @@ class SolicitarRecuperacion(BaseModel):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
     
-class ConfirmarRecuperacion(BaseModel):
+class ConfirmarContraseña(BaseModel):
     """Esquema para cambiar la contraseña usando el código recibido."""
     email: EmailStr
     codigo: str = Field(...)
@@ -405,3 +434,103 @@ class ConfirmarRecuperacion(BaseModel):
     def validar_email_confirmar_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
+    
+class GuardarActividad(BaseModel):
+    tipo: TipoActividad
+    distancia: float = Field(...)
+    duracion: int = Field(...)
+    calorias_quemadas: int = Field(...)
+    ruta_polilinea: Optional[str] = None 
+    ruta_mapa_url: Optional[str] = None 
+    fecha_ruta: datetime
+
+    @model_validator(mode='before')
+    @classmethod
+    def validar_campos_requeridos_actividad(cls, values: Any) -> Any:
+        """Revisa manualmente que lleguen los datos para dar el mensaje de error personalizado."""
+        if isinstance(values, dict):
+            if 'tipo' not in values:
+                raise ValueError('Error: El tipo de actividad es obligatorio')
+            if 'distancia' not in values:
+                raise ValueError('Error: La distancia es obligatoria')
+            if 'duracion' not in values:
+                raise ValueError('Error: La duración es obligatoria')
+            if 'calorias_quemadas' not in values:
+                raise ValueError('Error: Las calorías quemadas son obligatorias')
+        return values
+
+    @field_validator('tipo', mode='wrap')
+    @classmethod
+    def validar_tipo_actividad_custom(cls, v, handler):
+        """Intercepta errores en el Enum de tipo de actividad."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: El tipo de actividad no es válido')
+
+    @field_validator('distancia', mode='wrap')
+    @classmethod
+    def validar_distancia_actividad_custom(cls, v, handler):
+        """Intercepta errores de tipo en distancia."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: La distancia debe ser un número válido en metros')
+
+    @field_validator('distancia')
+    @classmethod
+    def validar_distancia_actividad(cls, v):
+        return validators.validar_distancia_logica(v)
+
+    @field_validator('duracion', mode='wrap')
+    @classmethod
+    def validar_duracion_actividad_custom(cls, v, handler):
+        """Intercepta errores de tipo en duración."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: La duración debe ser un número entero en segundos')
+
+    @field_validator('duracion')
+    @classmethod
+    def validar_duracion_actividad(cls, v):
+        return validators.validar_duracion_logica(v)
+
+    @field_validator('calorias_quemadas', mode='wrap')
+    @classmethod
+    def validar_calorias_actividad_custom(cls, v, handler):
+        """Intercepta errores de tipo en calorías."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: Las calorías deben ser un número entero')
+
+    @field_validator('calorias_quemadas')
+    @classmethod
+    def validar_calorias_actividad(cls, v):
+        return validators.validar_calorias_logica(v)
+
+    @field_validator('fecha_ruta', mode='wrap')
+    @classmethod
+    def validar_fecha_ruta_actividad_custom(cls, v, handler):
+        """Intercepta errores de formato de fecha."""
+        return validators.interceptar_error_pydantic(v, handler, 'Error: El formato de fecha no es válido')
+
+    @field_validator('fecha_ruta')
+    @classmethod
+    def validar_fecha_ruta_actividad(cls, v):
+        # Primero validamos formato (wrap) implícito en Pydantic, luego lógica
+        return validators.validar_fecha_ruta_logica(v)
+
+    @field_validator('ruta_polilinea', mode='before')
+    @classmethod
+    def validar_polilinea_actividad(cls, v):
+        if v == "":
+            return None
+        return validators.validar_polilinea_logica(v)
+
+class RespuestaObtenerActividad(BaseModel):
+    id: int
+    tipo: str
+    distancia: float
+    duracion: int
+    calorias_quemadas: int
+    ruta_polilinea: Optional[str] = None
+    ruta_mapa_url: Optional[str] = None
+    fecha_ruta: datetime
+    
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+        
+class RespuestaGenerica(BaseModel):
+    estatus: str
+    mensaje: str
