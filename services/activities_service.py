@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 import database
 import schemas
+from utils import calculos
 
 def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActividad):
     """
@@ -27,17 +28,20 @@ def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActi
         fecha_ruta=datos.fecha_ruta
     )
 
-    # Sumamos los metros recorridos de la actividad a los metros totales que tiene el usuario
-    metros_actuales = usuario.total_metros if usuario.total_metros else 0.0
-    usuario.total_metros = metros_actuales + datos.distancia
+    # Sumar los metros recorridos de la actividad a los metros totales que tiene el usuario.
+    # Se toma el valor directo de la BD y no el valor en Python para no caer en una race condition.
+    usuario.total_metros = database.Usuario.total_metros + datos.distancia
 
     # Se guarda en BD.
     db.add(nueva_actividad)
     db.commit()
     db.refresh(nueva_actividad)
+    # Al haber hecho el calculo en la BD, Python no sabe el nuevo valor.
+    # Debido a eso se refresca el usuario.
+    db.refresh(usuario)
     
-    # Se calculan los puntos para el Ranking
-    puntos_actualizados = int(usuario.total_metros / 1000)
+    # Calcular los puntos para el Ranking.
+    puntos_actualizados = calculos.calcular_puntos_nivel(usuario.total_metros)
 
     respuesta = {
         "id": nueva_actividad.id,

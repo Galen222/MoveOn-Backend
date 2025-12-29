@@ -72,7 +72,7 @@ def validar_peso_logica(v: float) -> float:
     return v
 
 def validar_fecha_ruta_logica(v: datetime) -> datetime:
-    """Lógica: No se pueden guardar actividades del futuro."""
+    """No se pueden guardar actividades del futuro."""
     if v:
 
         ahora = datetime.now(v.tzinfo if v.tzinfo else None)
@@ -83,27 +83,42 @@ def validar_fecha_ruta_logica(v: datetime) -> datetime:
     return v
 
 def validar_distancia_logica(v: float) -> float:
-    """Lógica: Nadie corre más de 300km en una sola sesión (Sanity Check)."""
-    # 300,000 metros = 300km
+    """
+    Nadie corre más de 300km en una sola sesión (Sanity Check).
+    Debe ser positiva y máximo 300km.
+    """
+    # 300,000 metros = 300km.
+    if v <= 0:
+        raise ValueError('Error: La distancia debe ser mayor a 0')
     if v > 300000:
         raise ValueError('Error: La distancia parece incorrecta (máximo 300km)')
     return v
 
 def validar_duracion_logica(v: int) -> int:
-    """Lógica: Una actividad no suele durar más de 24 horas seguidas."""
-    # 86400 segundos = 24 horas
+    """
+    Una actividad no suele durar más de 24 horas seguidas.
+    Debe ser positiva y máximo 24 horas.
+    """
+    # 86400 segundos = 24 horas.
+    if v <= 0:
+        raise ValueError('Error: La duración debe ser mayor a 0')
     if v > 86400:
         raise ValueError('Error: La duración excede el límite de 24 horas')
     return v
 
 def validar_calorias_logica(v: int) -> int:
-    """Lógica: Quemar más de 10.000 calorías en una sesión es fisiológicamente improbable."""
+    """
+    Quemar más de 10.000 calorías en una sesión es fisiológicamente improbable.
+    Debe ser positiva y máximo 10.000.
+    """
+    if v <= 0:
+        raise ValueError('Error: Las calorías deben ser mayor a 0')    
     if v > 10000:
         raise ValueError('Error: Las calorías parecen incorrectas (máximo 10.000)')
     return v
 
 def validar_polilinea_logica(v: str) -> str:
-    """Lógica: La polilínea no puede ser muy corta si existe."""
+    """La polilínea no puede ser muy corta si existe."""
     if v is None:
         return None 
     if len(v) < 5:

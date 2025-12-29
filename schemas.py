@@ -262,6 +262,7 @@ class RespuestaInformacionPerfil(BaseModel):
     provincia: Optional[str] = None
     foto_perfil: Optional[str] = None
     perfil_visible: bool
+    total_puntos: int
 
     class Config:
         from_attributes = True

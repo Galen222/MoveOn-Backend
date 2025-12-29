@@ -15,6 +15,7 @@ from database import obtener_db
 from fastapi.concurrency import run_in_threadpool
 from typing import List, Optional
 from schemas import ProvinciaEspaña
+from utils import calculos
 
 router = APIRouter(tags=["Usuarios"])
 
@@ -33,6 +34,9 @@ def informacion_perfil(request: Request,
     """Obtiene los datos del perfil."""
     usuario = user_service.obtener_perfil(db, usuario_actual)
     
+    # Calcular puntos (1 KM = 1 Punto).
+    puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
+    
     return {
         "nombre_usuario": usuario.nombre_usuario,
         "nombre_real": usuario.nombre_real,
@@ -43,7 +47,8 @@ def informacion_perfil(request: Request,
         "peso": usuario.peso,        
         "provincia": usuario.provincia,
         "foto_perfil": file_service.construir_url_foto(usuario.foto_perfil, request),
-        "perfil_visible": usuario.perfil_visible
+        "perfil_visible": usuario.perfil_visible,
+        "total_puntos": puntos        
     }
 
 @router.get("/perfil/informacion/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
@@ -55,15 +60,14 @@ nombre_usuario: str,
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
-    Permite ver la ficha reducida de otro usuario si este tiene el perfil visible.
+    Permite ver la ficha publica reducida de otro usuario si este tiene el perfil visible.
     Calcula los puntos de ese usuario en tiempo real basándose en los metros acumulados.
     """
     # Obtener el usuario.
     usuario_objetivo = user_service.obtener_perfil_publico(db, nombre_usuario)
     
     # Calcular puntos (1 KM = 1 Punto).
-    metros = usuario_objetivo.total_metros if usuario_objetivo.total_metros else 0
-    puntos = int(metros / 1000)
+    puntos = calculos.calcular_puntos_nivel(usuario_objetivo.total_metros)
 
     # Devolver solo los datos públicos.
     return {

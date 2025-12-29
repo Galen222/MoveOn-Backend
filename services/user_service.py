@@ -11,6 +11,7 @@ import database
 import auth
 import schemas
 from typing import Optional
+from utils import calculos
 
 def registrar_nuevo_usuario(db: Session, datos: schemas.Registro):
     """Registro de nuevo usuario con validación de duplicados."""
@@ -160,7 +161,7 @@ def obtener_ranking(db: Session, provincia: Optional[str] = None):
     ranking_procesado = []
     for nombre, foto, total_metros in resultados:
         # 1 KM = 1 Punto (División entera).
-        puntos = int(total_metros / 1000)
+        puntos = calculos.calcular_puntos_nivel(total_metros)
         
         ranking_procesado.append({
             "nombre_usuario": nombre,
