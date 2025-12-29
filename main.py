@@ -27,7 +27,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler) # type: ignore
 
-# Configuración de CORS para permitir peticiones desde la App.
+# Configuración de CORS para permitir peticiones externas.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,19 +40,22 @@ app.add_middleware(
 database.init_db()
 
 # Registro de excepciones.
+# Para mostrar los errores de las validaciones de Pydantic
+# con el mismo formato que los personalizados.
 app.add_exception_handler(RequestValidationError, manejador_validacion_personalizado)
 
-# Incluir rutas.
+# Rutas a los endpoints.
 app.include_router(access.router)
 app.include_router(users.router)
 app.include_router(activities.router)
 
 # Obtener el tipo de almacenamiento para las imagenes.
+# Seleccionando entre local (desarrollo) y Cloudinary (producción)
 STORAGE_TYPE = settings.STORAGE_TYPE
 
 # Configurar almacenamiento local si es necesario.
 if STORAGE_TYPE == "local":
-    # Usar la variable de settings.
+    # Usar la variable de settings con el nombre de la carpeta.
     carpeta_imagenes = settings.UPLOAD_DIR
     # Crear la carpeta para guardar imagenes en local si no existe.
     if not os.path.exists(carpeta_imagenes):

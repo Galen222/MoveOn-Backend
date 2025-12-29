@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     
     # Cloudinary
-    # Es mejor ponerles un valor por defecto para que no fallen si usas modo local
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
@@ -33,11 +32,11 @@ class Settings(BaseSettings):
     EMAIL_USER: str
     EMAIL_PASS: str
 
-    # CONFIGURACIÓN MODERNA DE PYDANTIC V2
+    # Configuración Pydantic V2.
     model_config = SettingsConfigDict(
         env_file=".env",
-        case_sensitive=True, # Distingue entre mayusculas y minusculas
-        extra="ignore" # Si hay variables extra en el .env, no da error
+        case_sensitive=True, # Distingue entre mayusculas y minusculas.
+        extra="ignore" # Si hay variables extra en el .env, no da error.
     )
 
 settings = Settings() # type: ignore
