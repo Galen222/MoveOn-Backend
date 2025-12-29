@@ -15,3 +15,7 @@ __pycache__/
 # Carpeta de fotos de perfil
 uploads/
 .uploads/
+
+# Dcoumentacion
+docs/
+.docs/
