@@ -118,7 +118,17 @@ def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
 
     db.delete(actividad)
     db.commit()
-    return {"estatus": "success", "mensaje": "Actividad eliminada"}
+    
+    # Refrescar para traer de la BD el valor real de 'total_metros' tras el 'case'
+    db.refresh(usuario) 
+    
+    # Recalcular los puntos con el valor actualizado
+    puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
+    return {
+        "estatus": "success", 
+        "mensaje": "Actividad eliminada",
+        "nuevo_total_puntos": puntos
+    }
 
 def eliminar_actividades(db: Session, usuario_actual: str):
     # Buscar usuario

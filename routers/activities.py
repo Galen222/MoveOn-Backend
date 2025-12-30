@@ -48,7 +48,7 @@ def obtener_todas_actividades(
     """
     return activities_service.obtener_actividades(db, usuario_actual, skip, limit)
 
-@router.delete("/actividad/borrar/{id_actividad}", response_model=schemas.RespuestaGenerica)
+@router.delete("/actividad/borrar/{id_actividad}", response_model=schemas.RespuestaBorrarActividad)
 def borrar_actividad(
     id_actividad: int,
     db: Session = Depends(obtener_db),

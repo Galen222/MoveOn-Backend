@@ -555,6 +555,11 @@ class RespuestaObtenerActividad(BaseModel):
         from_attributes = True
         populate_by_name = True
 
+class RespuestaBorrarActividad(BaseModel):
+    estatus: str
+    mensaje: str
+    nuevo_total_puntos: int
+
 class ObtenerRanking(BaseModel):
     nombre_usuario: str
     foto_perfil: Optional[str] = None
