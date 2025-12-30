@@ -1,7 +1,7 @@
 # services/access_service.py
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from datetime import datetime, timedelta, timezone
 import random
 import database
@@ -18,7 +18,7 @@ def buscar_por_identificador(db: Session, identificador: str):
         (database.Usuario.nombre_usuario == identificador_limpio)
     ).first()
 
-async def generar_codigo_recuperacion(db: Session, email: str):
+async def generar_codigo_recuperacion(db: Session, email: str, background_tasks: BackgroundTasks):
     """Genera el OTP de 6 dígitos y lo envía por email."""
     usuario = await run_in_threadpool(
         lambda: db.query(database.Usuario).filter(database.Usuario.email == email.lower()).first()
@@ -33,7 +33,7 @@ async def generar_codigo_recuperacion(db: Session, email: str):
     
         await run_in_threadpool(db.commit)
         # Envia el código por correo al usuario.
-        await email_service.enviar_codigo_recuperacion(email, codigo)
+        background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo)
     
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
 

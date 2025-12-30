@@ -3,10 +3,10 @@
 """
 Endpoints de Seguridad de Aplicación y Autenticación.
 
-Gestiona el apretón de manos (handshake) inicial para validar la App 
+Gestiona el apretón de manos (handshake) inicial para validar la App
 y el inicio de sesión de usuarios para obtener tokens de acceso.
 """
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 import auth
 import schemas
@@ -17,7 +17,7 @@ from limiter_config import limiter
 
 router = APIRouter(tags=["Seguridad"])
 
-@router.get("/handshake", response_model=schemas.RespuestaGenerica)
+@router.get("/handshake", response_model=schemas.RespuestaHandshake)
 def handshake(x_app_id: str = Header(None)):
     """Valida la App de Android y entrega un token de sesión temporal."""
     if x_app_id != settings.APP_ID_SECRET:
@@ -50,10 +50,14 @@ def login(request: Request,
 
 @router.post("/contraseña/solicitar", response_model=schemas.RespuestaGenerica)
 async def solicitar_contraseña(datos: schemas.SolicitarContraseña, 
+                     background_tasks: BackgroundTasks,
                      db: Session = Depends(obtener_db),
                      _auth_app=Depends(auth.verificar_sesion_aplicacion)):
-    """Solicitar código de 6 dígitos al email."""
-    return await access_service.generar_codigo_recuperacion(db, datos.email)
+    """
+    Solicitar código de 6 dígitos al email.
+    Se envía en segundo plano apra no bloquear la API mientras responde el servidor SMTP.
+    """
+    return await access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
 @router.post("/contraseña/confirmar", response_model=schemas.RespuestaGenerica)
 def confirmar_contraseña(datos: schemas.ConfirmarContraseña, 

@@ -94,6 +94,10 @@ class TipoActividad(str, Enum):
     CAMINAR = "Caminar"    
     CORRER = "Correr"
 
+class RespuestaHandshake(BaseModel):
+    """Esquema para la respuesta del handshake inicial."""
+    app_session_token: str
+
 class Registro(BaseModel):
     """
     Esquema para validar los campos en el registro de un nuevo usuario.
