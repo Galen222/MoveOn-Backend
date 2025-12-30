@@ -1,6 +1,7 @@
 # services/activities_service.py
 
 from sqlalchemy.orm import Session
+from sqlalchemy import case
 from fastapi import HTTPException
 import database
 import schemas
@@ -108,11 +109,12 @@ def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     # Se resta la distancia en metros recorrida de la ruta al borrarla.
-    if usuario.total_metros:
-        usuario.total_metros -= actividad.distancia
-        # Evitar números negativos por errores de redondeo flotante
-        if usuario.total_metros < 0: 
-            usuario.total_metros = 0.0
+    # Evita números negativos por errores de redondeo flotante.
+    # Calculo directo en BD para evitar Race conditions.
+    usuario.total_metros = case(
+        (database.Usuario.total_metros - actividad.distancia < 0, 0),
+        else_=database.Usuario.total_metros - actividad.distancia
+    )
 
     db.delete(actividad)
     db.commit()

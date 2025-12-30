@@ -8,7 +8,6 @@ import database
 import auth
 import schemas
 from services import email_service
-from fastapi.concurrency import run_in_threadpool
 
 def buscar_por_identificador(db: Session, identificador: str):
     """Búsqueda para login (email o nombre de usuario)."""
@@ -18,11 +17,9 @@ def buscar_por_identificador(db: Session, identificador: str):
         (database.Usuario.nombre_usuario == identificador_limpio)
     ).first()
 
-async def generar_codigo_recuperacion(db: Session, email: str, background_tasks: BackgroundTasks):
+def generar_codigo_recuperacion(db: Session, email: str, background_tasks: BackgroundTasks):
     """Genera el OTP de 6 dígitos y lo envía por email."""
-    usuario = await run_in_threadpool(
-        lambda: db.query(database.Usuario).filter(database.Usuario.email == email.lower()).first()
-    )
+    usuario = db.query(database.Usuario).filter(database.Usuario.email == email.lower()).first()
     
     # Si existe el correo se envía pero pero el mensaje de respuesta es el mismo para evitar pistas.
     if usuario:
@@ -31,7 +28,7 @@ async def generar_codigo_recuperacion(db: Session, email: str, background_tasks:
         usuario.codigo_recuperacion = codigo
         usuario.codigo_expiracion = datetime.now(timezone.utc) + timedelta(minutes=15)
     
-        await run_in_threadpool(db.commit)
+        db.commit()
         # Envia el código por correo al usuario.
         background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo)
     

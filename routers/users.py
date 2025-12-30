@@ -10,10 +10,9 @@ from fastapi import APIRouter, Depends, File, UploadFile, Request, Query
 from sqlalchemy.orm import Session
 import auth
 import schemas
+from typing import List, Optional
 from services import user_service, file_service
 from database import obtener_db
-from fastapi.concurrency import run_in_threadpool
-from typing import List, Optional
 from schemas import ProvinciaEspaña
 from utils import calculos
 
@@ -78,24 +77,24 @@ nombre_usuario: str,
     }
 
 @router.post("/perfil/foto", response_model=schemas.RespuestaGenerica)
-async def foto_perfil(
+def foto_perfil(
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
-    await file_service.validar_seguridad(archivo)
+    file_service.validar_seguridad(archivo)
     # Ejecutar la consulta bloqueante en un hilo separado
-    usuario = await run_in_threadpool(user_service.obtener_perfil, db, usuario_actual)
+    usuario = user_service.obtener_perfil(db, usuario_actual)
     
     # Se procesa la subida.
-    nueva_ruta_foto = await file_service.procesar_subida(archivo, usuario_actual)
+    nueva_ruta_foto = file_service.procesar_subida(archivo, usuario_actual)
     
     # Si la subida fue exitosa, se actualiza la base de datos.
     usuario.foto_perfil = nueva_ruta_foto
     
     # Ejecutar el commit bloqueante en un hilo separado
-    await run_in_threadpool(db.commit)
+    db.commit()
     
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 

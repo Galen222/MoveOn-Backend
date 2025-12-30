@@ -40,7 +40,7 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
     url_base = str(request.base_url).rstrip("/")
     return f"{url_base}/imagenes/{foto_perfil}"
 
-async def validar_seguridad(archivo: UploadFile):
+def validar_seguridad(archivo: UploadFile):
     # Validar tipo de archivo.
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Error: Solo imágenes JPG o PNG")
@@ -55,22 +55,22 @@ async def validar_seguridad(archivo: UploadFile):
         raise HTTPException(status_code=400, detail="Error: La imagen supera los 2MB")
 
     # Escaneo de firmas maliciosas
-    content = await archivo.read()
+    content = archivo.file.read()
     # Regresar el puntero del archivo al inicio
-    await archivo.seek(0)
+    archivo.file.seek(0)
     content_lower = content.lower()
     for signature in MALICIOUS_SIGNATURES:
         if signature in content_lower:
             raise HTTPException(status_code=400, detail="Error: Contenido malicioso detectado")
     return True
 
-async def procesar_subida(archivo: UploadFile, usuario_actual: str) -> str:
+def procesar_subida(archivo: UploadFile, usuario_actual: str) -> str:
     """Manejador de subida que elige entre Local o Nube."""
     if settings.STORAGE_TYPE == "cloudinary":
-        return await guardar_nube(archivo, usuario_actual)
-    return await guardar_local(archivo, usuario_actual)
+        return guardar_nube(archivo, usuario_actual)
+    return guardar_local(archivo, usuario_actual)
 
-async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
+def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     """Lógica de guardado local segura."""
     
     # Usar la variable de settings.
@@ -99,17 +99,16 @@ async def guardar_local(archivo: UploadFile, usuario_actual: str) -> str:
     ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
 
     try:
-        await archivo.seek(0)
-        contenido = await archivo.read()
+        archivo.file.seek(0)
 
         with open(ruta_final, "wb") as buffer:
-            buffer.write(contenido)
+            buffer.write(archivo.file.read())
     except Exception:
         raise HTTPException(status_code=500, detail="Error: No se ha podido guardar la imagen localmente")
     
     return nombre_archivo
 
-async def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
+def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
     """Lógica de guardado en Cloudinary usando Hash."""
     try:
         # Generar el hash del usuario

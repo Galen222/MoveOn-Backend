@@ -49,7 +49,7 @@ def login(request: Request,
     }
 
 @router.post("/contraseña/solicitar", response_model=schemas.RespuestaGenerica)
-async def solicitar_contraseña(datos: schemas.SolicitarContraseña, 
+def solicitar_contraseña(datos: schemas.SolicitarContraseña, 
                      background_tasks: BackgroundTasks,
                      db: Session = Depends(obtener_db),
                      _auth_app=Depends(auth.verificar_sesion_aplicacion)):
@@ -57,7 +57,7 @@ async def solicitar_contraseña(datos: schemas.SolicitarContraseña,
     Solicitar código de 6 dígitos al email.
     Se envía en segundo plano apra no bloquear la API mientras responde el servidor SMTP.
     """
-    return await access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
+    return access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
 @router.post("/contraseña/confirmar", response_model=schemas.RespuestaGenerica)
 def confirmar_contraseña(datos: schemas.ConfirmarContraseña, 

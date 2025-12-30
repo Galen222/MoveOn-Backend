@@ -7,7 +7,7 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from typing import Any
 
-async def manejador_validacion_personalizado(request: Request, exc: Any):
+def manejador_validacion_personalizado(request: Request, exc: Any):
     """
     Intercepta errores de validación y limpia los prefijos técnicos.
     """
