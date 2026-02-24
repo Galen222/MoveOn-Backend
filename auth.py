@@ -77,3 +77,4 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
         return usuario_id
     except JWTError:
         raise HTTPException(status_code=401, detail="Error: Token de acceso inválido o expirado")
+    

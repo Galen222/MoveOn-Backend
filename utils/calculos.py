@@ -1,3 +1,5 @@
+# Utils/calculos.py
+
 def calcular_puntos_nivel(metros: float) -> int:
     """
     Centraliza la lógica de conversión de metros a puntos.

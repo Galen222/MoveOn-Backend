@@ -29,3 +29,4 @@ def manejador_validacion_personalizado(request: Request, exc: Any):
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": errores_limpios}
     )
+    

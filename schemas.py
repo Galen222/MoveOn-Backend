@@ -568,3 +568,4 @@ class ObtenerRanking(BaseModel):
 class RespuestaGenerica(BaseModel):
     estatus: str
     mensaje: str
+    
