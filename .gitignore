@@ -1,0 +1,24 @@
+# --- ARCHIVOS DE PROYECTO ---
+datos.txt
+
+# --- SISTEMA OPERATIVO Y IDEs (GLOBAL) ---
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# --- BACKEND (PYTHON) ---
+venv/
+.venv/
+env/
+.env/
+__pycache__/
+*.py[cod]
+uploads/
+.uploads/
+docs/
+.docs/
+.env
+*.pyc

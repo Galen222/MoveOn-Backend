@@ -1,0 +1,32 @@
+# --- Framework & Servidor ---
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+
+# --- Base de Datos ---
+sqlalchemy
+psycopg2-binary
+
+# --- Seguridad / Autenticación ---
+python-jose
+bcrypt
+
+# --- Validación y Configuración ---
+pydantic[email]
+pydantic-settings
+
+# --- Rate limiting ---
+slowapi
+
+# --- Servicios externos ---
+cloudinary
+
+# --- Email ---
+aiosmtplib
+
+# --- Documentación ---
+pdoc
+
+# --- Gestion de librerias ---
+pip-review
