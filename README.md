@@ -4,8 +4,7 @@ Python desarrollado en Visual Studio Code (FastAPI) y Base de Datos PostgreSQL
 
 🚀 Guía para Colaboradores
 
-1. Clonar el repositorio
-   Abre una terminal en tu carpeta de proyectos y ejecuta: git clone https://github.com/Galen222/MoveOn-Backend.git y después cd MoveOn-Backend
+1. Clonar el repositorio. Abre una terminal en tu carpeta de proyectos y ejecuta: git clone https://github.com/Galen222/MoveOn-Backend.git y después cd MoveOn-Backend
 
 2. Backend (Visual Studio Code)
 
@@ -25,12 +24,10 @@ Python desarrollado en Visual Studio Code (FastAPI) y Base de Datos PostgreSQL
 
 3. Flujo de trabajo (Git). Para evitar conflictos, sigue siempre este orden:
 
-PULL: Antes de empezar, descarga los cambios de tus compañeros.
+   PULL: Antes de empezar, descarga los cambios de tus compañeros.
 
-COMMIT: Cuando termines un cambio, guarda tus avances con un mensaje descriptivo.
+   COMMIT: Cuando termines un cambio, guarda tus avances con un mensaje descriptivo.
 
-PUSH: Envía tus cambios a GitHub.
+   PUSH: Envía tus cambios a GitHub.
 
-4. Ejecución del Servidor Backend
-
-Para probar la API localmente, con el entorno venv activo, ejecuta: uvicorn main:app --reload
+4. Ejecución del Servidor Backend. Para probar la API localmente, con el entorno venv activo, ejecuta: uvicorn main:app --reload
