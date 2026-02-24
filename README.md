@@ -9,19 +9,19 @@ Python desarrollado en Visual Studio Code (FastAPI) y Base de Datos PostgreSQL
 
 2. Backend (Visual Studio Code)
 
-2.1 Abre Visual Studio Code. Selecciona Archivo > Abrir Carpeta... y elige la carpeta MoveOn-Backend.
+   2.1 Abre Visual Studio Code. Selecciona Archivo > Abrir Carpeta... y elige la carpeta MoveOn-Backend.
 
-2.2 Crear Entorno Virtual: Abre la terminal de VS Code y ejecuta: python -m venv venv
+   2.2 Crear Entorno Virtual: Abre la terminal de VS Code y ejecuta: python -m venv venv
 
-2.3 Activar Entorno:
+   2.3 Activar Entorno:
 
-Windows: .\venv\Scripts\activate
+      Windows: .\venv\Scripts\activate
 
-Mac/Linux: source venv/bin/activate
+      Mac/Linux: source venv/bin/activate
 
-Instalar Dependencias: pip install -r requirements_limpio.txt
+      Instalar Dependencias: pip install -r requirements_limpio.txt
 
-Configurar Intérprete: Pulsa Ctrl + Shift + P, escribe "Python: Select Interpreter" y elige el que indica ('venv': venv).
+      Configurar Intérprete: Pulsa Ctrl + Shift + P, escribe "Python: Select Interpreter" y elige el que indica ('venv': venv).
 
 3. Flujo de trabajo (Git). Para evitar conflictos, sigue siempre este orden:
 
