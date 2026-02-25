@@ -113,6 +113,34 @@ class Actividad(Base):
 
     fecha_ruta: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))    
 
+class SesionRefresh(Base):
+    """
+    Guarda sesiones refresh por dispositivo/sesión para permitir:
+    - expiración larga
+    - rotación
+    - revocación (logout)
+    """
+    __tablename__ = "sesiones_refresh"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
+
+    # Identidad del refresh token (JWT)
+    jti: Mapped[str] = mapped_column(String, unique=True, index=True)
+    familia_id: Mapped[str] = mapped_column(String, index=True)
+
+    # Hash del refresh token (nunca guardamos el token en claro)
+    token_hash: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Ciclo de vida
+    creada_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    ultimo_uso_en: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expira_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+    # Revocación / rotación
+    revocada_en: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    reemplazada_por_jti: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
 def init_db():
     """
     Inicialización de la base de datos.

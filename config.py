@@ -13,10 +13,18 @@ class Settings(BaseSettings):
     # Seguridad App
     APP_ID: str
     APP_SESSION_SECRET: str
+    
+    # Seguridad App JWT acceso corto
     SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Seguridad App JWT acceso largo
+    REFRESH_TOKEN_SECRET: str
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # Seguridad App Cifrado
+    ALGORITHM: str = "HS256"
+    
     # Almacenamiento
     STORAGE_TYPE: str = "local"
     UPLOAD_DIR: str = "uploads"

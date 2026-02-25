@@ -254,6 +254,38 @@ class RespuestaLogin(BaseModel):
     estatus: str
     nombre_usuario: str
     token_acceso: str
+    refresh_token: str
+
+class SolicitudRefreshToken(BaseModel):
+    refresh_token: str = Field(...)
+
+    @model_validator(mode='before')
+    @classmethod
+    def validar_campos_requeridos_refresh(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            if 'refresh_token' not in values or not values['refresh_token']:
+                raise ValueError('Error: El refresh token es obligatorio')
+        return values
+
+    @field_validator('refresh_token', mode='before')
+    @classmethod
+    def limpiar_refresh_token(cls, valor: Any) -> Any:
+        if isinstance(valor, str):
+            valor_limpio = valor.strip()
+            if not valor_limpio:
+                raise ValueError('Error: El refresh token no puede estar vacío')
+            return valor_limpio
+        return valor
+
+class RespuestaRefreshToken(BaseModel):
+    estatus: str
+    nombre_usuario: str
+    token_acceso: str
+    refresh_token: str
+
+class SolicitudLogout(SolicitudRefreshToken):
+    """Recibe el refresh token para revocar la sesión actual."""
+    pass
     
 class RespuestaInformacionPerfil(BaseModel):
     nombre_usuario: str

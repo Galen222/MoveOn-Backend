@@ -6,7 +6,6 @@ Módulo de Seguridad y Gestión de Tokens.
 Gestiona el cifrado de contraseñas mediante bcrypt, la generación de tokens JWT 
 para sesiones de usuario y el sistema de validación de handshake.
 """
-import os
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
@@ -15,10 +14,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Any
 from config import settings
 
-# Parámetros de configuración del sistema de tokens,
+# Parámetros de configuración del sistema de tokens
 SECRET_KEY = settings.SECRET_KEY
+REFRESH_TOKEN_SECRET = settings.REFRESH_TOKEN_SECRET
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 APP_ID = settings.APP_ID
 APP_SESSION_SECRET = settings.APP_SESSION_SECRET
 
@@ -41,11 +42,42 @@ def crear_token_aplicacion() -> str:
     return jwt.encode(datos_a_cifrar, str(APP_SESSION_SECRET), algorithm=ALGORITHM)
 
 def crear_token_acceso(datos: dict) -> str:
-    """Genera el token de acceso final para un usuario autenticado correctamente."""
+    """Genera el token de acceso (corto) para un usuario autenticado correctamente."""
     datos_copia = datos.copy()
     expiracion = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    datos_copia.update({"exp": expiracion})
+    datos_copia.update({
+        "exp": expiracion,
+        "typ": "access"
+    })
     return jwt.encode(datos_copia, str(SECRET_KEY), algorithm=ALGORITHM)
+
+def crear_token_refresh(nombre_usuario: str, jti: str, familia_id: str) -> str:
+    """Genera el refresh token (largo) con rotación."""
+    expiracion = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    payload = {
+        "sub": nombre_usuario,
+        "jti": jti,
+        "fam": familia_id,
+        "typ": "refresh",
+        "exp": expiracion
+    }
+    return jwt.encode(payload, str(REFRESH_TOKEN_SECRET), algorithm=ALGORITHM)
+
+def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
+    """Decodifica y valida un refresh token."""
+    try:
+        payload: dict[str, Any] = jwt.decode(
+            refresh_token,
+            str(REFRESH_TOKEN_SECRET),
+            algorithms=[ALGORITHM]
+        )
+
+        if payload.get("typ") != "refresh":
+            raise HTTPException(status_code=401, detail="Error: Token refresh inválido")
+
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Error: Refresh token inválido o expirado")
 
 def verificar_sesion_aplicacion(x_app_session: str = Header(None)):
     """Middleware que valida que la petición contenga un token de handshake."""
@@ -53,15 +85,20 @@ def verificar_sesion_aplicacion(x_app_session: str = Header(None)):
     if not x_app_session:
         raise HTTPException(status_code=403, detail="Error: Falta el token de sesión")
     try:
-        # Decodificar y validar firma y audiencia del token        
-        jwt.decode(x_app_session, str(APP_SESSION_SECRET), algorithms=[ALGORITHM], audience="moveon_app")
+        # Decodificar y validar firma y audiencia del token   
+        jwt.decode(
+            x_app_session,
+            str(APP_SESSION_SECRET),
+            algorithms=[ALGORITHM],
+            audience="moveon_app"
+        )
         return x_app_session
     except JWTError:
         raise HTTPException(status_code=403, detail="Error: Token inválido o expirado")
 
 def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_scheme)) -> str:
     """
-    Extrae el usuario validando el token. 
+    Extrae el usuario validando el token de acceso.
     Usa la dependencia de FastAPI para capturar el token del botón Authorize.
     """
     # El token ya viene limpio sin la palabra "Bearer" gracias a HTTPAuthorizationCredentials.
@@ -69,11 +106,15 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
 
     try:
         payload: dict[str, Any] = jwt.decode(token, str(SECRET_KEY), algorithms=[ALGORITHM])
+
+        if payload.get("typ") != "access":
+            raise HTTPException(status_code=401, detail="Error: Token no es de acceso")
+
         usuario_id = payload.get("sub")
-        
+
         if usuario_id is None or not isinstance(usuario_id, str):
             raise HTTPException(status_code=401, detail="Error: Token no contiene un usuario válido")
-            
+
         return usuario_id
     except JWTError:
         raise HTTPException(status_code=401, detail="Error: Token de acceso inválido o expirado")

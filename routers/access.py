@@ -3,8 +3,8 @@
 """
 Endpoints de Seguridad de Aplicación y Autenticación.
 
-Gestiona el apretón de manos (handshake) inicial para validar la App
-y el inicio de sesión de usuarios para obtener tokens de acceso.
+Gestiona el apretón de manos (handshake) inicial para validar la App,
+el inicio de sesión, refresh y cierre de sesión.
 """
 from fastapi import APIRouter, Depends, HTTPException, Header, Request, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -21,7 +21,8 @@ router = APIRouter(tags=["Seguridad"])
 @limiter.limit("30/minute")
 def handshake(
     request: Request,
-    x_app_id: str = Header(None)):
+    x_app_id: str = Header(None)
+):
     """Valida el identificador de app y entrega un token de sesión temporal."""
     if x_app_id != settings.APP_ID:
         raise HTTPException(status_code=403, detail="Error: El acceso no proviene de la aplicación MoveOn")
@@ -36,7 +37,7 @@ def login(
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    """Autentica al usuario y genera el token de acceso JWT final."""
+    """Autentica al usuario y genera access token + refresh token."""
     # Búsqueda flexible por nombre o email.
     usuario_encontrado = access_service.buscar_por_identificador(db, datos.identificador)
     # Validación de existencia y coincidencia de hash de contraseña.
@@ -45,14 +46,29 @@ def login(
     ):
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
-        # Generación del JWT de larga duración.
-    token = auth.crear_token_acceso({"sub": usuario_encontrado.nombre_usuario})
+    return access_service.crear_sesion_login(db, usuario_encontrado)
 
-    return {
-        "estatus": "success",
-        "nombre_usuario": usuario_encontrado.nombre_usuario,
-        "token_acceso": token
-    }
+@router.post("/token/refresh", response_model=schemas.RespuestaRefreshToken)
+@limiter.limit("30/minute")
+def refresh_token(
+    request: Request,
+    datos: schemas.SolicitudRefreshToken,
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+):
+    """Renueva la sesión usando refresh token con rotación."""
+    return access_service.refrescar_sesion(db, datos.refresh_token)
+
+@router.post("/logout", response_model=schemas.RespuestaGenerica)
+@limiter.limit("60/minute")
+def logout(
+    request: Request,
+    datos: schemas.SolicitudLogout,
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+):
+    """Revoca la sesión actual (refresh token)."""
+    return access_service.cerrar_sesion(db, datos.refresh_token)
 
 @router.post("/contraseña/solicitar", response_model=schemas.RespuestaGenerica)
 @limiter.limit("5/10minute")
@@ -65,7 +81,7 @@ def solicitar_contraseña(
 ):
     """
     Solicitar código de 6 dígitos al email.
-    Se envía en segundo plano apra no bloquear la API mientras responde el servidor SMTP.
+    Se envía en segundo plano para no bloquear la API mientras responde el servidor SMTP.
     """
     return access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
