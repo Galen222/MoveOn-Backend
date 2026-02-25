@@ -15,21 +15,27 @@ from services import user_service, file_service
 from database import obtener_db
 from schemas import ProvinciaEspaña
 from utils import calculos
+from limiter_config import limiter
 
 router = APIRouter(tags=["Usuarios"])
 
 @router.post("/registro", response_model=schemas.RespuestaRegistro)
-def registro(datos: schemas.Registro, 
-             db: Session = Depends(obtener_db), 
-             _auth_app=Depends(auth.verificar_sesion_aplicacion)):
+@limiter.limit("5/10minute")
+def registro(
+    request: Request,
+    datos: schemas.Registro,
+    db: Session = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+):
     """Registro de nuevo usuario con validación de duplicados."""
     return user_service.registrar_nuevo_usuario(db, datos)
 
 @router.get("/perfil/informacion", response_model=schemas.RespuestaInformacionPerfil) 
-def informacion_perfil(request: Request,
-                      db: Session = Depends(obtener_db), 
-                      _auth_app=Depends(auth.verificar_sesion_aplicacion),
-                      usuario_actual: str = Depends(auth.obtener_usuario_actual)):
+def informacion_perfil(
+    request: Request,
+    db: Session = Depends(obtener_db), 
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """Obtiene los datos del perfil."""
     usuario = user_service.obtener_perfil(db, usuario_actual)
     
@@ -52,7 +58,7 @@ def informacion_perfil(request: Request,
 
 @router.get("/perfil/informacion/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
 def informacion_perfil_publico(
-nombre_usuario: str,
+    nombre_usuario: str,
     request: Request,
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
@@ -99,18 +105,20 @@ def foto_perfil(
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
 @router.patch("/perfil/actualizar", response_model=schemas.RespuestaGenerica)
-def actualizar_perfil(datos: schemas.ActualizarPerfil, 
-                      db: Session = Depends(obtener_db), 
-                      _auth_app=Depends(auth.verificar_sesion_aplicacion),
-                      usuario_actual: str = Depends(auth.obtener_usuario_actual)):
+def actualizar_perfil(
+    datos: schemas.ActualizarPerfil, 
+    db: Session = Depends(obtener_db), 
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """Permite al usuario modificar su perfil."""
     usuario = user_service.obtener_perfil(db, usuario_actual)
     return user_service.actualizar_perfil_usuario(db, usuario, datos)
 
 @router.delete("/perfil/borrar", response_model=schemas.RespuestaGenerica)
-def borrar_perfil(db: Session = Depends(obtener_db), 
-                  _auth_app=Depends(auth.verificar_sesion_aplicacion),
-                  usuario_actual: str = Depends(auth.obtener_usuario_actual)):
+def borrar_perfil(
+    db: Session = Depends(obtener_db), 
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """Elimina la cuenta y borra la foto (local o nube)."""
     usuario = user_service.obtener_perfil(db, usuario_actual)
     
@@ -147,7 +155,7 @@ def buscar_perfil(
 
 @router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
 def obtener_ranking(
-request: Request,
+    request: Request,
     provincia: Optional[ProvinciaEspaña] = None,
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),

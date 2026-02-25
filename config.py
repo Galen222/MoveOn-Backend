@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DB_NAME: str
 
     # Seguridad App
-    APP_ID_SECRET: str
+    APP_ID: str
     APP_SESSION_SECRET: str
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
