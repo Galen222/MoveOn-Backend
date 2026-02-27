@@ -37,7 +37,7 @@ def validar_nombre_real_logica(v: str) -> str:
         
     return v
 
-def validar_contraseña_logica(v: str) -> str:
+def validar_password_logica(v: str) -> str:
     """Regla para contraseña: longitud, mayúscula y número."""
     if len(v) < 8:
         raise ValueError('Error: La contraseña debe tener al menos 8 caracteres')

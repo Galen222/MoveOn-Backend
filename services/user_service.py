@@ -31,7 +31,7 @@ def registrar_nuevo_usuario(db: Session, datos: schemas.Registro):
         nombre_usuario=datos.nombre_usuario,
         nombre_real=datos.nombre_real,
         email=datos.email,
-        contraseña_encriptada=auth.encriptar_contraseña(datos.contraseña),
+        password_encriptada=auth.encriptar_password(datos.password),
         fecha_nacimiento=datos.fecha_nacimiento,
         genero=datos.genero,
         altura=datos.altura,
@@ -67,8 +67,8 @@ def actualizar_perfil_usuario(db: Session, usuario: database.Usuario, datos: sch
             raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
         usuario.email = datos.email
     
-    if datos.contraseña:
-        usuario.contraseña_encriptada = auth.encriptar_contraseña(datos.contraseña)
+    if datos.password:
+        usuario.password_encriptada = auth.encriptar_password(datos.password)
     if datos.fecha_nacimiento: usuario.fecha_nacimiento = datos.fecha_nacimiento
     if datos.genero: usuario.genero = datos.genero
     if datos.altura is not None: usuario.altura = datos.altura

@@ -212,7 +212,7 @@ def generar_codigo_recuperacion(db: Session, email: str, background_tasks: Backg
 
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
 
-def resetear_contraseña(db: Session, datos: schemas.ConfirmarContraseña):
+def resetear_password(db: Session, datos: schemas.Confirmarpassword):
     """Valida el OTP y actualiza la contraseña."""
     usuario = db.query(database.Usuario).filter(
         database.Usuario.email == datos.email.lower(),
@@ -225,7 +225,7 @@ def resetear_contraseña(db: Session, datos: schemas.ConfirmarContraseña):
     if _ahora_utc() > _normalizar_utc(usuario.codigo_expiracion):
         raise HTTPException(status_code=400, detail="Error: El código ha expirado")
 
-    usuario.contraseña_encriptada = auth.encriptar_contraseña(datos.nueva_contraseña)
+    usuario.password_encriptada = auth.encriptar_password(datos.nueva_password)
     usuario.codigo_recuperacion = None
     usuario.codigo_expiracion = None
 

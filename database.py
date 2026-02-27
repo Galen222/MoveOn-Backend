@@ -35,7 +35,7 @@ class Usuario(Base):
         nombre_usuario: Identificador único de acceso.
         nombre_real: Nombre y apellidos reales del usuario (alfanumérico).
         email: Dirección de correo electrónico única y validada.
-        contraseña_encriptada: Hash seguro generado mediante bcrypt.
+        password_encriptada: Hash seguro generado mediante bcrypt.
         fecha_nacimiento: Fecha de nacimiento para control de edad mínima y control de calorias.
         genero: hombre, mujer u otro para control de calorias detallado.
         altura: altura personal para control de calorias detallado.        
@@ -55,7 +55,7 @@ class Usuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     nombre_usuario: Mapped[str] = mapped_column(String, unique=True, index=True)
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
-    contraseña_encriptada: Mapped[str] = mapped_column(String, nullable=False)
+    password_encriptada: Mapped[str] = mapped_column(String, nullable=False)
     
     # Información personal y perfil
     nombre_real: Mapped[str] = mapped_column(String, nullable=True)

@@ -104,7 +104,7 @@ class Registro(BaseModel):
     """
     nombre_usuario: str = Field(...)
     email: EmailStr 
-    contraseña: str = Field(...)
+    password: str = Field(...)
     nombre_real: Optional[str] = None
     fecha_nacimiento: date
     genero: Optional[GeneroUsuario] = None
@@ -122,7 +122,7 @@ class Registro(BaseModel):
                 raise ValueError('Error: El nombre de usuario es obligatorio')
             if 'email' not in values or not values['email']:
                 raise ValueError('Error: El email es obligatorio')
-            if 'contraseña' not in values or not values['contraseña']:
+            if 'password' not in values or not values['password']:
                 raise ValueError('Error: La contraseña es obligatoria')
             if 'fecha_nacimiento' not in values:
                 raise ValueError('Error: La fecha de nacimiento es obligatoria')
@@ -162,10 +162,10 @@ class Registro(BaseModel):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
 
-    @field_validator('contraseña')
+    @field_validator('password')
     @classmethod
-    def validar_contraseña_registro(cls, v):
-        return validators.validar_contraseña_logica(v)
+    def validar_password_registro(cls, v):
+        return validators.validar_password_logica(v)
 
     @field_validator('fecha_nacimiento', mode='wrap')
     @classmethod
@@ -226,7 +226,7 @@ class RespuestaRegistro(BaseModel):
 class Login(BaseModel):
     """Esquema para validar las credenciales en el inicio de sesión."""
     identificador: str 
-    contraseña: str
+    password: str
     
     @model_validator(mode='before')
     @classmethod
@@ -235,7 +235,7 @@ class Login(BaseModel):
         if isinstance(values, dict):
             if 'identificador' not in values or not values['identificador']:
                 raise ValueError('Error: El identificador es obligatorio')
-            if 'contraseña' not in values or not values['contraseña']:
+            if 'password' not in values or not values['password']:
                 raise ValueError('Error: La contraseña es obligatoria')
         return values
     
@@ -307,7 +307,7 @@ class ActualizarPerfil(BaseModel):
     """Esquema para actualizaciones del perfil de usuario."""
     nombre_real: Optional[str] = None
     email: Optional[EmailStr] = None
-    contraseña: Optional[str] = None
+    password: Optional[str] = None
     fecha_nacimiento: Optional[date] = None
     genero: Optional[GeneroUsuario] = None
     altura: Optional[int] = None
@@ -336,10 +336,10 @@ class ActualizarPerfil(BaseModel):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
 
-    @field_validator('contraseña')
+    @field_validator('password')
     @classmethod
-    def validar_contraseña_actualizacion(cls, v):
-        return validators.validar_contraseña_logica(v) if v is not None else v
+    def validar_password_actualizacion(cls, v):
+        return validators.validar_password_logica(v) if v is not None else v
 
     @field_validator('fecha_nacimiento', mode='wrap')
     @classmethod
@@ -409,7 +409,7 @@ class BusquedaUsuario(BaseModel):
     nombre_usuario: str
     foto_perfil: Optional[str] = None
 
-class SolicitarContraseña(BaseModel):
+class Solicitarpassword(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
     email: EmailStr
     
@@ -436,11 +436,11 @@ class SolicitarContraseña(BaseModel):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""        
         return validators.interceptar_error_pydantic(v, handler,'Error: El formato del correo electrónico no es válido')
     
-class ConfirmarContraseña(BaseModel):
+class Confirmarpassword(BaseModel):
     """Esquema para cambiar la contraseña usando el código recibido."""
     email: EmailStr
     codigo: str = Field(...)
-    nueva_contraseña: str
+    nueva_password: str
     
     @model_validator(mode='before')
     @classmethod
@@ -451,14 +451,14 @@ class ConfirmarContraseña(BaseModel):
                 raise ValueError('Error: El email es obligatorio')
             if 'codigo' not in values or not values['codigo']:
                 raise ValueError('Error: El código es obligatorio')
-            if 'nueva_contraseña' not in values or not values['nueva_contraseña']:
+            if 'nueva_passwordpassword' not in values or not values['nueva_password']:
                 raise ValueError('Error: La nueva contraseña es obligatoria')
         return values
     
-    @field_validator('nueva_contraseña')
+    @field_validator('nueva_password')
     @classmethod
-    def validar_nueva_contraseña_confirmar_recuperacion(cls, v):
-        return validators.validar_contraseña_logica(v)
+    def validar_nueva_password_confirmar_recuperacion(cls, v):
+        return validators.validar_password_logica(v)
     
     @field_validator('codigo', mode='before')
     @classmethod

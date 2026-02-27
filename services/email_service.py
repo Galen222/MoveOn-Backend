@@ -19,7 +19,7 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str):
     msg['To'] = email_destino
 
     msg.set_content(f"Tu código de recuperación para MoveOn es: {codigo}. Expira en 15 minutos.")
-    html_content = email_templates.recuperacion_contraseña_template(codigo)
+    html_content = email_templates.recuperacion_password_template(codigo)
     msg.add_alternative(html_content, subtype="html")
 
     try:

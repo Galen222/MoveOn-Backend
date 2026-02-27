@@ -20,7 +20,7 @@ from limiter_config import limiter
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.3.0"
+    version="0.3.1"
 )
 
 # Configurar el limitador (usa la IP del usuario para contar)

@@ -26,14 +26,14 @@ APP_SESSION_SECRET = settings.APP_SESSION_SECRET
 # Instancia de seguridad que activa el botón "Authorize" en Swagger.
 security_scheme = HTTPBearer()
 
-def encriptar_contraseña(contraseña: str) -> str:
+def encriptar_password(password: str) -> str:
     """Cifra una contraseña de texto plano usando bcrypt."""
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(contraseña.encode('utf-8'), salt).decode('utf-8')
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
-def comprobar_contraseña(contraseña_plana: str, contraseña_encriptada: str) -> bool:
+def comprobar_password(password_plana: str, password_encriptada: str) -> bool:
     """Compara una contraseña plana ingresada con el hash almacenado en la base de datos."""
-    return bcrypt.checkpw(contraseña_plana.encode('utf-8'), contraseña_encriptada.encode('utf-8'))
+    return bcrypt.checkpw(password_plana.encode('utf-8'), password_encriptada.encode('utf-8'))
 
 def crear_token_aplicacion() -> str:
     """Genera un token JWT de corta duración (5 minutos) para el apretón de manos inicial."""

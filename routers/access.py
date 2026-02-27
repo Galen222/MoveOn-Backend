@@ -41,8 +41,8 @@ def login(
     # Búsqueda flexible por nombre o email.
     usuario_encontrado = access_service.buscar_por_identificador(db, datos.identificador)
     # Validación de existencia y coincidencia de hash de contraseña.
-    if not usuario_encontrado or not auth.comprobar_contraseña(
-        datos.contraseña, str(usuario_encontrado.contraseña_encriptada)
+    if not usuario_encontrado or not auth.comprobar_password(
+        datos.password, str(usuario_encontrado.password_encriptada)
     ):
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
@@ -70,11 +70,11 @@ def logout(
     """Revoca la sesión actual (refresh token)."""
     return access_service.cerrar_sesion(db, datos.refresh_token)
 
-@router.post("/contraseña/solicitar", response_model=schemas.RespuestaGenerica)
+@router.post("/password/solicitar", response_model=schemas.RespuestaGenerica)
 @limiter.limit("5/10minute")
-def solicitar_contraseña(
+def solicitar_password(
     request: Request,
-    datos: schemas.SolicitarContraseña,
+    datos: schemas.Solicitarpassword,
     background_tasks: BackgroundTasks,
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
@@ -85,13 +85,13 @@ def solicitar_contraseña(
     """
     return access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
-@router.post("/contraseña/confirmar", response_model=schemas.RespuestaGenerica)
+@router.post("/password/confirmar", response_model=schemas.RespuestaGenerica)
 @limiter.limit("10/10minute")
-def confirmar_contraseña(
+def confirmar_password(
     request: Request,
-    datos: schemas.ConfirmarContraseña,
+    datos: schemas.Confirmarpassword,
     db: Session = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
     """Enviar código y nueva contraseña para resetear."""
-    return access_service.resetear_contraseña(db, datos)
+    return access_service.resetear_password(db, datos)
