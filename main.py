@@ -3,17 +3,20 @@
 """
 Punto de Entrada Principal - MoveOn API.
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
 from routers import users, access, activities
 from exceptions import manejador_validacion_personalizado
 import database
 from fastapi.staticfiles import StaticFiles
 import os
 from config import settings
-from slowapi import _rate_limit_exceeded_handler
+
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from limiter_config import limiter
 
 # Declaración de API.
@@ -25,7 +28,22 @@ app = FastAPI(
 
 # Configurar el limitador (usa la IP del usuario para contar)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler) # type: ignore
+
+# Middleware de SlowAPI (si no, el rate limit puede no comportarse correctamente)
+app.add_middleware(SlowAPIMiddleware)
+
+# Handler (JSON consistente para Android + headers de rate limit si existen)
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    headers = getattr(exc, "headers", None) or {}
+    return JSONResponse(
+        status_code=429,
+        content={
+            "estatus": "error",
+            "mensaje": "Demasiadas peticiones. Inténtalo más tarde."
+        },
+        headers=headers
+    )
 
 # Configuración de CORS para permitir peticiones externas.
 app.add_middleware(
@@ -61,10 +79,15 @@ if STORAGE_TYPE == "local":
     if not os.path.exists(carpeta_imagenes):
         os.makedirs(carpeta_imagenes)
     # Se monta la carpeta para que sea accesible vía URL
-    # http://127.0.0.1:8000/imagenes/default_avatar.jpg    
+    # http://127.0.0.1:8000/imagenes/default_avatar.jpg
     app.mount("/imagenes", StaticFiles(directory=carpeta_imagenes), name="imagenes")
 
 # Endpoint raiz.
 @app.get("/")
 def home():
     return {"estado": "en linea", "aplicacion": "MoveOn API"}
+
+# Icono.
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("favicon.ico")
