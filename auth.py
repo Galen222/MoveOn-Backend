@@ -83,7 +83,11 @@ def verificar_sesion_aplicacion(x_app_session: str = Header(None)):
     """Middleware que valida que la petición contenga un token de handshake."""
     # Validar presencia del encabezado
     if not x_app_session:
-        raise HTTPException(status_code=403, detail="Error: Falta el token de sesión")
+        raise HTTPException(
+            status_code=403, 
+            detail="Error: Falta el token de sesión",
+            headers={"x-app-session-expired": "1"}
+        )
     try:
         # Decodificar y validar firma y audiencia del token   
         jwt.decode(
@@ -94,7 +98,11 @@ def verificar_sesion_aplicacion(x_app_session: str = Header(None)):
         )
         return x_app_session
     except JWTError:
-        raise HTTPException(status_code=403, detail="Error: Token inválido o expirado")
+        raise HTTPException(
+            status_code=403, 
+            detail="Error: Token inválido o expirado",
+            headers={"x-app-session-expired": "1"}
+        )
 
 def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_scheme)) -> str:
     """
