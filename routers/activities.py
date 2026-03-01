@@ -1,4 +1,4 @@
-# routers/#activities.py
+# routers/activities.py
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,16 +6,19 @@ from typing import List
 import schemas
 import auth
 from database import obtener_db
-from services import activities_service 
+from services import activities_service
 
-router = APIRouter(tags=["Actividades"])
+# Inyectamos la dependencia a nivel de Router para todos los endpoints de este archivo
+router = APIRouter(
+    tags=["Actividades"],
+    dependencies=[Depends(auth.verificar_sesion_aplicacion)]
+)
 
 @router.post("/actividad/guardar", response_model=schemas.RespuestaObtenerActividad)
 async def guardar_actividad(
     datos: schemas.GuardarActividad,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     return await activities_service.crear_actividad(db, usuario_actual, datos)
 
@@ -23,8 +26,7 @@ async def guardar_actividad(
 async def obtener_actividad(
     id_actividad: int,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
     Obtiene el detalle de una actividad específica por su ID.
@@ -37,8 +39,7 @@ async def obtener_todas_actividades(
     skip: int = 0,
     limit: int = 20,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
     Este endpoint es para obtener toda la BD de rutas cuando el usuario vuelve a la app despues de desinstalar.
@@ -52,16 +53,14 @@ async def obtener_todas_actividades(
 async def borrar_actividad(
     id_actividad: int,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     return await activities_service.eliminar_actividad(db, usuario_actual, id_actividad)
 
 @router.delete("/actividad/borrar_todas", response_model=schemas.RespuestaGenerica)
 async def borrar_todas_actividades(
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
     Borra absolutamente todo el historial deportivo del usuario.
