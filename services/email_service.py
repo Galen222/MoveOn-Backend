@@ -1,9 +1,12 @@
 # services/email_service.py
 
+import logging
 import aiosmtplib
 from email.message import EmailMessage
 from services import email_templates
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 async def enviar_codigo_recuperacion(email_destino: str, codigo: str):
     """Construye y envía el correo de forma asíncrona."""
@@ -35,4 +38,5 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str):
     except Exception as e:
         # Imprime el error en consola para debuguear
         print(f"ERROR AL ENVIAR EMAIL: {str(e)}")
+        logger.exception("ERROR AL ENVIAR EMAIL a %s", email_destino)
         return False

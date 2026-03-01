@@ -1,7 +1,7 @@
 # services/access_service.py
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from fastapi import HTTPException, BackgroundTasks
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -25,15 +25,15 @@ def _hash_refresh_token(token: str) -> str:
 
 async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
     ahora = _ahora_utc()
-    sesiones = (await db.execute(
-        select(database.SesionRefresh).where(
+
+    await db.execute(
+        update(database.SesionRefresh)
+        .where(
             database.SesionRefresh.familia_id == familia_id,
             database.SesionRefresh.revocada_en.is_(None)
         )
-    )).scalars().all()
-
-    for s in sesiones:
-        s.revocada_en = ahora
+        .values(revocada_en=ahora)
+    )
 
 async def buscar_por_identificador(db: AsyncSession, identificador: str):
     """Búsqueda para login (email o nombre de usuario)."""
@@ -248,15 +248,14 @@ async def resetear_password(db: AsyncSession, datos: schemas.Confirmarpassword):
     usuario.codigo_expiracion = None
 
     # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
-    sesiones_activas = (await db.execute(
-        select(database.SesionRefresh).where(
+    ahora = _ahora_utc()
+    await db.execute(
+        update(database.SesionRefresh)
+        .where(
             database.SesionRefresh.usuario_id == usuario.id,
             database.SesionRefresh.revocada_en.is_(None)
         )
-    )).scalars().all()
-    ahora = _ahora_utc()
-    for s in sesiones_activas:
-        s.revocada_en = ahora
-
+        .values(revocada_en=ahora)
+    )
     await db.commit()
     return {"estatus": "success", "mensaje": "Contraseña actualizada correctamente"}
