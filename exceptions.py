@@ -6,6 +6,7 @@ Módulo de Manejo de Excepciones Personalizadas.
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from typing import Any
+import re
 
 def manejador_validacion_personalizado(request: Request, exc: Any):
     """
@@ -17,12 +18,13 @@ def manejador_validacion_personalizado(request: Request, exc: Any):
     if hasattr(exc, "errors"):
         for error in exc.errors():
             mensaje_original = error.get("msg", "")
-            # Limpia el prefijo de error de Pydantic.
-            mensaje_limpio = mensaje_original.replace("Value error, ", "")
+            # Limpia el prefijo de error de Pydantic de forma segura con Regex.
+            mensaje_limpio = re.sub(r"^(Value error,\s*|Assertion failed,\s*|Input should be.*,\s*)", "", mensaje_original)
+        
             campo = error.get("loc")[-1]
             errores_limpios.append({
                 "columna": campo,
-                "mensaje": mensaje_limpio
+                "mensaje": mensaje_limpio.strip().capitalize()
             })
 
     return JSONResponse(
