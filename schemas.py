@@ -451,7 +451,7 @@ class Confirmarpassword(BaseModel):
                 raise ValueError('Error: El email es obligatorio')
             if 'codigo' not in values or not values['codigo']:
                 raise ValueError('Error: El código es obligatorio')
-            if 'nueva_passwordpassword' not in values or not values['nueva_password']:
+            if 'nueva_password' not in values or not values['nueva_password']:
                 raise ValueError('Error: La nueva contraseña es obligatoria')
         return values
     
