@@ -88,13 +88,14 @@ class Usuario(Base):
     foto_perfil: Mapped[str] = mapped_column(String, default="default_avatar.png")
     total_metros: Mapped[float] = mapped_column(Float, default=0.0, index=True)
     # Metadatos automáticos del servidor
-    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    fecha_eula: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    fecha_eula: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     # Ajustes de privacidad del usuario
     perfil_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Recuperación de contraseña
-    codigo_recuperacion: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Guardamos el HASH SHA-256 del código (64 caracteres), no el código en claro
+    codigo_recuperacion: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class Actividad(Base):
     """
@@ -113,7 +114,7 @@ class Actividad(Base):
     """
     __tablename__ = "actividades"
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True )
     # Datos de ruta.
     tipo: Mapped[str] = mapped_column(String, nullable=False)
     distancia: Mapped[float] = mapped_column(Float, nullable=False)
@@ -124,9 +125,8 @@ class Actividad(Base):
     ruta_polilinea: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Instantanea del mapa
     ruta_mapa_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    fecha_ruta: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-
+    fecha_ruta: Mapped[datetime] = mapped_column(DateTime(timezone=True),  default=lambda: datetime.now(timezone.utc), index=True)
+    
 class SesionRefresh(Base):
     """
     Guarda sesiones refresh por dispositivo/sesión para permitir:
@@ -137,19 +137,18 @@ class SesionRefresh(Base):
     __tablename__ = "sesiones_refresh"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
-
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
     # Identidad del refresh token (JWT)
     jti: Mapped[str] = mapped_column(String, unique=True, index=True)
     familia_id: Mapped[str] = mapped_column(String, index=True)
     # Hash del refresh token (nunca guardamos el token en claro)
-    token_hash: Mapped[str] = mapped_column(String, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     # Ciclo de vida
-    creada_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    ultimo_uso_en: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    expira_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    ultimo_uso_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expira_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     # Revocación / rotación
-    revocada_en: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    revocada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     reemplazada_por_jti: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 async def init_db() -> None:

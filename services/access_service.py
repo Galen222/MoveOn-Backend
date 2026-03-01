@@ -4,10 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, BackgroundTasks
 from datetime import datetime, timedelta, timezone
-from jose import JWTError
-import random
 import hashlib
 import uuid
+import secrets
 
 import database
 import auth
@@ -83,6 +82,9 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         "token_acceso": token_acceso,
         "refresh_token": refresh_token
     }
+
+def _hash_codigo_recuperacion(codigo: str) -> str:
+    return hashlib.sha256(codigo.encode("utf-8")).hexdigest()
 
 async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     """
@@ -210,9 +212,11 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
 
     # Si existe el correo se envía pero el mensaje de respuesta es el mismo para evitar pistas.
     if usuario:
-        #  genera un código aleatorio con validez de 15 minutos.
-        codigo = f"{random.randint(100000, 999999)}"
-        usuario.codigo_recuperacion = codigo
+        # Genera un código aleatorio con validez de 15 minutos.
+        # Usamos 'secrets' (aleatoriedad criptográfica) y lo formateamos a 6 dígitos.
+        codigo = f"{secrets.randbelow(900000) + 100000:06d}"
+        # Guardar el HASH en BD (no el código en claro)
+        usuario.codigo_recuperacion = _hash_codigo_recuperacion(codigo)
         usuario.codigo_expiracion = _ahora_utc() + timedelta(minutes=15)
 
         await db.commit()
@@ -223,10 +227,13 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
 
 async def resetear_password(db: AsyncSession, datos: schemas.Confirmarpassword):
     """Valida el OTP y actualiza la contraseña."""
+    # Hashear el código recibido para compararlo con el hash guardado
+    codigo_hash = _hash_codigo_recuperacion(datos.codigo)
+
     usuario = (await db.execute(
         select(database.Usuario).where(
             database.Usuario.email == datos.email.lower(),
-            database.Usuario.codigo_recuperacion == datos.codigo
+            database.Usuario.codigo_recuperacion == codigo_hash
         )
     )).scalar_one_or_none()
 
