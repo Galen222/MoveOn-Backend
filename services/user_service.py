@@ -4,8 +4,8 @@
 Servicio de Gestión de Usuarios.
 Encapsula la lógica de negocio de registro y actualización de perfil.
 """
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import desc, select
 from fastapi import HTTPException
 import database
 import auth
@@ -13,13 +13,15 @@ import schemas
 from typing import Optional
 from utils import calculos
 
-def registrar_nuevo_usuario(db: Session, datos: schemas.Registro):
+async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     """Registro de nuevo usuario con validación de duplicados."""
     # Buscar si existe ignorando mayúsculas/minúsculas
-    usuario_existente = db.query(database.Usuario).filter(
-        (database.Usuario.nombre_usuario.ilike(datos.nombre_usuario)) | 
-        (database.Usuario.email == datos.email.lower())
-    ).first()
+    usuario_existente = (await db.execute(
+        select(database.Usuario).where(
+            (database.Usuario.nombre_usuario.ilike(datos.nombre_usuario)) | 
+            (database.Usuario.email == datos.email.lower())
+        )
+    )).scalar_one_or_none()
 
     if usuario_existente:
         # Comprobación específica para el mensaje de error
@@ -41,28 +43,33 @@ def registrar_nuevo_usuario(db: Session, datos: schemas.Registro):
     )
     
     db.add(nuevo_usuario)
-    db.commit()
+    await db.commit()
     return {
         "estatus": "success", 
         "mensaje": "Usuario registrado correctamente",
         "nombre_usuario": nuevo_usuario.nombre_usuario
     }
 
-def obtener_perfil(db: Session, usuario_actual: str):
+async def obtener_perfil(db: AsyncSession, usuario_actual: str):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
-    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+    )).scalar_one_or_none()
+    
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Perfil de usuario no encontrado")
     return usuario
 
-def actualizar_perfil_usuario(db: Session, usuario: database.Usuario, datos: schemas.ActualizarPerfil):
+async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario, datos: schemas.ActualizarPerfil):
     """Lógica para modificar el perfil de usuario."""
     if datos.nombre_real: usuario.nombre_real = datos.nombre_real
     if datos.email:
-        duplicado = db.query(database.Usuario).filter(
-            database.Usuario.email == datos.email,
-            database.Usuario.nombre_usuario != usuario.nombre_usuario
-        ).first()
+        duplicado = (await db.execute(
+            select(database.Usuario).where(
+                database.Usuario.email == datos.email,
+                database.Usuario.nombre_usuario != usuario.nombre_usuario
+            )
+        )).scalar_one_or_none()
         if duplicado:
             raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
         usuario.email = datos.email
@@ -76,17 +83,17 @@ def actualizar_perfil_usuario(db: Session, usuario: database.Usuario, datos: sch
     if datos.provincia: usuario.provincia = datos.provincia
     if datos.perfil_visible is not None: usuario.perfil_visible = datos.perfil_visible
 
-    db.commit()
+    await db.commit()
     return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
 
-def obtener_perfil_publico(db: Session, nombre_objetivo: str):
+async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
     """
     Busca un usuario por nombre para mostrar su ficha pública.
     Solo devuelve datos si el usuario existe y tiene perfil_visible=True.
     """
-    usuario = db.query(database.Usuario).filter(
-        database.Usuario.nombre_usuario == nombre_objetivo
-    ).first()
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == nombre_objetivo)
+    )).scalar_one_or_none()
 
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
@@ -99,7 +106,7 @@ def obtener_perfil_publico(db: Session, nombre_objetivo: str):
 
 # ... imports (asegúrate de que Usuario esté importado)
 
-def buscar_usuario(db: Session, termino_busqueda: str):
+async def buscar_usuario(db: AsyncSession, termino_busqueda: str):
     """
     Busca usuarios cuyo nombre_usuario contenga el término.
     Filtros:
@@ -114,29 +121,31 @@ def buscar_usuario(db: Session, termino_busqueda: str):
     if not termino:
         return []
 
-    resultados = db.query(database.Usuario).filter(
-        # ILIKE: Busca coincidencias sin importar mayúsculas/minúsculas
-        # %termino% significa: contiene el texto en cualquier parte
-        database.Usuario.nombre_usuario.ilike(f"%{termino}%"),
-        # PRIVACIDAD: Solo usuarios visibles
-        database.Usuario.perfil_visible == True
-    ).limit(20).all()
+    resultados = (await db.execute(
+        select(database.Usuario).where(
+            # ILIKE: Busca coincidencias sin importar mayúsculas/minúsculas
+            # %termino% significa: contiene el texto en cualquier parte
+            database.Usuario.nombre_usuario.ilike(f"%{termino}%"),
+            # PRIVACIDAD: Solo usuarios visibles
+            database.Usuario.perfil_visible == True
+        ).limit(20)
+    )).scalars().all()
     
     return resultados
 
-def eliminar_cuenta(db: Session, usuario: database.Usuario):
+async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
     """Elimina permanentemente el registro de la base de datos."""
-    db.delete(usuario)
-    db.commit()
+    await db.delete(usuario)
+    await db.commit()
     return {"estatus": "success", "mensaje": "Tu cuenta ha sido eliminada permanentemente"}
 
-def obtener_ranking(db: Session, provincia: Optional[str] = None):
+async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     """
     Obtiene el Ranking de los usuarios con más kilometros recorridos.
     """
     
     # Query sobre la tabla Usuarios
-    query = db.query(
+    stmt = select(
         database.Usuario.nombre_usuario,
         database.Usuario.foto_perfil,
         database.Usuario.total_metros
@@ -144,18 +153,17 @@ def obtener_ranking(db: Session, provincia: Optional[str] = None):
 
     # Filtro opcional
     if provincia:
-        query = query.filter(database.Usuario.provincia == provincia)
+        stmt = stmt.where(database.Usuario.provincia == provincia)
 
     # Ordenar por el campo pre-calculado.
     # Filtrar que total_metros > 0 para no llenar el ranking de usuarios inactivos.
     # Filtrar que solo los usuarios con perfil publico aparezcan en el ranking.
-    resultados = query.filter(
+    resultados = (await db.execute(
+        stmt.where(
             database.Usuario.total_metros > 0,
             database.Usuario.perfil_visible == True
-        )\
-        .order_by(desc(database.Usuario.total_metros))\
-        .limit(15)\
-        .all()
+        ).order_by(desc(database.Usuario.total_metros)).limit(15)
+    )).all()
     
     # Convertir Metros a Puntos
     ranking_procesado = []

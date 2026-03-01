@@ -1,18 +1,20 @@
 # services/activities_service.py
 
-from sqlalchemy.orm import Session
-from sqlalchemy import case
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import case, select, delete as sa_delete, func
 from fastapi import HTTPException
 import database
 import schemas
 from utils import calculos
 
-def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActividad):
+async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.GuardarActividad):
     """
     Busca al usuario y registra una nueva actividad deportiva.
     """
     # Se busca el usuario por su nombre (viene del token)
-    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+    )).scalar_one_or_none()
     
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
@@ -35,11 +37,11 @@ def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActi
 
     # Se guarda en BD.
     db.add(nueva_actividad)
-    db.commit()
-    db.refresh(nueva_actividad)
+    await db.commit()
+    await db.refresh(nueva_actividad)
     # Al haber hecho el calculo en la BD, Python no sabe el nuevo valor.
     # Debido a eso se refresca el usuario.
-    db.refresh(usuario)
+    await db.refresh(usuario)
     
     # Calcular los puntos para el Ranking.
     puntos_actualizados = calculos.calcular_puntos_nivel(usuario.total_metros)
@@ -58,52 +60,63 @@ def crear_actividad(db: Session, usuario_actual: str, datos: schemas.GuardarActi
     
     return respuesta
 
-def obtener_actividad(db: Session, usuario_actual: str, id_actividad: int):
+async def obtener_actividad(db: AsyncSession, usuario_actual: str, id_actividad: int):
     # Burcar usuario
-    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+    )).scalar_one_or_none()
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Buscar la actividad asegurando que pertenezca a este usuario
-    actividad = db.query(database.Actividad).filter(
-        database.Actividad.id == id_actividad,
-        database.Actividad.usuario_id == usuario.id
-    ).first()
+    actividad = (await db.execute(
+        select(database.Actividad).where(
+            database.Actividad.id == id_actividad,
+            database.Actividad.usuario_id == usuario.id
+        )
+    )).scalar_one_or_none()
 
     if not actividad:
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     return actividad
 
-def obtener_actividades(db: Session, usuario_actual: str, skip: int, limit: int):
+async def obtener_actividades(db: AsyncSession, usuario_actual: str, skip: int, limit: int):
     """
     Obtiene la lista paginada de actividades de un usuario específico.
     """
     # Se Busca el usuario para obtener su ID.
-    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+    )).scalar_one_or_none()
     
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Se Hace la query filtrando por ese ID de usuario.
-    actividades = db.query(database.Actividad)\
-        .filter(database.Actividad.usuario_id == usuario.id)\
-        .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())\
-        .offset(skip)\
-        .limit(limit)\
-        .all()
+    actividades = (await db.execute(
+        select(database.Actividad)
+            .where(database.Actividad.usuario_id == usuario.id)
+            .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())
+            .offset(skip)
+            .limit(limit)
+    )).scalars().all()
         
     return actividades
 
-def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
-    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad: int):
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+    )).scalar_one_or_none()
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    actividad = db.query(database.Actividad).filter(
-        database.Actividad.id == id_actividad,
-        database.Actividad.usuario_id == usuario.id
-    ).first()
+    actividad = (await db.execute(
+        select(database.Actividad).where(
+            database.Actividad.id == id_actividad,
+            database.Actividad.usuario_id == usuario.id
+        )
+    )).scalar_one_or_none()
 
     if not actividad:
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
@@ -116,11 +129,11 @@ def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
         else_=database.Usuario.total_metros - actividad.distancia
     )
 
-    db.delete(actividad)
-    db.commit()
+    await db.delete(actividad)
+    await db.commit()
     
     # Refrescar para traer de la BD el valor real de 'total_metros' tras el 'case'
-    db.refresh(usuario) 
+    await db.refresh(usuario) 
     
     # Recalcular los puntos con el valor actualizado
     puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
@@ -130,23 +143,33 @@ def eliminar_actividad(db: Session, usuario_actual: str, id_actividad: int):
         "nuevo_total_puntos": puntos
     }
 
-def eliminar_actividades(db: Session, usuario_actual: str):
+async def eliminar_actividades(db: AsyncSession, usuario_actual: str):
     # Buscar usuario
-    usuario = db.query(database.Usuario).filter(database.Usuario.nombre_usuario == usuario_actual).first()
+    usuario = (await db.execute(
+        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+    )).scalar_one_or_none()
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Borrado masivo. Buscar todas las actividades donde el usuario_id coincida y borrarlas de golpe.
-    num_borrados = db.query(database.Actividad)\
-        .filter(database.Actividad.usuario_id == usuario.id)\
-        .delete(synchronize_session=False)
-        
+    # Primero contamos cuántas hay, para poder devolver el número borrado.
+    num_borrados = (await db.execute(
+        select(func.count())
+        .select_from(database.Actividad)
+        .where(database.Actividad.usuario_id == usuario.id)
+    )).scalar_one()
+
+    await db.execute(
+        sa_delete(database.Actividad).where(database.Actividad.usuario_id == usuario.id)
+    )
+
     # Borrar todos los metros recorridos de las actividades del usuario.
     usuario.total_metros = 0.0
 
-    db.commit()
-    
+    await db.commit()
+
     return {
-        "estatus": "success", 
-        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {num_borrados} actividades."
+        "estatus": "success",
+        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
     }
+    

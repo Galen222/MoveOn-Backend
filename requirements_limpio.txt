@@ -6,7 +6,7 @@ python-dotenv
 
 # --- Base de Datos ---
 sqlalchemy
-psycopg2-binary
+asyncpg
 
 # --- Seguridad / Autenticación ---
 python-jose

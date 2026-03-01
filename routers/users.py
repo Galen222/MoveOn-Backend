@@ -7,7 +7,7 @@ Define las rutas para el registro de nuevos usuarios y la gestión
 posterior del perfil (consulta, actualización, foto y borrado).
 """
 from fastapi import APIRouter, Depends, File, UploadFile, Request, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import auth
 import schemas
 from typing import List, Optional
@@ -17,27 +17,29 @@ from schemas import ProvinciaEspaña
 from utils import calculos
 from limiter_config import limiter
 
+from starlette.concurrency import run_in_threadpool
+
 router = APIRouter(tags=["Usuarios"])
 
 @router.post("/registro", response_model=schemas.RespuestaRegistro)
 @limiter.limit("5/10minute")
-def registro(
+async def registro(
     request: Request,
     datos: schemas.Registro,
-    db: Session = Depends(obtener_db),
+    db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
     """Registro de nuevo usuario con validación de duplicados."""
-    return user_service.registrar_nuevo_usuario(db, datos)
+    return await user_service.registrar_nuevo_usuario(db, datos)
 
 @router.get("/perfil/informacion", response_model=schemas.RespuestaInformacionPerfil) 
-def informacion_perfil(
+async def informacion_perfil(
     request: Request,
-    db: Session = Depends(obtener_db), 
+    db: AsyncSession = Depends(obtener_db), 
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """Obtiene los datos del perfil."""
-    usuario = user_service.obtener_perfil(db, usuario_actual)
+    usuario = await user_service.obtener_perfil(db, usuario_actual)
     
     # Calcular puntos (1 KM = 1 Punto).
     puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
@@ -57,10 +59,10 @@ def informacion_perfil(
     }
 
 @router.get("/perfil/informacion/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
-def informacion_perfil_publico(
+async def informacion_perfil_publico(
     nombre_usuario: str,
     request: Request,
-    db: Session = Depends(obtener_db),
+    db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
@@ -69,7 +71,7 @@ def informacion_perfil_publico(
     Calcula los puntos de ese usuario en tiempo real basándose en los metros acumulados.
     """
     # Obtener el usuario.
-    usuario_objetivo = user_service.obtener_perfil_publico(db, nombre_usuario)
+    usuario_objetivo = await user_service.obtener_perfil_publico(db, nombre_usuario)
     
     # Calcular puntos (1 KM = 1 Punto).
     puntos = calculos.calcular_puntos_nivel(usuario_objetivo.total_metros)
@@ -83,55 +85,55 @@ def informacion_perfil_publico(
     }
 
 @router.post("/perfil/foto", response_model=schemas.RespuestaGenerica)
-def foto_perfil(
-    db: Session = Depends(obtener_db),
+async def foto_perfil(
+    db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
-    file_service.validar_seguridad(archivo)
+    await run_in_threadpool(file_service.validar_seguridad, archivo)
     # Ejecutar la consulta bloqueante en un hilo separado
-    usuario = user_service.obtener_perfil(db, usuario_actual)
+    usuario = await user_service.obtener_perfil(db, usuario_actual)
     
     # Se procesa la subida.
-    nueva_ruta_foto = file_service.procesar_subida(archivo, usuario_actual)
+    nueva_ruta_foto = await run_in_threadpool(file_service.procesar_subida, archivo, usuario_actual)
     
     # Si la subida fue exitosa, se actualiza la base de datos.
     usuario.foto_perfil = nueva_ruta_foto
     
     # Ejecutar el commit bloqueante en un hilo separado
-    db.commit()
+    await db.commit()
     
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
 @router.patch("/perfil/actualizar", response_model=schemas.RespuestaGenerica)
-def actualizar_perfil(
+async def actualizar_perfil(
     datos: schemas.ActualizarPerfil, 
-    db: Session = Depends(obtener_db), 
+    db: AsyncSession = Depends(obtener_db), 
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """Permite al usuario modificar su perfil."""
-    usuario = user_service.obtener_perfil(db, usuario_actual)
-    return user_service.actualizar_perfil_usuario(db, usuario, datos)
+    usuario = await user_service.obtener_perfil(db, usuario_actual)
+    return await user_service.actualizar_perfil_usuario(db, usuario, datos)
 
 @router.delete("/perfil/borrar", response_model=schemas.RespuestaGenerica)
-def borrar_perfil(
-    db: Session = Depends(obtener_db), 
+async def borrar_perfil(
+    db: AsyncSession = Depends(obtener_db), 
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)):
     """Elimina la cuenta y borra la foto (local o nube)."""
-    usuario = user_service.obtener_perfil(db, usuario_actual)
+    usuario = await user_service.obtener_perfil(db, usuario_actual)
     
-    file_service.borrar_foto(usuario.foto_perfil, usuario_actual)
-    return user_service.eliminar_cuenta(db, usuario)
+    await run_in_threadpool(file_service.borrar_foto, usuario.foto_perfil, usuario_actual)
+    return await user_service.eliminar_cuenta(db, usuario)
 
 @router.get("/perfil/buscar", response_model=List[schemas.BusquedaUsuario])
-def buscar_perfil(
+async def buscar_perfil(
     request: Request,
     # 'q' es el parámetro de la URL: /perfil/buscar?q=pepe
     # min_length=3 valida que escriban al menos 3 letras antes de molestar a la base de datos
     q: str = Query(..., min_length=3, description="Término de búsqueda (min 3 caracteres)"),
-    db: Session = Depends(obtener_db),
+    db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
@@ -139,7 +141,7 @@ def buscar_perfil(
     Busca usuarios por nombre (coincidencia parcial).
     Solo devuelve usuarios con perfil público.
     """
-    resultados = user_service.buscar_usuario(db, q)
+    resultados = await user_service.buscar_usuario(db, q)
     
     # Procesamos para añadir la URL completa de la foto
     lista_final = []
@@ -154,10 +156,10 @@ def buscar_perfil(
     return lista_final
 
 @router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
-def obtener_ranking(
+async def obtener_ranking(
     request: Request,
     provincia: Optional[ProvinciaEspaña] = None,
-    db: Session = Depends(obtener_db),
+    db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
@@ -166,7 +168,7 @@ def obtener_ranking(
     Permite filtrar por provincia de foma opcional.
     """
     # Obtener los datos
-    ranking = user_service.obtener_ranking(db, provincia)
+    ranking = await user_service.obtener_ranking(db, provincia)
     
     # Procesar la URL de las fotos para que la App pueda descargarlas.
     ranking_final = []
