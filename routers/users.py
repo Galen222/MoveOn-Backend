@@ -91,16 +91,20 @@ async def foto_perfil(
 ):
     await run_in_threadpool(file_service.validar_seguridad, archivo)
     
-    # Ejecutar la consulta bloqueante en un hilo separado
+    # Obtenemos el usuario para saber qué foto tiene actualmente
     usuario = await user_service.obtener_perfil(db, usuario_actual)
     
-    # Se procesa la subida.
-    nueva_ruta_foto = await run_in_threadpool(file_service.procesar_subida, archivo, usuario_actual)
+    # Le pasamos 'usuario.foto_perfil' como cuarto argumento
+    nueva_ruta_foto = await run_in_threadpool(
+        file_service.procesar_subida, 
+        archivo, 
+        usuario_actual, 
+        usuario.foto_perfil
+    )
     
-    # Si la subida fue exitosa, se actualiza la base de datos.
+    # Si la subida fue exitosa, se actualiza la base de datos con la nueva ruta
     usuario.foto_perfil = nueva_ruta_foto
     
-    # Ejecutar el commit bloqueante en un hilo separado
     await db.commit()
     
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
