@@ -104,8 +104,12 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     if not isinstance(familia_id, str) or not familia_id:
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido (familia)")
 
+    # Bloqueo de fila para evitar race condition: 2 refresh simultáneos con el mismo token
+    # podrían rotar el token dos veces si no se bloquea la sesión.
     sesion = (await db.execute(
-        select(database.SesionRefresh).where(database.SesionRefresh.jti == jti)
+        select(database.SesionRefresh)
+        .where(database.SesionRefresh.jti == jti)
+        .with_for_update()
     )).scalar_one_or_none()
 
     if not sesion:
