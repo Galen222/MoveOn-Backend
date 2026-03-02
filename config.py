@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Seguridad App
     APP_ID: str
     APP_SESSION_SECRET: str
+    APP_SESSION_EXPIRE_MINUTES: int = 5
     
     # Seguridad App JWT acceso corto
     ACCESS_TOKEN_SECRET: str

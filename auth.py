@@ -22,6 +22,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 APP_ID = settings.APP_ID
 APP_SESSION_SECRET = settings.APP_SESSION_SECRET
+APP_SESSION_EXPIRE_MINUTES = settings.APP_SESSION_EXPIRE_MINUTES
 
 # Instancia de seguridad que activa el botón "Authorize" en Swagger.
 security_scheme = HTTPBearer()
@@ -37,7 +38,7 @@ def comprobar_password(password_plana: str, password_encriptada: str) -> bool:
 
 def crear_token_aplicacion() -> str:
     """Genera un token JWT de corta duración (5 minutos) para el apretón de manos inicial."""
-    expiracion = datetime.now(timezone.utc) + timedelta(minutes=5)
+    expiracion = datetime.now(timezone.utc) + timedelta(minutes=APP_SESSION_EXPIRE_MINUTES)
     datos_a_cifrar = {"exp": expiracion, "aud": "moveon_app"}
     return jwt.encode(datos_a_cifrar, str(APP_SESSION_SECRET), algorithm=ALGORITHM)
 
