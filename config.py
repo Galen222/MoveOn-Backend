@@ -44,8 +44,12 @@ class Settings(BaseSettings):
     EMAIL_PASS: str
     
     # CORS
+    ENABLE_CORS: bool = False
     CORS_ORIGINS: str = "https://miapp.com, http://localhost:3000"
 
+    # SWAGGER
+    ENABLE_DOCS: bool = True
+    
     # Configuración Pydantic V2.
     model_config = SettingsConfigDict(
         env_file=".env",

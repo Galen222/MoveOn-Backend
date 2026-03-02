@@ -29,7 +29,6 @@ async def lifespan(app: FastAPI):
     # Obtener el tipo de almacenamiento para las imagenes.
     # Seleccionando entre local (desarrollo) y Cloudinary (producción)
     STORAGE_TYPE = settings.STORAGE_TYPE
-
     # Configurar almacenamiento local si es necesario.
     if STORAGE_TYPE == "local":
         # Usar la variable de settings con el nombre de la carpeta.
@@ -52,7 +51,10 @@ app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
     version="0.3.6",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None
 )
 
 # Configurar el limitador (usa la IP del usuario para contar)
@@ -75,13 +77,14 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 # Configuración de CORS para permitir peticiones externas.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if settings.ENABLE_CORS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Registro de excepciones.
 # Para mostrar los errores de las validaciones de Pydantic
