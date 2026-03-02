@@ -51,7 +51,21 @@ class Settings(BaseSettings):
     # SWAGGER
     ENABLE_DOCS: bool = True
     
-    # Configuración Pydantic V2.
+    # Proxy
+    TRUST_PROXY_LAN: bool = False
+    TRUST_PROXY_LAN_CIDRS: str = (
+    "127.0.0.1/32,"
+    "10.0.0.0/8,"
+    "172.16.0.0/12,"
+    "192.168.0.0/16,"
+    "::1/128,"
+    "fc00::/7"
+    )
+    TRUST_PROXY_WAN: bool = False
+    TRUST_PROXY_WAN_IPS: str = ""      # ej: "203.0.113.10,198.51.100.22"
+    TRUST_PROXY_WAN_CIDRS: str = ""    # ej: "203.0.113.0/24,198.51.100.22/32"
+    TRUST_PROXY_HEADER_ORDER: str = "x-forwarded-for,x-real-ip"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True, # Distingue entre mayusculas y minusculas.
