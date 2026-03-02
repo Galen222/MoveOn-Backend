@@ -65,7 +65,11 @@ class Settings(BaseSettings):
     TRUST_PROXY_WAN_IPS: str = ""      # ej: "203.0.113.10,198.51.100.22"
     TRUST_PROXY_WAN_CIDRS: str = ""    # ej: "203.0.113.0/24,198.51.100.22/32"
     TRUST_PROXY_HEADER_ORDER: str = "x-forwarded-for,x-real-ip"
-
+    
+    # JWT hardening (mismo issuer/audience para TODOS los JWT)
+    JWT_ISSUER: str = "moveon_api"
+    JWT_AUDIENCE: str = "moveon_app"
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True, # Distingue entre mayusculas y minusculas.
