@@ -15,7 +15,7 @@ from typing import Any
 from config import settings
 
 # Parámetros de configuración del sistema de tokens
-SECRET_KEY = settings.SECRET_KEY
+ACCESS_TOKEN_SECRET = settings.ACCESS_TOKEN_SECRET
 REFRESH_TOKEN_SECRET = settings.REFRESH_TOKEN_SECRET
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
@@ -49,7 +49,7 @@ def crear_token_acceso(datos: dict) -> str:
         "exp": expiracion,
         "typ": "access"
     })
-    return jwt.encode(datos_copia, str(SECRET_KEY), algorithm=ALGORITHM)
+    return jwt.encode(datos_copia, str(ACCESS_TOKEN_SECRET), algorithm=ALGORITHM)
 
 def crear_token_refresh(nombre_usuario: str, jti: str, familia_id: str) -> str:
     """Genera el refresh token (largo) con rotación."""
@@ -113,7 +113,7 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
     token = res.credentials
 
     try:
-        payload: dict[str, Any] = jwt.decode(token, str(SECRET_KEY), algorithms=[ALGORITHM])
+        payload: dict[str, Any] = jwt.decode(token, str(ACCESS_TOKEN_SECRET), algorithms=[ALGORITHM])
 
         if payload.get("typ") != "access":
             raise HTTPException(status_code=401, detail="Error: Token no es de acceso")

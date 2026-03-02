@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     APP_SESSION_SECRET: str
     
     # Seguridad App JWT acceso corto
-    SECRET_KEY: str
+    ACCESS_TOKEN_SECRET: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Seguridad App JWT acceso largo
