@@ -158,6 +158,10 @@ async def init_db() -> None:
     Crea físicamente las tablas definidas en los modelos de SQLAlchemy 
     si estas no existen previamente en la base de datos PostgreSQL.
     """
+    # Solo crea las tablas si lo indica el .env
+    if not settings.AUTO_CREATE_TABLES:
+        return
+    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

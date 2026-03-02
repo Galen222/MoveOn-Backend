@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Seguridad App Cifrado
     ALGORITHM: str = "HS256"
     
+    # Operacional
+    AUTO_CREATE_TABLES: bool = True    
+    
     # Almacenamiento
     STORAGE_TYPE: str = "local"
     UPLOAD_DIR: str = "uploads"
@@ -39,6 +42,9 @@ class Settings(BaseSettings):
     EMAIL_PORT: int = 587
     EMAIL_USER: str
     EMAIL_PASS: str
+    
+    # CORS
+    CORS_ORIGINS: str = "https://miapp.com, http://localhost:3000"
 
     # Configuración Pydantic V2.
     model_config = SettingsConfigDict(

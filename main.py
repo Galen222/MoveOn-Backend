@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.3.5",
+    version="0.3.6",
     lifespan=lifespan
 )
 
@@ -77,8 +77,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # Configuración de CORS para permitir peticiones externas.
 app.add_middleware(
     CORSMiddleware,
-    # IMPORTANTE: Cambiar al dominio real de producción
-    allow_origins=["https://miapp.com", "http://localhost:3000"],
+    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
