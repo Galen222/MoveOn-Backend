@@ -10,7 +10,7 @@ from datetime import datetime, date, timezone
 from typing import Optional, AsyncGenerator
 from urllib.parse import quote_plus
 from sqlalchemy import (
-    String, Date, DateTime, Boolean, Integer, Float, ForeignKey, Text
+    String, Date, DateTime, Boolean, Integer, Float, ForeignKey, Text, Index, func
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import (
@@ -96,7 +96,14 @@ class Usuario(Base):
     # Guardamos el HASH SHA-256 del código (64 caracteres), no el código en claro
     codigo_recuperacion: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    __table_args__ = (
+        # Evita duplicados tipo Usuario/usuARio/USUARIO
+        Index("uq_usuarios_nombre_usuario_lower", func.lower(nombre_usuario), unique=True),
 
+        # Blinda incluso si alguien guarda emails con mayúsculas
+        Index("uq_usuarios_email_lower", func.lower(email), unique=True),
+    )
 class Actividad(Base):
     """
     Modelo para registrar las actividades deportivas.

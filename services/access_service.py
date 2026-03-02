@@ -1,32 +1,40 @@
 # services/access_service.py
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
-from fastapi import HTTPException, BackgroundTasks
+from __future__ import annotations
+
 from datetime import datetime, timedelta, timezone
+
 import hashlib
 import hmac
-import uuid
 import secrets
+import uuid
 
-import database
+from fastapi import BackgroundTasks, HTTPException
+from sqlalchemy import select, update, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
 import auth
+import database
 import schemas
+from config import settings
 from services import email_service
+
 
 def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
+
 
 def _normalizar_utc(dt: datetime) -> datetime:
     # Por compatibilidad si SQLAlchemy devuelve naive datetime
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
+
 def _hash_refresh_token(token: str) -> str:
     """
     Hash del refresh token para guardarlo en BD sin almacenarlo en claro.
-    Usamos HMAC-SHA256 con la clave del servidor (REFRESH_TOKEN_SECRET).
+    Usamos HMAC-SHA256 con un secreto dedicado (REFRESH_HASH_SECRET).
     """
-    key = str(auth.REFRESH_TOKEN_SECRET).encode("utf-8")
+    key = (settings.REFRESH_HASH_SECRET).encode("utf-8")
     return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
@@ -42,15 +50,19 @@ async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
         .values(revocada_en=ahora)
     )
 
+
 async def buscar_por_identificador(db: AsyncSession, identificador: str):
     """Búsqueda para login (email o nombre de usuario)."""
-    identificador_limpio = identificador.strip()
+    # Email se guarda en minúsculas. Usuario se guarda como lo escribe el usuario, pero se compara case-insensitive.
+    identificador_limpio = identificador.strip().lower()
+
     return (await db.execute(
         select(database.Usuario).where(
-            (database.Usuario.email == identificador_limpio.lower()) |
-            (database.Usuario.nombre_usuario == identificador_limpio)
+            (database.Usuario.email == identificador_limpio) |
+            (func.lower(database.Usuario.nombre_usuario) == identificador_limpio)
         )
     )).scalar_one_or_none()
+
 
 async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
     """
@@ -90,8 +102,10 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         "refresh_token": refresh_token
     }
 
+
 def _hash_codigo_recuperacion(codigo: str) -> str:
     return hashlib.sha256(codigo.encode("utf-8")).hexdigest()
+
 
 async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     """
@@ -144,6 +158,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     usuario = (await db.execute(
         select(database.Usuario).where(database.Usuario.id == sesion.usuario_id)
     )).scalar_one_or_none()
+
     if not usuario:
         sesion.revocada_en = ahora
         await db.commit()
@@ -182,6 +197,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         "refresh_token": nuevo_refresh_token
     }
 
+
 async def cerrar_sesion(db: AsyncSession, refresh_token: str):
     """
     Revoca la sesión actual a partir del refresh token.
@@ -215,6 +231,7 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
 
     return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
+
 async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_tasks: BackgroundTasks):
     """Genera el OTP de 6 dígitos y lo envía por email."""
     usuario = (await db.execute(
@@ -235,6 +252,7 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
         background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo)
 
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
+
 
 async def resetear_password(db: AsyncSession, datos: schemas.Confirmarpassword):
     """Valida el OTP y actualiza la contraseña."""

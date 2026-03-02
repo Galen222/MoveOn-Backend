@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     
     # Hash de refresh tokens en DB (pepper). Si lo dejas vacío, se usará REFRESH_TOKEN_SECRET
-    REFRESH_HASH_SECRET: str = ""
+    REFRESH_HASH_SECRET: str
     
     # Operacional
     AUTO_CREATE_TABLES: bool = True    
