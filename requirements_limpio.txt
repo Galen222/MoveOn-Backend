@@ -22,6 +22,9 @@ slowapi
 # --- Servicios externos ---
 cloudinary
 
+# --- Encodear Imagen ---
+pillow
+
 # --- Email ---
 aiosmtplib
 
