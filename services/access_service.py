@@ -5,6 +5,7 @@ from sqlalchemy import select, update
 from fastapi import HTTPException, BackgroundTasks
 from datetime import datetime, timedelta, timezone
 import hashlib
+import hmac
 import uuid
 import secrets
 
@@ -21,7 +22,13 @@ def _normalizar_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 def _hash_refresh_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    """
+    Hash del refresh token para guardarlo en BD sin almacenarlo en claro.
+    Usamos HMAC-SHA256 con la clave del servidor (REFRESH_TOKEN_SECRET).
+    """
+    key = str(auth.REFRESH_TOKEN_SECRET).encode("utf-8")
+    return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
+
 
 async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
     ahora = _ahora_utc()
@@ -116,7 +123,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido")
 
     refresh_hash = _hash_refresh_token(refresh_token)
-    if sesion.token_hash != refresh_hash:
+    if not hmac.compare_digest(str(sesion.token_hash), refresh_hash):
         # Token manipulado / no coincide con el registrado
         await _revocar_familia_refresh(db, sesion.familia_id)
         await db.commit()
@@ -198,7 +205,7 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     # Validamos hash para evitar revocar jti con token distinto manipulado
-    if sesion.token_hash != _hash_refresh_token(refresh_token):
+    if not hmac.compare_digest(str(sesion.token_hash), _hash_refresh_token(refresh_token)):
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     if sesion.revocada_en is None:
