@@ -5,8 +5,9 @@ Servicio de Gestión de Usuarios.
 Encapsula la lógica de negocio de registro y actualización de perfil.
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 from fastapi import HTTPException
+from datetime import datetime, timezone
 import database
 import auth
 import schemas
@@ -76,6 +77,16 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
     
     if datos.password:
         usuario.password_encriptada = auth.encriptar_password(datos.password)
+        # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
+        ahora = datetime.now(timezone.utc)
+        await db.execute(
+            update(database.SesionRefresh)
+            .where(
+                database.SesionRefresh.usuario_id == usuario.id,
+                database.SesionRefresh.revocada_en.is_(None)
+            )
+            .values(revocada_en=ahora)
+        )
     if datos.fecha_nacimiento: usuario.fecha_nacimiento = datos.fecha_nacimiento
     if datos.genero: usuario.genero = datos.genero
     if datos.altura is not None: usuario.altura = datos.altura
