@@ -19,6 +19,7 @@ from config import settings
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from limiter_config import limiter
+from middlewares.security_headers import SecurityHeadersMiddleware
 
 
 @asynccontextmanager
@@ -62,6 +63,10 @@ app.state.limiter = limiter
 
 # Middleware de SlowAPI (si no, el rate limit puede no comportarse correctamente)
 app.add_middleware(SlowAPIMiddleware)
+
+# Middleware de Seguridad
+if settings.ENABLE_SECURITY_HEADERS:
+    app.add_middleware(SecurityHeadersMiddleware)
 
 # Handler (JSON consistente para Android + headers de rate limit si existen)
 @app.exception_handler(RateLimitExceeded)
