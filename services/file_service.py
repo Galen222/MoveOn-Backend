@@ -251,28 +251,30 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
     except Exception:
         raise HTTPException(status_code=500, detail="Error: No se ha podido subir la imagen a la nube")
 
-
 def borrar_foto(foto_perfil: str, usuario_actual: str):
     """Lógica de borrado permanente segura usando Hashing."""
     if not foto_perfil:
         return
 
-    # No existe en backend (sentinel de Android)
+    # Si es el sentinel (avatar local de Android), no hay nada que borrar en backend
     if os.path.basename(foto_perfil) == DEFAULT_AVATAR_SENTINEL:
         return
 
+    # Cloudinary: borrado fiable por el mismo public_id con el que subimos
     if settings.STORAGE_TYPE == "cloudinary":
-        # Si es cloudinary, debería ser URL; si no lo es, no hacemos nada
-        if not foto_perfil.startswith("http"):
-            return
         try:
-            # Si guardas public_id de cloudinary, esto sería mejor.
-            # Aquí no se puede borrar con fiabilidad solo con URL, así que lo dejamos conservador.
-            return
+            usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
+            public_id = f"perfiles/perfil_{usuario_hash}"
+            cloudinary.uploader.destroy(
+                public_id,
+                resource_type="image",
+                invalidate=True
+            )
         except Exception:
-            return
+            pass
+        return
 
-    # Local
+    # Local (tu lógica actual)
     try:
         carpeta_imagenes = settings.UPLOAD_DIR
         ruta = os.path.join(carpeta_imagenes, os.path.basename(foto_perfil))

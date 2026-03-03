@@ -1,6 +1,6 @@
 # services/email_templates.py
 
-def recuperacion_password_template(codigo: str) -> str:
+def recuperacion_password_template(codigo: str, minutos: int) -> str:
     """Genera la plantilla HTML para el código de recuperación de MoveOn."""
     return f"""
     <!DOCTYPE html>
@@ -30,11 +30,11 @@ def recuperacion_password_template(codigo: str) -> str:
                 <div class="code-box">
                     <div class="code">{codigo}</div>
                 </div>
-                <p style="font-size: 0.9em; color: #666;">Este código <strong>expirará en 15 minutos</strong>.</p>
+                <p style="font-size: 0.9em; color: #666;">Este código <strong>expirará en {minutos} minuto{"s" if minutos != 1 else ""}</strong>.</p>
             </div>
             <div class="footer">
                 <p>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>
-                <p>&copy; MoveOn App</p>
+                <p>MoveOn App</p>
             </div>
         </div>
     </body>
