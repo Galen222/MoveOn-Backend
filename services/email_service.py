@@ -8,9 +8,10 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+
 async def enviar_codigo_recuperacion(email_destino: str, codigo: str):
     """Construye y envía el correo de forma asíncrona."""
-    # Obtener configuración del entorno 
+    # Obtener configuración del entorno
     smtp_server = settings.EMAIL_HOST
     smtp_port = settings.EMAIL_PORT
     smtp_username = settings.EMAIL_USER
@@ -21,8 +22,10 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str):
     msg['From'] = smtp_username
     msg['To'] = email_destino
 
-    msg.set_content(f"Tu código de recuperación para MoveOn es: {codigo}. Expira en 15 minutos.")
-    html_content = email_templates.recuperacion_password_template(codigo)
+    msg.set_content(
+        f"Tu código de recuperación para MoveOn es: {codigo}. Expira en 15 minutos.")
+    html_content = email_templates.recuperacion_password_template(
+        codigo, int(settings.RECOVERY_CODE_EXPIRE_MINUTES))
     msg.add_alternative(html_content, subtype="html")
 
     try:
