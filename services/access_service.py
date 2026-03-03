@@ -104,7 +104,12 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
 
 
 def _hash_codigo_recuperacion(codigo: str) -> str:
-    return hashlib.sha256(codigo.encode("utf-8")).hexdigest()
+    """
+    Hash HMAC-SHA256 del código OTP.
+    Así, si alguien roba la BD, no puede verificar códigos sin el secreto.
+    """
+    key = (settings.CODE_HASH_SECRET).encode("utf-8")
+    return hmac.new(key, codigo.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 async def refrescar_sesion(db: AsyncSession, refresh_token: str):
