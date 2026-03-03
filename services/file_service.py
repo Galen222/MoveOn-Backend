@@ -20,10 +20,27 @@ from config import settings
 # Pillow para verificar que el archivo es realmente una imagen
 from PIL import Image, UnidentifiedImageError
 
+
+# Sentinel: en tu caso "default_avatar.png" NO existe en backend.
+# Existe en Android como drawable, así que el backend debe devolver null y no intentar borrarla.
+DEFAULT_AVATAR_SENTINEL = "default_avatar.png"
+
 # Límite de seguridad (anti "decompression bomb")
-# Puedes ajustar este valor si lo necesitas (20MP por defecto)
-MAX_IMAGE_PIXELS = 13_000_000
+# Ajustable por env (ej: 13MP)
+MAX_IMAGE_PIXELS = int(settings.MAX_IMAGE_PIXELS)
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+# Tamaño máximo de imagen (bytes) ajustable por env (ej: 2MB)
+MAX_IMAGE_BYTES = int(getattr(settings, "MAX_IMAGE_BYTES", 2 * 1024 * 1024))
+
+# Calidad JPEG para re-encode, ajustable por env
+IMAGE_JPEG_QUALITY = int(getattr(settings, "IMAGE_JPEG_QUALITY", 85))
+# clamp razonable (Pillow recomienda no pasarse de 95)
+if IMAGE_JPEG_QUALITY < 1:
+    IMAGE_JPEG_QUALITY = 1
+if IMAGE_JPEG_QUALITY > 95:
+    IMAGE_JPEG_QUALITY = 95
+
 
 # Si la API está en producción carga variables de Cloudinary.
 if settings.STORAGE_TYPE == "cloudinary":
@@ -47,13 +64,22 @@ MALICIOUS_SIGNATURES = [
 
 
 def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional[str]:
+    """
+    Devuelve la URL completa de la foto si existe.
+    Si es 'default_avatar.png' (sentinel local de Android), devuelve None para que la app use su drawable.
+    """
     if not foto_perfil:
         return None
 
-    # Si la foto es de Cloudinary (empieza por http), se usa tal cual. Si es local, se construye la URL.
+    # Si alguien guardó "default_avatar.png" en BD (o viene en ruta), no se sirve desde backend
+    if os.path.basename(foto_perfil) == DEFAULT_AVATAR_SENTINEL:
+        return None
+
+    # Si la foto es de Cloudinary (empieza por http), se usa tal cual.
     if foto_perfil.startswith("http"):
         return foto_perfil
 
+    # Si es local, se construye la URL.
     url_base = str(request.base_url).rstrip("/")
     return f"{url_base}/imagenes/{foto_perfil}"
 
@@ -63,18 +89,17 @@ def validar_seguridad(archivo: UploadFile):
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Error: Solo imágenes JPG o PNG")
 
-    # Validar tamaño máximo (2MB). Leemos el tamaño del archivo desde el descriptor.
+    # Validar tamaño máximo (por env). Leemos el tamaño del archivo desde el descriptor.
     archivo.file.seek(0, os.SEEK_END)
     tamano = archivo.file.tell()
-    # Vuelve al inicio para poder guardarlo después.
     archivo.file.seek(0)
 
-    if tamano > 2 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Error: La imagen supera los 2MB")
+    if tamano > MAX_IMAGE_BYTES:
+        mb = MAX_IMAGE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)")
 
     # Escaneo de firmas maliciosas
     content = archivo.file.read()
-    # Regresar el puntero del archivo al inicio
     archivo.file.seek(0)
 
     content_lower = content.lower()
@@ -127,14 +152,28 @@ def _reencode_image(archivo: UploadFile, extension: str) -> bytes:
         if im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGBA")
         im.save(out, format="PNG", optimize=True)
-        return out.getvalue()
+        data = out.getvalue()
+
+        # OJO: re-encode puede inflar tamaño -> revalidamos
+        if len(data) > MAX_IMAGE_BYTES:
+            mb = MAX_IMAGE_BYTES / (1024 * 1024)
+            raise HTTPException(status_code=400, detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)")
+        return data
 
     # JPEG por defecto
     # JPEG no soporta alpha, convertimos a RGB si hace falta
     if im.mode in ("RGBA", "P"):
         im = im.convert("RGB")
-    im.save(out, format="JPEG", optimize=True, quality=85)
-    return out.getvalue()
+
+    im.save(out, format="JPEG", optimize=True, quality=IMAGE_JPEG_QUALITY)
+    data = out.getvalue()
+
+    # Revalidar tamaño tras re-encode
+    if len(data) > MAX_IMAGE_BYTES:
+        mb = MAX_IMAGE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)")
+
+    return data
 
 
 def procesar_subida(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Optional[str] = None) -> str:
@@ -146,7 +185,6 @@ def procesar_subida(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: 
 
 def guardar_local(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Optional[str] = None) -> str:
     """Lógica de guardado local segura."""
-    # Usar la variable de settings.
     carpeta_imagenes = settings.UPLOAD_DIR
 
     # Genera un HASH SHA-256 para el nombre del archivo de la foto de perfil.
@@ -163,15 +201,17 @@ def guardar_local(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Op
     # Re-encode para limpiar metadata y asegurar formato real
     data_limpia = _reencode_image(archivo, extension)
 
-    # Borramos explícitamente la foto referenciada en la BD
-    if foto_anterior_bd and foto_anterior_bd != "default_avatar.png" and not foto_anterior_bd.startswith("http"):
-        nombre_archivo_antiguo = os.path.basename(foto_anterior_bd)
-        ruta_antigua = os.path.join(carpeta_imagenes, nombre_archivo_antiguo)
-        if os.path.exists(ruta_antigua):
-            try:
-                os.remove(ruta_antigua)
-            except OSError:
-                pass
+    # Borramos explícitamente la foto referenciada en la BD (si NO es default avatar y NO es cloud)
+    if foto_anterior_bd:
+        base = os.path.basename(foto_anterior_bd)
+        if base != DEFAULT_AVATAR_SENTINEL and not foto_anterior_bd.startswith("http"):
+            nombre_archivo_antiguo = os.path.basename(foto_anterior_bd)
+            ruta_antigua = os.path.join(carpeta_imagenes, nombre_archivo_antiguo)
+            if os.path.exists(ruta_antigua):
+                try:
+                    os.remove(ruta_antigua)
+                except OSError:
+                    pass
 
     # Construir la ruta final usando el hash.
     nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
@@ -189,10 +229,8 @@ def guardar_local(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Op
 def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
     """Lógica de guardado en Cloudinary usando Hash."""
     try:
-        # Generar el hash del usuario
         usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
-        # Definir extensión segura basada en content_type (mismo criterio que en local)
         mapa_extensiones = {
             "image/jpeg": ".jpg",
             "image/jpg": ".jpg",
@@ -200,13 +238,11 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
         }
         extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 
-        # Re-encode para limpiar metadata y asegurar formato real
         data_limpia = _reencode_image(archivo, extension)
 
         resultado = cloudinary.uploader.upload(
             BytesIO(data_limpia),
             folder="perfiles",
-            # Usar el hash en lugar del nombre de usuario legible
             public_id=f"perfil_{usuario_hash}",
             overwrite=True,
             resource_type="image"
@@ -218,30 +254,30 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
 
 def borrar_foto(foto_perfil: str, usuario_actual: str):
     """Lógica de borrado permanente segura usando Hashing."""
-    # Usar las variables de settings.
-    storage = settings.STORAGE_TYPE
-    carpeta_imagenes = settings.UPLOAD_DIR
+    if not foto_perfil:
+        return
 
-    # Generar el mismo hash que se usa al guardar
-    usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
+    # No existe en backend (sentinel de Android)
+    if os.path.basename(foto_perfil) == DEFAULT_AVATAR_SENTINEL:
+        return
 
-    if storage != "cloudinary" and foto_perfil and foto_perfil != "default_avatar.png":
-        # Usar basename por precaución (limpia rutas como ../)
-        nombre_archivo_seguro = os.path.basename(foto_perfil)
-        ruta_foto = os.path.join(carpeta_imagenes, nombre_archivo_seguro)
-
-        # Solo borrar la foto si el nombre del archivo contiene el hash de este usuario.
-        if f"perfil_{usuario_hash}" in nombre_archivo_seguro:
-            if os.path.exists(ruta_foto):
-                try:
-                    os.remove(ruta_foto)
-                except OSError:
-                    pass
-
-    if storage == "cloudinary":
+    if settings.STORAGE_TYPE == "cloudinary":
+        # Si es cloudinary, debería ser URL; si no lo es, no hacemos nada
+        if not foto_perfil.startswith("http"):
+            return
         try:
-            # Usar el mismo hash para borrar en la nube
-            cloudinary.uploader.destroy(f"perfiles/perfil_{usuario_hash}")
-        except:
-            pass
-        
+            # Si guardas public_id de cloudinary, esto sería mejor.
+            # Aquí no se puede borrar con fiabilidad solo con URL, así que lo dejamos conservador.
+            return
+        except Exception:
+            return
+
+    # Local
+    try:
+        carpeta_imagenes = settings.UPLOAD_DIR
+        ruta = os.path.join(carpeta_imagenes, os.path.basename(foto_perfil))
+        if os.path.exists(ruta):
+            os.remove(ruta)
+    except Exception:
+        return
+    

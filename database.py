@@ -93,7 +93,7 @@ class Usuario(Base):
     # Ajustes de privacidad del usuario
     perfil_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Recuperación de contraseña
-    # Guardamos el HASH SHA-256 del código (64 caracteres), no el código en claro
+    # Guardamos el HMAC-SHA256 del código (64 caracteres), no el código en claro
     codigo_recuperacion: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     

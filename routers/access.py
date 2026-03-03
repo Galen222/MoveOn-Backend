@@ -13,12 +13,14 @@ import schemas
 from database import obtener_db
 from services import access_service
 from config import settings
-from limiter_config import limiter
+from limiter_config import rate_limit
+from services.identity_rate_limit import check_identity_limit
 
 router = APIRouter(tags=["Seguridad"])
 
+
 @router.get("/handshake", response_model=schemas.RespuestaHandshake)
-@limiter.limit("30/minute")
+@rate_limit(settings.RL_HANDSHAKE)
 def handshake(
     request: Request,
     x_app_id: str = Header(None)
@@ -29,17 +31,24 @@ def handshake(
     # Crea el token de corta duración.
     return {"app_session_token": auth.crear_token_aplicacion()}
 
+
+"""Autentica al usuario y genera access token + refresh token."""
 @router.post("/login", response_model=schemas.RespuestaLogin)
-@limiter.limit("20/minute") # Limite 20 intentos por minuto
+@rate_limit(settings.RL_LOGIN)  # configurable por env
 async def login(
     request: Request,
     datos: schemas.Login,
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    """Autentica al usuario y genera access token + refresh token."""
+    # Rate-limit adicional por identidad (anti-abuso distribuido)
+    resp = check_identity_limit("login", datos.identificador, settings.RL_LOGIN_ID)
+    if resp:
+        return resp
+    
     # Búsqueda flexible por nombre o email.
     usuario_encontrado = await access_service.buscar_por_identificador(db, datos.identificador)
+
     # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado or not auth.comprobar_password(
         datos.password, str(usuario_encontrado.password_encriptada)
@@ -48,8 +57,9 @@ async def login(
 
     return await access_service.crear_sesion_login(db, usuario_encontrado)
 
+
 @router.post("/token/refresh", response_model=schemas.RespuestaRefreshToken)
-@limiter.limit("30/minute")
+@rate_limit(settings.RL_REFRESH)
 async def refresh_token(
     request: Request,
     datos: schemas.SolicitudRefreshToken,
@@ -59,8 +69,9 @@ async def refresh_token(
     """Renueva la sesión usando refresh token con rotación."""
     return await access_service.refrescar_sesion(db, datos.refresh_token)
 
+
 @router.post("/logout", response_model=schemas.RespuestaGenerica)
-@limiter.limit("60/minute")
+@rate_limit(settings.RL_LOGOUT)
 async def logout(
     request: Request,
     datos: schemas.SolicitudLogout,
@@ -70,8 +81,9 @@ async def logout(
     """Revoca la sesión actual (refresh token)."""
     return await access_service.cerrar_sesion(db, datos.refresh_token)
 
+
 @router.post("/password/solicitar", response_model=schemas.RespuestaGenerica)
-@limiter.limit("5/10minute")
+@rate_limit(settings.RL_PASSWORD_SOLICITAR)
 async def solicitar_password(
     request: Request,
     datos: schemas.Solicitarpassword,
@@ -79,19 +91,28 @@ async def solicitar_password(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
+    resp = check_identity_limit("password_solicitar", datos.email, settings.RL_PASSWORD_SOLICITAR_ID)
+    if resp:
+        return resp
+    
     """
     Solicitar código de 6 dígitos al email.
     Se envía en segundo plano para no bloquear la API mientras responde el servidor SMTP.
     """
     return await access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
+
 @router.post("/password/confirmar", response_model=schemas.RespuestaGenerica)
-@limiter.limit("10/10minute")
+@rate_limit(settings.RL_PASSWORD_CONFIRMAR)
 async def confirmar_password(
     request: Request,
     datos: schemas.Confirmarpassword,
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    """Enviar código y nueva contraseña para resetear."""
+    resp = check_identity_limit("password_confirmar", datos.email, settings.RL_PASSWORD_CONFIRMAR_ID)
+    if resp:
+        return resp
+    
+    """Confirma el código y actualiza la contraseña."""
     return await access_service.resetear_password(db, datos)

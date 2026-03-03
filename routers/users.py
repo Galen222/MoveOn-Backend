@@ -14,8 +14,9 @@ from services import user_service, file_service
 from database import obtener_db
 from schemas import ProvinciaEspaña
 from utils import calculos
-from limiter_config import limiter
 from starlette.concurrency import run_in_threadpool
+from config import settings
+from limiter_config import rate_limit
 
 # Inyectamos la dependencia a nivel de Router para todos los endpoints de este archivo
 router = APIRouter(
@@ -23,8 +24,9 @@ router = APIRouter(
     dependencies=[Depends(auth.verificar_sesion_aplicacion)]
 )
 
+
 @router.post("/registro", response_model=schemas.RespuestaRegistro)
-@limiter.limit("5/10minute")
+@rate_limit(settings.RL_REGISTRO)
 async def registro(
     request: Request,
     datos: schemas.Registro,
@@ -33,11 +35,14 @@ async def registro(
     """Registro de nuevo usuario con validación de duplicados."""
     return await user_service.registrar_nuevo_usuario(db, datos)
 
+
 @router.get("/perfil/informacion", response_model=schemas.RespuestaInformacionPerfil)
+@rate_limit(settings.RL_PERFIL_INFO)
 async def informacion_perfil(
     request: Request,
-    db: AsyncSession = Depends(obtener_db), 
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)):
+    db: AsyncSession = Depends(obtener_db),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+):
     """Obtiene los datos del perfil."""
     usuario = await user_service.obtener_perfil(db, usuario_actual)
 
@@ -58,7 +63,9 @@ async def informacion_perfil(
         "total_puntos": puntos
     }
 
+
 @router.get("/perfil/informacion/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
+@rate_limit(settings.RL_PERFIL_PUBLICO)
 async def informacion_perfil_publico(
     nombre_usuario: str,
     request: Request,
@@ -71,7 +78,7 @@ async def informacion_perfil_publico(
     """
     # Obtener el usuario.
     usuario_objetivo = await user_service.obtener_perfil_publico(db, nombre_usuario)
-    
+
     # Calcular puntos (1 KM = 1 Punto).
     puntos = calculos.calcular_puntos_nivel(usuario_objetivo.total_metros)
 
@@ -83,51 +90,63 @@ async def informacion_perfil_publico(
         "total_puntos": puntos
     }
 
+
 @router.post("/perfil/foto", response_model=schemas.RespuestaGenerica)
+@rate_limit(settings.RL_PERFIL_FOTO)
 async def foto_perfil(
+    request: Request,
     db: AsyncSession = Depends(obtener_db),
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
     await run_in_threadpool(file_service.validar_seguridad, archivo)
-    
+
     # Obtenemos el usuario para saber qué foto tiene actualmente
     usuario = await user_service.obtener_perfil(db, usuario_actual)
-    
+
     # Le pasamos 'usuario.foto_perfil' como cuarto argumento
     nueva_ruta_foto = await run_in_threadpool(
-        file_service.procesar_subida, 
-        archivo, 
-        usuario_actual, 
+        file_service.procesar_subida,
+        archivo,
+        usuario_actual,
         usuario.foto_perfil
     )
-    
+
     # Si la subida fue exitosa, se actualiza la base de datos con la nueva ruta
     usuario.foto_perfil = nueva_ruta_foto
-    
     await db.commit()
-    
+
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
+
 @router.patch("/perfil/actualizar", response_model=schemas.RespuestaGenerica)
+@rate_limit(settings.RL_PERFIL_ACTUALIZAR)
 async def actualizar_perfil(
-    datos: schemas.ActualizarPerfil, 
-    db: AsyncSession = Depends(obtener_db), 
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)):
+    request: Request,
+    datos: schemas.ActualizarPerfil,
+    db: AsyncSession = Depends(obtener_db),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+):
     """Permite al usuario modificar su perfil."""
     usuario = await user_service.obtener_perfil(db, usuario_actual)
     return await user_service.actualizar_perfil_usuario(db, usuario, datos)
 
+
 @router.delete("/perfil/borrar", response_model=schemas.RespuestaGenerica)
+@rate_limit(settings.RL_PERFIL_BORRAR)
 async def borrar_perfil(
-    db: AsyncSession = Depends(obtener_db), 
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)):
+    request: Request,
+    db: AsyncSession = Depends(obtener_db),
+    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+):
     """Elimina la cuenta y borra la foto (local o nube)."""
     usuario = await user_service.obtener_perfil(db, usuario_actual)
     await run_in_threadpool(file_service.borrar_foto, usuario.foto_perfil, usuario_actual)
     return await user_service.eliminar_cuenta(db, usuario)
 
+
 @router.get("/perfil/buscar", response_model=List[schemas.BusquedaUsuario])
+@rate_limit(settings.RL_PERFIL_BUSCAR)
 async def buscar_perfil(
     request: Request,
     # 'q' es el parámetro de la URL: /perfil/buscar?q=pepe
@@ -141,7 +160,7 @@ async def buscar_perfil(
     Solo devuelve usuarios con perfil público.
     """
     resultados = await user_service.buscar_usuario(db, q)
-    
+
     # Procesamos para añadir la URL completa de la foto
     lista_final = []
     for usuario in resultados:
@@ -150,10 +169,12 @@ async def buscar_perfil(
             "nombre_usuario": usuario.nombre_usuario,
             "foto_perfil": url_foto
         })
-        
+
     return lista_final
 
+
 @router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
+@rate_limit(settings.RL_RANKING)
 async def obtener_ranking(
     request: Request,
     provincia: Optional[ProvinciaEspaña] = None,
@@ -166,7 +187,7 @@ async def obtener_ranking(
     """
     # Obtener los datos
     ranking = await user_service.obtener_ranking(db, provincia)
-    
+
     # Procesar la URL de las fotos para que la App pueda descargarlas.
     ranking_final = []
     for item in ranking:
@@ -177,5 +198,5 @@ async def obtener_ranking(
             "foto_perfil": url_foto,
             "total_puntos": item["total_puntos"]
         })
-        
+
     return ranking_final

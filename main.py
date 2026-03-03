@@ -18,8 +18,8 @@ from config import settings
 
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from limiter_config import limiter
 from middlewares.security_headers import SecurityHeadersMiddleware
+from limiter_config import limiter, rate_limit
 
 
 @asynccontextmanager
@@ -62,7 +62,8 @@ app = FastAPI(
 app.state.limiter = limiter
 
 # Middleware de SlowAPI (si no, el rate limit puede no comportarse correctamente)
-app.add_middleware(SlowAPIMiddleware)
+if settings.ENABLE_RATE_LIMIT_IP:
+    app.add_middleware(SlowAPIMiddleware)
 
 # Middleware de Seguridad
 if settings.ENABLE_SECURITY_HEADERS:
@@ -103,10 +104,12 @@ app.include_router(activities.router)
 
 # Endpoint raiz.
 @app.get("/")
-def home():
+@rate_limit(settings.RL_ROOT)
+def home(request: Request):
     return {"estado": "en linea", "aplicacion": "MoveOn API"}
 
 # Endpoint icono.
 @app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
+@rate_limit(settings.RL_FAVICON)
+async def favicon(request: Request):
     return FileResponse("favicon.ico")

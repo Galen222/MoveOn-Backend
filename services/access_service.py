@@ -19,6 +19,7 @@ import database
 import schemas
 from config import settings
 from services import email_service
+from typing import Optional
 
 def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -85,7 +86,7 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         reemplazada_por_jti=None
     )
     
-    await _limpiar_sesiones_refresh_usuario(db, usuario.id, older_than_days=30)
+    await _limpiar_sesiones_refresh_usuario(db, usuario.id)
     db.add(sesion)
     await db.commit()
 
@@ -184,7 +185,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     sesion.revocada_en = ahora
     sesion.reemplazada_por_jti = nuevo_jti
     
-    await _limpiar_sesiones_refresh_usuario(db, usuario.id, older_than_days=30)
+    await _limpiar_sesiones_refresh_usuario(db, usuario.id)
     db.add(nueva_sesion)
     await db.commit()
     
@@ -197,7 +198,9 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         "refresh_token": nuevo_refresh_token
     }
     
-async def _limpiar_sesiones_refresh_usuario(db: AsyncSession, usuario_id: int, older_than_days: int = 30):
+async def _limpiar_sesiones_refresh_usuario(db: AsyncSession, usuario_id: int, older_than_days: Optional[int] = None):
+    if older_than_days is None:
+        older_than_days = int(settings.REFRESH_SESSION_CLEANUP_DAYS)
     ahora = _ahora_utc()
     cutoff = ahora - timedelta(days=older_than_days)
 
@@ -257,7 +260,7 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
         codigo = f"{secrets.randbelow(900000) + 100000:06d}"
         # Guardar el HASH en BD (no el código en claro)
         usuario.codigo_recuperacion = _hash_codigo_recuperacion(codigo)
-        usuario.codigo_expiracion = _ahora_utc() + timedelta(minutes=15)
+        usuario.codigo_expiracion = _ahora_utc() + timedelta(minutes=int(settings.RECOVERY_CODE_EXPIRE_MINUTES))
 
         await db.commit()
         # Envia el código por correo al usuario.
