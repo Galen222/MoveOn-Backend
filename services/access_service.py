@@ -12,6 +12,7 @@ import uuid
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete as sa_delete
 
 import auth
 import database
@@ -19,15 +20,12 @@ import schemas
 from config import settings
 from services import email_service
 
-
 def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
-
 
 def _normalizar_utc(dt: datetime) -> datetime:
     # Por compatibilidad si SQLAlchemy devuelve naive datetime
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-
 
 def _hash_refresh_token(token: str) -> str:
     """
@@ -36,7 +34,6 @@ def _hash_refresh_token(token: str) -> str:
     """
     key = (settings.REFRESH_HASH_SECRET).encode("utf-8")
     return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
-
 
 async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
     ahora = _ahora_utc()
@@ -50,7 +47,6 @@ async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
         .values(revocada_en=ahora)
     )
 
-
 async def buscar_por_identificador(db: AsyncSession, identificador: str):
     """Búsqueda para login (email o nombre de usuario)."""
     # Email se guarda en minúsculas. Usuario se guarda como lo escribe el usuario, pero se compara case-insensitive.
@@ -62,7 +58,6 @@ async def buscar_por_identificador(db: AsyncSession, identificador: str):
             (func.lower(database.Usuario.nombre_usuario) == identificador_limpio)
         )
     )).scalar_one_or_none()
-
 
 async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
     """
@@ -89,7 +84,8 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         revocada_en=None,
         reemplazada_por_jti=None
     )
-
+    
+    await _limpiar_sesiones_refresh_usuario(db, usuario.id, older_than_days=30)
     db.add(sesion)
     await db.commit()
 
@@ -102,7 +98,6 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         "refresh_token": refresh_token
     }
 
-
 def _hash_codigo_recuperacion(codigo: str) -> str:
     """
     Hash HMAC-SHA256 del código OTP.
@@ -110,7 +105,6 @@ def _hash_codigo_recuperacion(codigo: str) -> str:
     """
     key = (settings.CODE_HASH_SECRET).encode("utf-8")
     return hmac.new(key, codigo.encode("utf-8"), hashlib.sha256).hexdigest()
-
 
 async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     """
@@ -173,7 +167,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     nuevo_jti = uuid.uuid4().hex
     nuevo_refresh_token = auth.crear_token_refresh(usuario.nombre_usuario, nuevo_jti, sesion.familia_id)
     nuevo_refresh_hash = _hash_refresh_token(nuevo_refresh_token)
-
+    
     nueva_sesion = database.SesionRefresh(
         usuario_id=usuario.id,
         jti=nuevo_jti,
@@ -185,23 +179,37 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         revocada_en=None,
         reemplazada_por_jti=None
     )
-
+    
     sesion.ultimo_uso_en = ahora
     sesion.revocada_en = ahora
     sesion.reemplazada_por_jti = nuevo_jti
-
+    
+    await _limpiar_sesiones_refresh_usuario(db, usuario.id, older_than_days=30)
     db.add(nueva_sesion)
     await db.commit()
-
+    
     nuevo_token_acceso = auth.crear_token_acceso({"sub": usuario.nombre_usuario})
-
+    
     return {
         "estatus": "success",
         "nombre_usuario": usuario.nombre_usuario,
         "token_acceso": nuevo_token_acceso,
         "refresh_token": nuevo_refresh_token
     }
+    
+async def _limpiar_sesiones_refresh_usuario(db: AsyncSession, usuario_id: int, older_than_days: int = 30):
+    ahora = _ahora_utc()
+    cutoff = ahora - timedelta(days=older_than_days)
 
+    await db.execute(
+        sa_delete(database.SesionRefresh).where(
+            database.SesionRefresh.usuario_id == usuario_id,
+            # solo revocadas o expiradas
+            (database.SesionRefresh.revocada_en.is_not(None)) | (database.SesionRefresh.expira_en < ahora),
+            # y además antiguas
+            database.SesionRefresh.ultimo_uso_en < cutoff
+        )
+    )
 
 async def cerrar_sesion(db: AsyncSession, refresh_token: str):
     """
@@ -236,7 +244,6 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
 
     return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
-
 async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_tasks: BackgroundTasks):
     """Genera el OTP de 6 dígitos y lo envía por email."""
     usuario = (await db.execute(
@@ -257,7 +264,6 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
         background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo)
 
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
-
 
 async def resetear_password(db: AsyncSession, datos: schemas.Confirmarpassword):
     """Valida el OTP y actualiza la contraseña."""
