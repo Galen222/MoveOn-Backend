@@ -34,7 +34,7 @@ def recuperacion_password_template(codigo: str, minutos: int) -> str:
             </div>
             <div class="footer">
                 <p>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>
-                <p>MoveOn App</p>
+                <p>&copyMoveOn App</p>
             </div>
         </div>
     </body>

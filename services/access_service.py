@@ -264,7 +264,7 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
 
         await db.commit()
         # Envia el código por correo al usuario.
-        background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo)
+        background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo, int(settings.RECOVERY_CODE_EXPIRE_MINUTES))
 
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
 
