@@ -5,6 +5,7 @@ Rate limit in-memory por identidad (identificador/email).
 - Útil para frenar ataques distribuidos (botnet) donde el rate-limit por IP no basta.
 - No requiere Redis (asumes 1 instancia del proceso).
 - Se configura por env con strings tipo: "10/minute", "5/hour".
+- Lanza una excepción propia y main.py la transforma a RespuestaGenerica.
 """
 
 from __future__ import annotations
@@ -12,9 +13,20 @@ from __future__ import annotations
 import time
 from typing import Optional, Tuple
 
-from fastapi import HTTPException
-
 from config import settings
+
+
+class IdentityRateLimitExceeded(Exception):
+    """
+    Excepción propia para el rate limit por identidad.
+
+    La capturamos en main.py con app.exception_handler(...) para devolver un JSON
+    con el mismo formato que RespuestaGenerica:
+      {"estatus": "error", "mensaje": "..."}
+    """
+    def __init__(self, mensaje: str = "Demasiadas peticiones. Inténtalo más tarde."):
+        super().__init__(mensaje)
+        self.mensaje = mensaje
 
 
 # (scope, identity) -> (window_start_epoch, count)
@@ -56,6 +68,9 @@ def _purge_old(now: float, max_age_seconds: int = 24 * 3600) -> None:
     """
     Purga sencilla para que el dict no crezca indefinidamente.
     Borra buckets que no se han usado en mucho tiempo.
+
+    Nota: iteramos sobre list(_BUCKETS.keys()) para evitar:
+      RuntimeError: dictionary changed size during iteration
     """
     if len(_BUCKETS) < 10_000:
         return
@@ -75,9 +90,11 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
     """
     Aplica rate limit por identidad.
 
-    - Si se excede el límite lanza HTTPException(429).
-    - Si no aplica (desactivado / inválido / sin identidad), no hace nada.
+    - Si se excede el límite -> lanza IdentityRateLimitExceeded (429)
+      que main.py transforma a JSON RespuestaGenerica.
+    - Si no aplica (desactivado / inválido / sin identidad) -> no hace nada.
     """
+    # Feature-flag por env
     if not settings.ENABLE_RATE_LIMIT_ID:
         return
 
@@ -105,8 +122,7 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
     _BUCKETS[key] = (window_start, count)
 
     if count > max_hits:
-        raise HTTPException(
-            status_code=429,
-            detail="Demasiadas peticiones. Inténtalo más tarde."
-        )
-        
+        # IMPORTANTe:
+        # No devolvemos JSONResponse aquí (rompería response_model),
+        # sino que lanzamos una excepción capturada por main.py.
+        raise IdentityRateLimitExceeded()
