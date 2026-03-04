@@ -15,17 +15,17 @@ from services import access_service
 from config import settings
 from limiter_config import rate_limit
 from services.identity_rate_limit import check_identity_limit
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(tags=["Seguridad"])
 
-
+"""Valida el identificador de app y entrega un token de sesión temporal."""
 @router.get("/handshake", response_model=schemas.RespuestaHandshake)
 @rate_limit(settings.RL_HANDSHAKE)
 def handshake(
     request: Request,
     x_app_id: str = Header(None)
 ):
-    """Valida el identificador de app y entrega un token de sesión temporal."""
     if x_app_id != settings.APP_ID:
         raise HTTPException(status_code=403, detail="Error: El acceso no proviene de la aplicación MoveOn")
     # Crea el token de corta duración.
@@ -50,14 +50,20 @@ async def login(
     usuario_encontrado = await access_service.buscar_por_identificador(db, datos.identificador)
 
     # Validación de existencia y coincidencia de hash de contraseña.
-    if not usuario_encontrado or not auth.comprobar_password(
-        datos.password, str(usuario_encontrado.password_encriptada)
-    ):
+    if not usuario_encontrado:
+        raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
+
+    es_valido = await run_in_threadpool(
+        auth.comprobar_password,
+        datos.password,
+        str(usuario_encontrado.password_encriptada),
+    )
+    if not es_valido:
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
     return await access_service.crear_sesion_login(db, usuario_encontrado)
 
-
+"""Renueva la sesión usando refresh token con rotación."""
 @router.post("/token/refresh", response_model=schemas.RespuestaRefreshToken)
 @rate_limit(settings.RL_REFRESH)
 async def refresh_token(
@@ -66,10 +72,9 @@ async def refresh_token(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    """Renueva la sesión usando refresh token con rotación."""
     return await access_service.refrescar_sesion(db, datos.refresh_token)
 
-
+"""Revoca la sesión actual (refresh token)."""
 @router.post("/logout", response_model=schemas.RespuestaGenerica)
 @rate_limit(settings.RL_LOGOUT)
 async def logout(
@@ -78,10 +83,12 @@ async def logout(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    """Revoca la sesión actual (refresh token)."""
     return await access_service.cerrar_sesion(db, datos.refresh_token)
 
-
+"""
+Solicitar código de 6 dígitos al email.
+Se envía en segundo plano para no bloquear la API mientras responde el servidor SMTP.
+"""
 @router.post("/password/solicitar", response_model=schemas.RespuestaGenerica)
 @rate_limit(settings.RL_PASSWORD_SOLICITAR)
 async def solicitar_password(
@@ -95,13 +102,9 @@ async def solicitar_password(
     if resp:
         return resp
     
-    """
-    Solicitar código de 6 dígitos al email.
-    Se envía en segundo plano para no bloquear la API mientras responde el servidor SMTP.
-    """
     return await access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
-
+"""Confirma el código y actualiza la contraseña."""
 @router.post("/password/confirmar", response_model=schemas.RespuestaGenerica)
 @rate_limit(settings.RL_PASSWORD_CONFIRMAR)
 async def confirmar_password(
@@ -114,5 +117,4 @@ async def confirmar_password(
     if resp:
         return resp
     
-    """Confirma el código y actualiza la contraseña."""
     return await access_service.resetear_password(db, datos)
