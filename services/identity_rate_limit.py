@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 from typing import Optional, Tuple
 
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException
 
 from config import settings
 
@@ -71,25 +71,25 @@ def _purge_old(now: float, max_age_seconds: int = 24 * 3600) -> None:
         _BUCKETS.pop(k, None)
 
 
-def check_identity_limit(scope: str, identity: str, limit_str: str) -> Optional[JSONResponse]:
+def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
     """
-    Devuelve JSONResponse(429) si excede el límite, si no devuelve None.
+    Aplica rate limit por identidad.
 
-    - Respeta ENABLE_RATE_LIMIT_ID (si está en false, no aplica nada).
-    - Si limit_str está vacío o inválido, no aplica.
+    - Si se excede el límite lanza HTTPException(429).
+    - Si no aplica (desactivado / inválido / sin identidad), no hace nada.
     """
     if not settings.ENABLE_RATE_LIMIT_ID:
-        return None
+        return
 
     parsed = _parse_limit(limit_str)
     if not parsed:
-        return None
+        return
 
     max_hits, window_seconds = parsed
 
     ident = (identity or "").strip().lower()
     if not ident:
-        return None
+        return
 
     now = time.time()
     _purge_old(now)
@@ -105,12 +105,8 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> Optional[
     _BUCKETS[key] = (window_start, count)
 
     if count > max_hits:
-        return JSONResponse(
+        raise HTTPException(
             status_code=429,
-            content={
-                "estatus": "error",
-                "mensaje": "Demasiadas peticiones. Inténtalo más tarde."
-            }
+            detail="Demasiadas peticiones. Inténtalo más tarde."
         )
-
-    return None
+        

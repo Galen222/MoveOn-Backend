@@ -42,10 +42,8 @@ async def login(
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
     # Rate-limit adicional por identidad (anti-abuso distribuido)
-    resp = check_identity_limit("login", datos.identificador, settings.RL_LOGIN_ID)
-    if resp:
-        return resp
-    
+    check_identity_limit("login", datos.identificador, settings.RL_LOGIN_ID)
+
     # Búsqueda flexible por nombre o email.
     usuario_encontrado = await access_service.buscar_por_identificador(db, datos.identificador)
 
@@ -98,10 +96,9 @@ async def solicitar_password(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    resp = check_identity_limit("password_solicitar", datos.email, settings.RL_PASSWORD_SOLICITAR_ID)
-    if resp:
-        return resp
-    
+    # Rate-limit adicional por identidad (anti-abuso distribuido)
+    check_identity_limit("password_solicitar", datos.email, settings.RL_PASSWORD_SOLICITAR_ID)
+
     return await access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
 
 """Confirma el código y actualiza la contraseña."""
@@ -113,8 +110,7 @@ async def confirmar_password(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):
-    resp = check_identity_limit("password_confirmar", datos.email, settings.RL_PASSWORD_CONFIRMAR_ID)
-    if resp:
-        return resp
-    
+    # Rate-limit adicional por identidad (anti-abuso distribuido)
+    check_identity_limit("password_confirmar", datos.email, settings.RL_PASSWORD_CONFIRMAR_ID)
+
     return await access_service.resetear_password(db, datos)
