@@ -177,7 +177,12 @@ def _reencode_image(archivo: UploadFile, extension: str) -> bytes:
 
 
 def procesar_subida(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Optional[str] = None) -> str:
-    """Manejador de subida que elige entre Local o Nube."""
+    """
+    Manejador de subida que elige entre Local o Nube.
+    - El parámetro `foto_anterior_bd` se mantiene por compatibilidad, pero NO se usa
+      para borrar la foto antigua durante la subida.
+    - La foto antigua se borra en routers/users.py tras un commit exitoso.
+    """
     if settings.STORAGE_TYPE == "cloudinary":
         return guardar_nube(archivo, usuario_actual)
     return guardar_local(archivo, usuario_actual, foto_anterior_bd)
@@ -200,18 +205,6 @@ def guardar_local(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Op
 
     # Re-encode para limpiar metadata y asegurar formato real
     data_limpia = _reencode_image(archivo, extension)
-
-    # Borramos explícitamente la foto referenciada en la BD (si NO es default avatar y NO es cloud)
-    if foto_anterior_bd:
-        base = os.path.basename(foto_anterior_bd)
-        if base != DEFAULT_AVATAR_SENTINEL and not foto_anterior_bd.startswith("http"):
-            nombre_archivo_antiguo = os.path.basename(foto_anterior_bd)
-            ruta_antigua = os.path.join(carpeta_imagenes, nombre_archivo_antiguo)
-            if os.path.exists(ruta_antigua):
-                try:
-                    os.remove(ruta_antigua)
-                except OSError:
-                    pass
 
     # Construir la ruta final usando el hash.
     nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
@@ -250,6 +243,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
         return resultado.get("secure_url")
     except Exception:
         raise HTTPException(status_code=500, detail="Error: No se ha podido subir la imagen a la nube")
+
 
 def borrar_foto(foto_perfil: str, usuario_actual: str):
     """Lógica de borrado permanente segura usando Hashing."""

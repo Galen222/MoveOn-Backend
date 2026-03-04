@@ -5,8 +5,9 @@ Endpoints de Gestión de Perfil de Usuario.
 Define las rutas para el registro de nuevos usuarios y la gestión
 posterior del perfil (consulta, actualización, foto y borrado).
 """
-from fastapi import APIRouter, Depends, File, UploadFile, Request, Query
+from fastapi import APIRouter, Depends, File, UploadFile, Request, Query, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+import os
 import auth
 import schemas
 from typing import List, Optional
@@ -95,26 +96,54 @@ async def informacion_perfil_publico(
 @rate_limit(settings.RL_PERFIL_FOTO)
 async def foto_perfil(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
+    # Validaciones de seguridad de la imagen (se ejecutan en threadpool porque Pillow es CPU/IO)
     await run_in_threadpool(file_service.validar_seguridad, archivo)
 
     # Obtenemos el usuario para saber qué foto tiene actualmente
     usuario = await user_service.obtener_perfil(db, usuario_actual)
 
-    # Le pasamos 'usuario.foto_perfil' como cuarto argumento
+    foto_antigua = usuario.foto_perfil
+
+    # Subimos la nueva imagen.
+    # Importante: NO borramos aquí la foto antigua (eso se hace tras commit).
     nueva_ruta_foto = await run_in_threadpool(
         file_service.procesar_subida,
         archivo,
         usuario_actual,
-        usuario.foto_perfil
+        None  # <- no pasar foto anterior para evitar borrados prematuros
     )
 
     # Si la subida fue exitosa, se actualiza la base de datos con la nueva ruta
     usuario.foto_perfil = nueva_ruta_foto
-    await db.commit()
+
+    # Commit protegido: si falla, hacemos rollback y limpiamos la nueva foto (evitar huérfanas)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+        # Si el storage es local, podemos borrar la imagen recién subida.
+        # En Cloudinary, el flujo actual hace overwrite por public_id, así que "borrar la nueva"
+        # equivaldría a borrar la imagen del usuario (y no podemos restaurar la anterior sin más).
+        if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
+            await run_in_threadpool(file_service.borrar_foto, nueva_ruta_foto, usuario_actual)
+
+        raise HTTPException(status_code=500, detail="Error: No se ha podido actualizar la foto de perfil")
+
+    # Solo si el commit fue exitoso, borramos la antigua (evita desync).
+    # Solo aplica a almacenamiento local (en Cloudinary se usa overwrite).
+    if (
+        settings.STORAGE_TYPE != "cloudinary"
+        and foto_antigua
+        and not str(foto_antigua).startswith("http")
+        and (os.path.basename(str(foto_antigua)) != file_service.DEFAULT_AVATAR_SENTINEL)
+    ):
+        background_tasks.add_task(file_service.borrar_foto, foto_antigua, usuario_actual)
 
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
@@ -136,13 +165,24 @@ async def actualizar_perfil(
 @rate_limit(settings.RL_PERFIL_BORRAR)
 async def borrar_perfil(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
-    """Elimina la cuenta y borra la foto (local o nube)."""
+    """
+    Se elimina la cuenta (commit) y solo después se borra la foto
+    (en background). Si el commit falla, NO se borra nada.
+    """
     usuario = await user_service.obtener_perfil(db, usuario_actual)
-    await run_in_threadpool(file_service.borrar_foto, usuario.foto_perfil, usuario_actual)
-    return await user_service.eliminar_cuenta(db, usuario)
+    foto_perfil = usuario.foto_perfil  # guardar antes de borrar el usuario
+
+    respuesta = await user_service.eliminar_cuenta(db, usuario)
+
+    # Solo si commit OK (eliminar_cuenta hace commit), borramos la foto.
+    # En background para no bloquear el endpoint con IO (disco / cloud).
+    background_tasks.add_task(file_service.borrar_foto, foto_perfil, usuario_actual)
+
+    return respuesta
 
 
 @router.get("/perfil/buscar", response_model=List[schemas.BusquedaUsuario])
