@@ -29,7 +29,8 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     # - pero no se permiten duplicados ignorando mayúsculas/minúsculas
     nombre_usuario = datos.nombre_usuario.strip()
     if not nombre_usuario:
-        raise HTTPException(status_code=400, detail="Error: El nombre de usuario no puede estar vacío")
+        raise HTTPException(
+            status_code=400, detail="Error: El nombre de usuario no puede estar vacío")
 
     # Email: estándar práctico -> guardar y comparar siempre en minúsculas
     email = str(datos.email).strip().lower()
@@ -47,8 +48,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     if usuario_existente:
         # Comprobación específica para el mensaje de error
         if usuario_existente.nombre_usuario.lower() == nombre_usuario_key:
-            raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
-        raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El nombre de usuario ya está en uso")
+        raise HTTPException(
+            status_code=400, detail="Error: El email ya está en uso")
 
     nuevo_usuario = database.Usuario(
         nombre_usuario=nombre_usuario,
@@ -60,7 +63,11 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         altura=datos.altura,
         peso=datos.peso,
         provincia=datos.provincia,
-        perfil_visible=datos.perfil_visible
+        perfil_visible=datos.perfil_visible,
+        acepta_terminos=datos.acepta_terminos,
+        fecha_eula=datos.fecha_aceptacion_terminos,
+        version_terminos=datos.version_terminos,
+
     )
 
     db.add(nuevo_usuario)
@@ -81,8 +88,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         )).scalar_one_or_none()
 
         if conflicto and conflicto.nombre_usuario.lower() == nombre_usuario_key:
-            raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
-        raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El nombre de usuario ya está en uso")
+        raise HTTPException(
+            status_code=400, detail="Error: El email ya está en uso")
 
     return {
         "estatus": "success",
@@ -94,11 +103,13 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
 async def obtener_perfil(db: AsyncSession, usuario_actual: str):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
     usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+        select(database.Usuario).where(
+            database.Usuario.nombre_usuario == usuario_actual)
     )).scalar_one_or_none()
 
     if not usuario:
-        raise HTTPException(status_code=404, detail="Error: Perfil de usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Perfil de usuario no encontrado")
     return usuario
 
 
@@ -119,7 +130,8 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
         )).scalar_one_or_none()
 
         if duplicado:
-            raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El email ya está en uso")
 
         usuario.email = email
 
@@ -168,15 +180,18 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
     nombre_key = nombre_objetivo.strip().lower()
 
     usuario = (await db.execute(
-        select(database.Usuario).where(func.lower(database.Usuario.nombre_usuario) == nombre_key)
+        select(database.Usuario).where(func.lower(
+            database.Usuario.nombre_usuario) == nombre_key)
     )).scalar_one_or_none()
 
     if not usuario:
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Usuario no encontrado")
 
     # LÓGICA DE PRIVACIDAD
     if not usuario.perfil_visible:
-        raise HTTPException(status_code=403, detail="Error: Este perfil es privado")
+        raise HTTPException(
+            status_code=403, detail="Error: Este perfil es privado")
 
     return usuario
 
