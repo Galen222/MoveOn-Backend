@@ -1,6 +1,6 @@
 # routers/activities.py
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 import schemas
@@ -47,8 +47,8 @@ async def obtener_actividad(
 @rate_limit(settings.RL_ACTIVIDAD_OBTENER_TODAS)
 async def obtener_todas_actividades(
     request: Request,
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(obtener_db),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
