@@ -14,15 +14,17 @@ from fastapi import HTTPException
 from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 import auth
 import database
 import schemas
 from utils import calculos
 
+"""Registro de nuevo usuario con validación de duplicados."""
+
 
 async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
-    """Registro de nuevo usuario con validación de duplicados."""
 
     # IMPORTANTE:
     # - nombre_usuario se guarda tal cual (case-preserving)
@@ -52,12 +54,18 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
                 status_code=400, detail="Error: El nombre de usuario ya está en uso")
         raise HTTPException(
             status_code=400, detail="Error: El email ya está en uso")
+        raise HTTPException(
+            status_code=400, detail="Error: El nombre de usuario ya está en uso")
+        raise HTTPException(
+            status_code=400, detail="Error: El email ya está en uso")
+
+    password_hash = await run_in_threadpool(auth.encriptar_password, datos.password)
 
     nuevo_usuario = database.Usuario(
         nombre_usuario=nombre_usuario,
         nombre_real=datos.nombre_real,
         email=email,
-        password_encriptada=auth.encriptar_password(datos.password),
+        password_encriptada=password_hash,
         fecha_nacimiento=datos.fecha_nacimiento,
         genero=datos.genero,
         altura=datos.altura,
@@ -99,9 +107,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         "nombre_usuario": nuevo_usuario.nombre_usuario
     }
 
+"""Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
+
 
 async def obtener_perfil(db: AsyncSession, usuario_actual: str):
-    """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
     usuario = (await db.execute(
         select(database.Usuario).where(
             database.Usuario.nombre_usuario == usuario_actual)
@@ -112,9 +121,10 @@ async def obtener_perfil(db: AsyncSession, usuario_actual: str):
             status_code=404, detail="Error: Perfil de usuario no encontrado")
     return usuario
 
+"""Lógica para modificar el perfil de usuario."""
+
 
 async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario, datos: schemas.ActualizarPerfil):
-    """Lógica para modificar el perfil de usuario."""
     if datos.nombre_real:
         usuario.nombre_real = datos.nombre_real
 
@@ -136,7 +146,7 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
         usuario.email = email
 
     if datos.password:
-        usuario.password_encriptada = auth.encriptar_password(datos.password)
+        usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, datos.password)
 
         # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
         ahora = datetime.now(timezone.utc)
@@ -170,12 +180,13 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
     await db.commit()
     return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
 
+"""
+Busca un usuario por nombre para mostrar su ficha pública.
+Solo devuelve datos si el usuario existe y tiene perfil_visible=True.
+"""
+
 
 async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
-    """
-    Busca un usuario por nombre para mostrar su ficha pública.
-    Solo devuelve datos si el usuario existe y tiene perfil_visible=True.
-    """
     # Case-insensitive lookup: permite /perfil/publico/GaLeN aunque el guardado sea "Galen"
     nombre_key = nombre_objetivo.strip().lower()
 
@@ -195,15 +206,16 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
 
     return usuario
 
+"""
+Busca usuarios cuyo nombre_usuario contenga el término.
+Filtros:
+1. Coincidencia parcial (ilike)
+2. Perfil visible (Privacidad)
+3. Límite de 20 (Rendimiento)
+"""
+
 
 async def buscar_usuario(db: AsyncSession, termino_busqueda: str):
-    """
-    Busca usuarios cuyo nombre_usuario contenga el término.
-    Filtros:
-    1. Coincidencia parcial (ilike)
-    2. Perfil visible (Privacidad)
-    3. Límite de 20 (Rendimiento)
-    """
     # Limpiamos espacios
     termino = termino_busqueda.strip()
 
@@ -223,18 +235,20 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str):
 
     return resultados
 
+"""Elimina permanentemente el registro de la base de datos."""
+
 
 async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
-    """Elimina permanentemente el registro de la base de datos."""
     await db.delete(usuario)
     await db.commit()
     return {"estatus": "success", "mensaje": "Tu cuenta ha sido eliminada permanentemente"}
 
+"""
+Obtiene el Ranking de los usuarios con más kilometros recorridos.
+"""
+
 
 async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
-    """
-    Obtiene el Ranking de los usuarios con más kilometros recorridos.
-    """
     # Query sobre la tabla Usuarios
     stmt = select(
         database.Usuario.nombre_usuario,

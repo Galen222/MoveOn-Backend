@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete as sa_delete
+from starlette.concurrency import run_in_threadpool
 
 import auth
 import database
@@ -286,7 +287,7 @@ async def resetear_password(db: AsyncSession, datos: schemas.Confirmarpassword):
     if _ahora_utc() > _normalizar_utc(usuario.codigo_expiracion):
         raise HTTPException(status_code=400, detail="Error: El código ha expirado")
 
-    usuario.password_encriptada = auth.encriptar_password(datos.nueva_password)
+    usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, datos.nueva_password)
     usuario.codigo_recuperacion = None
     usuario.codigo_expiracion = None
 
