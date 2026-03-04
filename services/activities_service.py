@@ -13,7 +13,9 @@ async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.
     """
     # Se busca el usuario por su nombre (viene del token)
     usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+        select(database.Usuario)
+        .where(database.Usuario.nombre_usuario == usuario_actual)
+        .with_for_update()
     )).scalar_one_or_none()
     
     if not usuario:
@@ -106,7 +108,9 @@ async def obtener_actividades(db: AsyncSession, usuario_actual: str, skip: int, 
 
 async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad: int):
     usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+        select(database.Usuario)
+        .where(database.Usuario.nombre_usuario == usuario_actual)
+        .with_for_update()
     )).scalar_one_or_none()
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
