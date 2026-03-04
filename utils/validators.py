@@ -1,7 +1,7 @@
 # utils/validators.py
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 
@@ -87,15 +87,15 @@ def validar_peso_logica(v: float) -> float:
 
 
 def validar_fecha_ruta_logica(v: datetime) -> datetime:
-    """No se pueden guardar actividades del futuro."""
     if v:
+        ahora = datetime.now(timezone.utc)
 
-        ahora = datetime.now(v.tzinfo if v.tzinfo else None)
-        # CAMBIO: Se da 10 minutos de margen por si el reloj del móvil está adelantado.
+        # Normalizar v a UTC para comparar siempre igual
+        v_utc = v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
+
         margen = ahora + timedelta(minutes=10)
-        if v > margen:
-            raise ValueError(
-                'Error: La fecha de la actividad no puede ser en el futuro')
+        if v_utc > margen:
+            raise ValueError("Error: La fecha de la actividad no puede ser en el futuro")
     return v
 
 
