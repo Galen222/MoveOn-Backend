@@ -62,8 +62,9 @@ def _purge_old(now: float, max_age_seconds: int = 24 * 3600) -> None:
 
     cutoff = now - max_age_seconds
     keys_to_delete = []
-    for k, (start, _count) in _BUCKETS.items():
-        if start < cutoff:
+    for k in list(_BUCKETS.keys()):
+        val = _BUCKETS.get(k)
+        if val and val[0] < cutoff:
             keys_to_delete.append(k)
 
     for k in keys_to_delete:
