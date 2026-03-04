@@ -54,10 +54,6 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
                 status_code=400, detail="Error: El nombre de usuario ya está en uso")
         raise HTTPException(
             status_code=400, detail="Error: El email ya está en uso")
-        raise HTTPException(
-            status_code=400, detail="Error: El nombre de usuario ya está en uso")
-        raise HTTPException(
-            status_code=400, detail="Error: El email ya está en uso")
 
     password_hash = await run_in_threadpool(auth.encriptar_password, datos.password)
 
