@@ -22,7 +22,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.
     # Se Crea el objeto de base de datos.
     nueva_actividad = database.Actividad(
         usuario_id=usuario.id,
-        tipo=datos.tipo,
+        tipo=datos.tipo.value,
         distancia=datos.distancia,
         duracion=datos.duracion,
         calorias_quemadas=datos.calorias_quemadas,

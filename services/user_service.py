@@ -158,8 +158,8 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
     if datos.fecha_nacimiento:
         usuario.fecha_nacimiento = datos.fecha_nacimiento
 
-    if datos.genero:
-        usuario.genero = datos.genero
+    if datos.genero is not None:
+        usuario.genero = datos.genero.value if datos.genero else None
 
     if datos.altura is not None:
         usuario.altura = datos.altura
@@ -167,8 +167,8 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
     if datos.peso is not None:
         usuario.peso = datos.peso
 
-    if datos.provincia:
-        usuario.provincia = datos.provincia
+    if datos.provincia is not None:
+        usuario.provincia = datos.provincia.value if datos.provincia else None
 
     if datos.perfil_visible is not None:
         usuario.perfil_visible = datos.perfil_visible
