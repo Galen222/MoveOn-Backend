@@ -17,6 +17,7 @@ from services import access_service
 from config import settings
 from limiter_config import rate_limit
 from services.identity_rate_limit import check_identity_limit
+import hmac
 
 router = APIRouter(tags=["Seguridad"])
 
@@ -28,7 +29,7 @@ def handshake(
     request: Request,
     x_app_id: str = Header(None)
 ):
-    if x_app_id != settings.APP_ID:
+    if not hmac.compare_digest((x_app_id or ""), settings.APP_ID):
         raise HTTPException(status_code=403, detail="Error: El acceso no proviene de la aplicación MoveOn")
     # Crea el token de corta duración.
     return {"app_session_token": auth.crear_token_aplicacion()}

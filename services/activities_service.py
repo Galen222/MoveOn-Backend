@@ -179,14 +179,4 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual: str):
         "estatus": "success",
         "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
     }
-
-    # Borrar todos los metros recorridos de las actividades del usuario.
-    usuario.total_metros = 0
-
-    await db.commit()
-
-    return {
-        "estatus": "success",
-        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
-    }
     

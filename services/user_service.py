@@ -114,7 +114,7 @@ async def obtener_perfil(db: AsyncSession, usuario_actual: str):
 
 async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario, datos: schemas.ActualizarPerfil):
     """Lógica para modificar el perfil de usuario."""    
-    if datos.nombre_real:
+    if datos.nombre_real is not None:
         usuario.nombre_real = datos.nombre_real
 
     if datos.email:

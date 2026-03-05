@@ -191,7 +191,7 @@ async def buscar_perfil(
     request: Request,
     # 'q' es el parámetro de la URL: /perfil/buscar?q=pepe
     # min_length=3 valida que escriban al menos 3 letras antes de molestar a la base de datos
-    q: str = Query(..., min_length=3, description="Término de búsqueda (min 3 caracteres)"),
+    q: str = Query(..., min_length=3, max_length=50, description="Término de búsqueda (min 3 caracteres)"),
     db: AsyncSession = Depends(obtener_db),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):

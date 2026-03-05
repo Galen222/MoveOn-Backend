@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ipaddress import ip_address, ip_network
-from typing import Callable, Optional
+from typing import Optional
 
 from fastapi import Request
 from slowapi import Limiter

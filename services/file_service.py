@@ -31,10 +31,10 @@ MAX_IMAGE_PIXELS = int(settings.MAX_IMAGE_PIXELS)
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 # Tamaño máximo de imagen (bytes) ajustable por env (ej: 2MB)
-MAX_IMAGE_BYTES = int(getattr(settings, "MAX_IMAGE_BYTES", 2 * 1024 * 1024))
+MAX_IMAGE_BYTES = settings.MAX_IMAGE_BYTES
 
 # Calidad JPEG para re-encode, ajustable por env
-IMAGE_JPEG_QUALITY = int(getattr(settings, "IMAGE_JPEG_QUALITY", 85))
+IMAGE_JPEG_QUALITY = settings.IMAGE_JPEG_QUALITY
 # clamp razonable (Pillow recomienda no pasarse de 95)
 if IMAGE_JPEG_QUALITY < 1:
     IMAGE_JPEG_QUALITY = 1

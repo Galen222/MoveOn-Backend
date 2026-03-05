@@ -17,23 +17,12 @@ def interceptar_error_pydantic(valor: Any, handler, mensaje_error: str):
 
 # Funciones de lógica de validación
 
-
 def validar_nombre_real_logica(v: str) -> str:
     """Regla para el nombre real: longitud y símbolos."""
     if len(v) < 3:
         raise ValueError('Error: El nombre real es demasiado corto')
 
-    # REGEX:
-    # ^ inicio
-    # [ ... ] lista de caracteres permitidos
-    # a-zA-Z : letras inglesas
-    # áéíóúÁÉÍÓÚñÑ : letras españolas comunes
-    # üÜ : diéresis
-    # \s : espacios
-    # ' : apóstrofe (ej. O'Connor)
-    # - : guiones (ej. Ana-Maria)
-    # + : uno o más caracteres
-    # $ : fin
+    # Solo letras (incluye acentos/ñ/ü), espacios, apóstrofe y guion
     if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$", v):
         raise ValueError('Error: El nombre no puede contener números ni símbolos especiales')
 
@@ -89,12 +78,15 @@ def validar_fecha_ruta_logica(v: datetime) -> datetime:
     if v:
         ahora = datetime.now(timezone.utc)
 
-        # Normalizar v a UTC para comparar siempre igual
+        # Normalizar v a UTC para comparar y almacenar siempre igual
         v_utc = v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
 
         margen = ahora + timedelta(minutes=10)
         if v_utc > margen:
             raise ValueError("Error: La fecha de la actividad no puede ser en el futuro")
+
+        return v_utc
+
     return v
 
 
