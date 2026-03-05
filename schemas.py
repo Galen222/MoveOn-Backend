@@ -107,7 +107,7 @@ class Registro(BaseModel):
     """
     Esquema para validar los campos en el registro de un nuevo usuario.
     """
-    nombre_usuario: str = Field(...)
+    nombre_usuario: str = Field(..., min_length=5, max_length=50)
     email: EmailStr
     password: str = Field(...)
     nombre_real: Optional[str] = None
@@ -642,7 +642,7 @@ class RespuestaObtenerActividad(BaseModel):
 
     id: int
     tipo: str
-    distancia: int
+    distancia: StrictInt = Field(...)
     duracion: int
     calorias_quemadas: int
     ruta_polilinea: Optional[str] = None

@@ -34,6 +34,9 @@ def validar_password_logica(v: str) -> str:
     if len(v) < 8:
         raise ValueError(
             'Error: La contraseña debe tener al menos 8 caracteres')
+    # bcrypt solo usa los primeros 72 bytes; limita para evitar truncado / DoS
+    if len(v) > 30:
+        raise ValueError("Error: La contraseña no puede superar los 30 caracteres")
     if not any(char.isupper() for char in v):
         raise ValueError(
             'Error: La contraseña debe incluir al menos una letra mayúscula')

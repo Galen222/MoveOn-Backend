@@ -21,7 +21,8 @@ def manejador_validacion_personalizado(request: Request, exc: Any):
             # Limpia el prefijo de error de Pydantic de forma segura con Regex.
             mensaje_limpio = re.sub(r"^(Value error,\s*|Assertion failed,\s*|Input should be.*,\s*)", "", mensaje_original)
         
-            campo = error.get("loc")[-1]
+            loc = error.get("loc") or []
+            campo = loc[-1] if loc else "general"
             errores_limpios.append({
                 "columna": campo,
                 "mensaje": mensaje_limpio.strip().capitalize()

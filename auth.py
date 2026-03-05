@@ -8,7 +8,8 @@ para sesiones de usuario y el sistema de validación de handshake.
 """
 import bcrypt
 from datetime import datetime, timedelta, timezone
-from jose import jwt, JWTError
+import jwt
+from jwt.exceptions import InvalidTokenError
 from fastapi import HTTPException, Header, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Any
@@ -114,7 +115,7 @@ def verificar_sesion_aplicacion(x_app_session: str = Header(None)):
         # Validación uniforme (firma + exp + iss + aud + typ)
         decodifica_jwt(x_app_session, APP_SESSION_SECRET, "app_session")
         return x_app_session
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=403,
             detail="Error: Token inválido o expirado",
@@ -158,7 +159,7 @@ def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
     """Decodifica y valida un refresh token."""
     try:
         return decodifica_jwt(refresh_token, REFRESH_TOKEN_SECRET, "refresh")
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido o expirado")
 
 
@@ -178,6 +179,6 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
             raise HTTPException(status_code=401, detail="Error: Token no contiene un usuario válido")
 
         return usuario_id
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Error: Token de acceso inválido o expirado")
     

@@ -9,7 +9,7 @@ sqlalchemy
 asyncpg
 
 # --- Seguridad / Autenticación ---
-python-jose
+PyJWT
 bcrypt
 
 # --- Validación y Configuración ---

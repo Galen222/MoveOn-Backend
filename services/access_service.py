@@ -208,10 +208,7 @@ async def _limpiar_sesiones_refresh_usuario(db: AsyncSession, usuario_id: int, o
     await db.execute(
         sa_delete(database.SesionRefresh).where(
             database.SesionRefresh.usuario_id == usuario_id,
-            # solo revocadas o expiradas
-            (database.SesionRefresh.revocada_en.is_not(None)) | (database.SesionRefresh.expira_en < ahora),
-            # y además antiguas
-            database.SesionRefresh.ultimo_uso_en < cutoff
+            (database.SesionRefresh.ultimo_uso_en < cutoff) | (database.SesionRefresh.ultimo_uso_en.is_(None))
         )
     )
 
@@ -251,7 +248,9 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
 async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_tasks: BackgroundTasks):
     """Genera el OTP de 6 dígitos y lo envía por email."""
     usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.email == email.lower())
+        select(database.Usuario)
+        .where(database.Usuario.email == email)
+        .with_for_update()
     )).scalar_one_or_none()
 
     # Si existe el correo se envía pero el mensaje de respuesta es el mismo para evitar pistas.

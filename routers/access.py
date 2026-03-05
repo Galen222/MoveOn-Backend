@@ -18,6 +18,7 @@ from config import settings
 from limiter_config import rate_limit
 from services.identity_rate_limit import check_identity_limit
 import hmac
+from typing import Optional
 
 router = APIRouter(tags=["Seguridad"])
 
@@ -27,7 +28,7 @@ router = APIRouter(tags=["Seguridad"])
 @rate_limit(settings.RL_HANDSHAKE)
 def handshake(
     request: Request,
-    x_app_id: str = Header(None)
+    x_app_id: Optional[str] = Header(default=None)
 ):
     if not hmac.compare_digest((x_app_id or ""), settings.APP_ID):
         raise HTTPException(status_code=403, detail="Error: El acceso no proviene de la aplicación MoveOn")
