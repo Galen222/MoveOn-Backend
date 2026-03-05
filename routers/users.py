@@ -226,7 +226,7 @@ async def obtener_ranking(
     Permite filtrar por provincia de foma opcional.
     """
     # Obtener los datos
-    ranking = await user_service.obtener_ranking(db, provincia)
+    ranking = await user_service.obtener_ranking(db, provincia.value if provincia else None)
 
     # Procesar la URL de las fotos para que la App pueda descargarlas.
     ranking_final = []
