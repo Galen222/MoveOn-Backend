@@ -10,7 +10,7 @@ from datetime import datetime, date, timezone
 from typing import Optional, AsyncGenerator
 from urllib.parse import quote_plus
 from sqlalchemy import (
-    String, Date, DateTime, Boolean, Integer, Float, ForeignKey, Text, Index, func
+    String, Date, DateTime, Boolean, Integer, BigInteger, Float, ForeignKey, Text, Index, func
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import (
@@ -92,7 +92,7 @@ class Usuario(Base):
     provincia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     foto_perfil: Mapped[str] = mapped_column(
         String, default="default_avatar.png")
-    total_metros: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    total_metros: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", index=True)
     # Metadatos automáticos del servidor
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -143,7 +143,7 @@ class Actividad(Base):
         "usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
     # Datos de ruta.
     tipo: Mapped[str] = mapped_column(String, nullable=False)
-    distancia: Mapped[float] = mapped_column(Float, nullable=False)
+    distancia: Mapped[int] = mapped_column(Integer, nullable=False)
     duracion: Mapped[int] = mapped_column(Integer, nullable=False)
     calorias_quemadas: Mapped[int] = mapped_column(Integer, nullable=False)
     # Datos de la ruta (Geometría).

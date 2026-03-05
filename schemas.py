@@ -6,7 +6,7 @@ Esquemas de Validación de Datos (Pydantic V2).
 Define la estructura de los datos que entran y salen de la API, 
 asegurando que cumplan con las reglas de negocio antes de tocar la DB.
 """
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator, StrictInt
 from datetime import date, datetime
 from typing import Optional, Any
 import re
@@ -556,7 +556,7 @@ class Confirmarpassword(BaseModel):
 
 class GuardarActividad(BaseModel):
     tipo: TipoActividad
-    distancia: float = Field(...)
+    distancia: StrictInt = Field(...)
     duracion: int = Field(...)
     calorias_quemadas: int = Field(...)
     ruta_polilinea: Optional[str] = None
@@ -641,7 +641,7 @@ class GuardarActividad(BaseModel):
 class RespuestaObtenerActividad(BaseModel):
     id: int
     tipo: str
-    distancia: float
+    distancia: int
     duracion: int
     calorias_quemadas: int
     ruta_polilinea: Optional[str] = None

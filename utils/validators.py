@@ -99,7 +99,7 @@ def validar_fecha_ruta_logica(v: datetime) -> datetime:
     return v
 
 
-def validar_distancia_logica(v: float) -> float:
+def validar_distancia_logica(v: int) -> int:
     """
     Nadie corre más de 300km en una sola sesión (Sanity Check).
     Debe ser positiva y máximo 300km.
