@@ -85,25 +85,28 @@ async def obtener_actividad(db: AsyncSession, usuario_actual: str, id_actividad:
 
 async def obtener_actividades(db: AsyncSession, usuario_actual: str, skip: int, limit: int):
     """
-    Obtiene la lista paginada de actividades de un usuario específico.
-    """
-    # Se Busca el usuario para obtener su ID.
-    usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
-    )).scalar_one_or_none()
-    
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+    Obtiene la lista paginada de actividades del usuario autenticado.
 
-    # Se Hace la query filtrando por ese ID de usuario.
+    Mejora de rendimiento:
+    - Evita el round-trip extra (buscar usuario -> luego actividades)
+    - Usa una subquery con el id del usuario
+    """
+    subq_usuario_id = (
+        select(database.Usuario.id)
+        .where(database.Usuario.nombre_usuario == usuario_actual)
+        .scalar_subquery()
+    )
+
     actividades = (await db.execute(
         select(database.Actividad)
-            .where(database.Actividad.usuario_id == usuario.id)
-            .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())
-            .offset(skip)
-            .limit(limit)
+        .where(database.Actividad.usuario_id == subq_usuario_id)
+        .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())
+        .offset(skip)
+        .limit(limit)
     )).scalars().all()
-        
+
+    # Nota: si el usuario no existiera (caso raro aquí), devolvería [] en vez de 404.
+    # En un endpoint autenticado normalmente es aceptable.
     return actividades
 
 async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad: int):

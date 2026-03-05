@@ -97,7 +97,7 @@ async def logout(
 @rate_limit(settings.RL_PASSWORD_SOLICITAR)
 async def solicitar_password(
     request: Request,
-    datos: schemas.Solicitarpassword,
+    datos: schemas.SolicitarPassword,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
@@ -113,7 +113,7 @@ async def solicitar_password(
 @rate_limit(settings.RL_PASSWORD_CONFIRMAR)
 async def confirmar_password(
     request: Request,
-    datos: schemas.Confirmarpassword,
+    datos: schemas.ConfirmarPassword,
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion)
 ):

@@ -6,13 +6,12 @@ Esquemas de Validación de Datos (Pydantic V2).
 Define la estructura de los datos que entran y salen de la API, 
 asegurando que cumplan con las reglas de negocio antes de tocar la DB.
 """
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator, StrictInt, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator, StrictInt, ConfigDict, AnyHttpUrl
 from datetime import date, datetime
 from typing import Optional, Any
 import re
 from enum import Enum
 from utils import validators
-
 
 class ProvinciaEspaña(str, Enum):
     # Andalucía
@@ -146,6 +145,9 @@ class Registro(BaseModel):
         if len(valor) < 5:
             raise ValueError(
                 'Error: El nombre de usuario debe tener al menos 5 caracteres')
+            
+        if len(valor) > 50:  # ✅ añadido
+            raise ValueError("Error: El nombre de usuario no puede superar los 50 caracteres")            
         # Validación formato alfanumérico sin espacios.
         if not re.match("^[a-zA-Z0-9]*$", valor):
             raise ValueError(
@@ -470,7 +472,7 @@ class BusquedaUsuario(BaseModel):
     foto_perfil: Optional[str] = None
 
 
-class Solicitarpassword(BaseModel):
+class SolicitarPassword(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
     email: EmailStr
 
@@ -498,7 +500,7 @@ class Solicitarpassword(BaseModel):
         return validators.interceptar_error_pydantic(v, handler, 'Error: El formato del correo electrónico no es válido')
 
 
-class Confirmarpassword(BaseModel):
+class ConfirmarPassword(BaseModel):
     """Esquema para cambiar la contraseña usando el código recibido."""
     email: EmailStr
     codigo: str = Field(...)
@@ -556,10 +558,11 @@ class Confirmarpassword(BaseModel):
 class GuardarActividad(BaseModel):
     tipo: TipoActividad
     distancia: StrictInt = Field(...)
-    duracion: int = Field(...)
-    calorias_quemadas: int = Field(...)
+    duracion: StrictInt = Field(...)
+    calorias_quemadas: StrictInt = Field(...)
     ruta_polilinea: Optional[str] = None
-    ruta_mapa_url: Optional[str] = None
+    # URL válida (http/https) + límite razonable
+    ruta_mapa_url: Optional[AnyHttpUrl] = Field(None, max_length=2048)
     fecha_ruta: datetime
 
     @model_validator(mode='before')

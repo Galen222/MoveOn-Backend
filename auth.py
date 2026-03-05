@@ -12,7 +12,7 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from fastapi import HTTPException, Header, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Any
+from typing import Any, Optional
 from config import settings
 
 # Parámetros de configuración del sistema de tokens
@@ -81,7 +81,8 @@ def decodifica_jwt(token: str, secret: str, expected_typ: str) -> dict[str, Any]
         str(secret),
         algorithms=[ALGORITHM],
         audience=JWT_AUDIENCE,
-        issuer=JWT_ISSUER
+        issuer=JWT_ISSUER,
+        options={"require": ["exp", "iat"]},
     )
 
     if payload.get("typ") != expected_typ:
@@ -101,7 +102,7 @@ def crear_token_aplicacion() -> str:
     )
 
 
-def verificar_sesion_aplicacion(x_app_session: str = Header(None)):
+def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=None)):
     """Middleware que valida que la petición contenga un token de handshake."""
     # Validar presencia del encabezado
     if not x_app_session:

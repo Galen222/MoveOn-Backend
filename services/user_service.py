@@ -28,75 +28,80 @@ from utils import calculos
 
 
 async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
-    """Registro de nuevo usuario con validación de duplicados."""
-    # IMPORTANTE:
-    # - nombre_usuario se guarda tal cual (case-preserving)
-    # - pero no se permiten duplicados ignorando mayúsculas/minúsculas
+    """
+    Registro de nuevo usuario con validación de duplicados.
+
+    Mejora (auditoría V12 #3):
+    - En vez de 2 queries separadas (nombre y email), hacemos 1 sola query OR.
+    - Reduce ventanas de carrera y mejora rendimiento.
+    - Aun así mantenemos el try/except IntegrityError como red de seguridad (concurrencia).
+    """
+    # Normalizaciones básicas
     nombre_usuario = datos.nombre_usuario.strip()
     if not nombre_usuario:
-        raise HTTPException(
-            status_code=400, detail="Error: El nombre de usuario no puede estar vacío")
+        raise HTTPException(status_code=400, detail="Error: El nombre de usuario no puede estar vacío")
 
-    # Email: estándar práctico -> guardar y comparar siempre en minúsculas
+    # Guardamos email siempre en minúsculas para que la unicidad sea consistente
     email = str(datos.email).strip().lower()
+    nombre_key = nombre_usuario.lower()
 
-    nombre_usuario_key = nombre_usuario.lower()
-
-    # Validación manual case-insensitive (porque unique=True es case-sensitive en algunos engines)
+    # 1) Detección de duplicados en UNA sola query
+    #    - nombre_usuario case-insensitive
+    #    - email exact match (ya lo normalizamos a lower)
     existente = (await db.execute(
         select(database.Usuario).where(
-            func.lower(database.Usuario.nombre_usuario) == nombre_usuario_key
+            (func.lower(database.Usuario.nombre_usuario) == nombre_key) |
+            (database.Usuario.email == email)
         )
     )).scalar_one_or_none()
 
     if existente:
-        raise HTTPException(
-            status_code=400, detail="Error: El nombre de usuario ya está en uso")
+        # Mensaje específico: ayuda a UX y evita ambigüedad
+        if str(existente.nombre_usuario).lower() == nombre_key:
+            raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
+        raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
 
-    # Validación email duplicado
-    existente_email = (await db.execute(
-        select(database.Usuario).where(
-            database.Usuario.email == email
-        )
-    )).scalar_one_or_none()
-
-    if existente_email:
-        raise HTTPException(
-            status_code=400, detail="Error: El email ya está en uso")
-
-    # Hash de contraseña (bcrypt) en threadpool para no bloquear el event loop
+    # 2) Hash de contraseña en threadpool (bcrypt es CPU-bound y bloquea el event loop)
     password_hash = await run_in_threadpool(auth.encriptar_password, datos.password)
 
-    # Guardar enums como string en BD (si viene None, guardar None)
+    # 3) Enums a string para persistir en columnas String (si viene None, guardar None)
     genero_val = datos.genero.value if datos.genero else None
     provincia_val = datos.provincia.value if datos.provincia else None
 
+    # 4) Construcción del objeto Usuario
     nuevo_usuario = database.Usuario(
         nombre_usuario=nombre_usuario,
         email=email,
         password_encriptada=password_hash,
-        nombre_real=datos.nombre_real.strip()
-        if isinstance(datos.nombre_real, str) else datos.nombre_real,
+
+        # nombre_real: si viene str, strip; si viene None, se guarda None
+        nombre_real=datos.nombre_real.strip() if isinstance(datos.nombre_real, str) else None,
+
         fecha_nacimiento=datos.fecha_nacimiento,
         genero=genero_val,
         altura=datos.altura,
         peso=datos.peso,
         provincia=provincia_val,
+
         perfil_visible=datos.perfil_visible,
         acepta_terminos=datos.acepta_terminos,
         fecha_eula=datos.fecha_aceptacion_terminos,
         version_terminos=datos.version_terminos
     )
 
+    # 5) Persistencia con red de seguridad por si hay concurrencia (race condition)
+    #    Aunque hayamos detectado duplicados, otra request puede colarse entre medias.
     try:
         db.add(nuevo_usuario)
         await db.commit()
         await db.refresh(nuevo_usuario)
     except IntegrityError:
+        # Importante: rollback siempre
         await db.rollback()
+        # Mensaje coherente (sin depender de parsear el error SQL del driver)
         raise HTTPException(
             status_code=400,
-            detail="Error: No se ha podido registrar el usuario. Revisa que el nombre/email no existan."
+            detail="Error: El nombre de usuario o el email ya están en uso"
         )
 
     return {"estatus": "success", "mensaje": "Usuario registrado correctamente"}
@@ -251,14 +256,22 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str):
     termino = termino_busqueda.strip()
 
     if not termino or len(termino) < 3:
-        raise HTTPException(
-            status_code=400, detail="Error: La búsqueda requiere al menos 3 caracteres")
+        return []
+
+    # Escapamos metacaracteres de LIKE: %, _ y la propia barra '\'
+    # (SQLAlchemy parametriza valores, pero NO escapa el patrón LIKE automáticamente)
+    termino_seguro = (
+        termino
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
 
     usuarios = (await db.execute(
         select(database.Usuario)
         .where(
             database.Usuario.perfil_visible == True,
-            database.Usuario.nombre_usuario.ilike(f"%{termino}%")
+            database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\")
         )
         .limit(20)
     )).scalars().all()

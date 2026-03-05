@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     
     # Rate Limit
     ENABLE_RATE_LIMIT_IP: bool = True      # SlowAPI (por IP)
-    ENABLE_RATE_LIMIT_ID: bool = False     # In-memory (por email/usuario)
+    ENABLE_RATE_LIMIT_ID: bool = True     # In-memory (por email/usuario)
     # IP Públicos / Auth
     RL_HANDSHAKE: str = "60/minute"
     RL_LOGIN: str = "20/minute"

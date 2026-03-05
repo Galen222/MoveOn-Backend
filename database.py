@@ -157,6 +157,16 @@ class Actividad(Base):
     ruta_mapa_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     fecha_ruta: Mapped[datetime] = mapped_column(DateTime(
         timezone=True),  default=lambda: datetime.now(timezone.utc), index=True)
+    
+    __table_args__ = (
+        # WHERE usuario_id = X ORDER BY fecha_ruta DESC, id DESC
+        Index(
+            "ix_actividades_usuario_fecha",
+            "usuario_id",
+            "fecha_ruta",
+            "id",
+        ),
+    )
 
 
 class SesionRefresh(Base):

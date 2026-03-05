@@ -44,6 +44,12 @@ if IMAGE_JPEG_QUALITY > 95:
 
 # Si la API está en producción carga variables de Cloudinary.
 if settings.STORAGE_TYPE == "cloudinary":
+    if not settings.CLOUDINARY_CLOUD_NAME or not settings.CLOUDINARY_API_KEY or not settings.CLOUDINARY_API_SECRET:
+        raise RuntimeError(
+            "STORAGE_TYPE=cloudinary pero faltan credenciales: "
+            "CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET"
+        )
+
     cloudinary.config(
         cloud_name=settings.CLOUDINARY_CLOUD_NAME,
         api_key=settings.CLOUDINARY_API_KEY,

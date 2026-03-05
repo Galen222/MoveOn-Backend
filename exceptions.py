@@ -23,9 +23,11 @@ def manejador_validacion_personalizado(request: Request, exc: Any):
         
             loc = error.get("loc") or []
             campo = loc[-1] if loc else "general"
+            msg = mensaje_limpio.strip()
+            msg = (msg[:1].upper() + msg[1:]) if msg else msg
             errores_limpios.append({
                 "columna": campo,
-                "mensaje": mensaje_limpio.strip().capitalize()
+                "mensaje": msg
             })
 
     return JSONResponse(

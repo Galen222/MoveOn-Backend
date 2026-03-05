@@ -21,6 +21,10 @@ def validar_nombre_real_logica(v: str) -> str:
     """Regla para el nombre real: longitud y símbolos."""
     if len(v) < 3:
         raise ValueError('Error: El nombre real es demasiado corto')
+    
+    # Límite superior para evitar payloads absurdamente grandes
+    if len(v) > 80:
+        raise ValueError("Error: El nombre real no puede superar los 80 caracteres")
 
     # Solo letras (incluye acentos/ñ/ü), espacios, apóstrofe y guion
     if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$", v):
@@ -35,8 +39,8 @@ def validar_password_logica(v: str) -> str:
         raise ValueError(
             'Error: La contraseña debe tener al menos 8 caracteres')
     # bcrypt solo usa los primeros 72 bytes; limita para evitar truncado / DoS
-    if len(v) > 30:
-        raise ValueError("Error: La contraseña no puede superar los 30 caracteres")
+    if len(v) > 128:
+        raise ValueError("Error: La contraseña no puede superar los 128 caracteres")
     if not any(char.isupper() for char in v):
         raise ValueError(
             'Error: La contraseña debe incluir al menos una letra mayúscula')
