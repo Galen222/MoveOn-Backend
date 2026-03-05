@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
     
+    # Operacional
+    AUTO_CREATE_TABLES: bool = False   
+    
     # Seguridad App
     APP_ID: str
     APP_SESSION_SECRET: str
@@ -33,9 +36,6 @@ class Settings(BaseSettings):
     # Hash pepper para HMAC
     REFRESH_HASH_SECRET: str
     CODE_HASH_SECRET: str
-    
-    # Operacional
-    AUTO_CREATE_TABLES: bool = True    
     
     # Almacenamiento
     STORAGE_TYPE: str = "local"
