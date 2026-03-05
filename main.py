@@ -20,6 +20,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from middlewares.security_headers import SecurityHeadersMiddleware
 from limiter_config import limiter, rate_limit
+from services.identity_rate_limit import IdentityRateLimitExceeded
 
 
 @asynccontextmanager
@@ -80,6 +81,17 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
             "mensaje": "Demasiadas peticiones. Inténtalo más tarde."
         },
         headers=headers
+    )
+
+@app.exception_handler(IdentityRateLimitExceeded)
+async def identity_rate_limit_handler(request: Request, exc: IdentityRateLimitExceeded):
+    # Formato estándar (igual que RespuestaGenerica)
+    return JSONResponse(
+        status_code=429,
+        content={
+            "estatus": "error",
+            "mensaje": exc.mensaje
+        }
     )
 
 # Configuración de CORS para permitir peticiones externas.
