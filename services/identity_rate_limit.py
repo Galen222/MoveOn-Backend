@@ -28,7 +28,9 @@ class IdentityRateLimitExceeded(Exception):
         super().__init__(mensaje)
         self.mensaje = mensaje
 
-
+# IMPORTANTE: este rate limit es in-process.
+# Si ejecutas múltiples workers/procesos, el límite efectivo se multiplica por Nº de workers.
+# Para producción multi-worker: usar Redis (fastapi-limiter) u otro backend compartido.
 # (scope, identity) -> (window_start_epoch, count)
 _BUCKETS: dict[tuple[str, str], tuple[float, int]] = {}
 

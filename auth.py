@@ -56,8 +56,8 @@ def codifica_jwt(payload: dict, secret: str, expires_delta: timedelta, typ: str)
 
     datos = payload.copy()
     datos.update({
-        "exp": exp,
-        "iat": ahora,
+        "exp": int(exp.timestamp()),
+        "iat": int(ahora.timestamp()),
         "iss": JWT_ISSUER,
         "aud": JWT_AUDIENCE,
         "typ": typ

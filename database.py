@@ -34,6 +34,10 @@ DATABASE_URL = (
 engine = create_async_engine(
     DATABASE_URL,
     pool_pre_ping=True,
+    pool_size=int(settings.DB_POOL_SIZE),
+    max_overflow=int(settings.DB_MAX_OVERFLOW),
+    pool_timeout=int(settings.DB_POOL_TIMEOUT),
+    pool_recycle=int(settings.DB_POOL_RECYCLE),
 )
 
 # Sesiones ASYNC

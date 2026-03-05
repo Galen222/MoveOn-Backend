@@ -62,7 +62,10 @@ MALICIOUS_SIGNATURES = [
     b'.dll\x00'
 ]
 
-
+# NOTA:
+# - En producción usamos Cloudinary y guardamos secure_url en BD -> se devuelve tal cual (no depende de base_url).
+# - request.base_url solo se usa en modo local con storage local (HTTP), donde es suficiente.
+# - Si en el futuro se despliega detrás de reverse proxy/HTTPS, considerar usar X-Forwarded-* o PUBLIC_BASE_URL.
 def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional[str]:
     """
     Devuelve la URL completa de la foto si existe.
