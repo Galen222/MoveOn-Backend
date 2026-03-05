@@ -6,7 +6,7 @@ Esquemas de Validación de Datos (Pydantic V2).
 Define la estructura de los datos que entran y salen de la API, 
 asegurando que cumplan con las reglas de negocio antes de tocar la DB.
 """
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator, StrictInt
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator, StrictInt, ConfigDict
 from datetime import date, datetime
 from typing import Optional, Any
 import re
@@ -345,6 +345,8 @@ class SolicitudLogout(SolicitudRefreshToken):
 
 
 class RespuestaInformacionPerfil(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     nombre_usuario: str
     nombre_real: Optional[str] = None
     email: EmailStr
@@ -356,9 +358,6 @@ class RespuestaInformacionPerfil(BaseModel):
     foto_perfil: Optional[str] = None
     perfil_visible: bool
     total_puntos: int
-
-    class Config:
-        from_attributes = True
 
 
 class ActualizarPerfil(BaseModel):
@@ -639,6 +638,8 @@ class GuardarActividad(BaseModel):
 
 
 class RespuestaObtenerActividad(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: int
     tipo: str
     distancia: int
@@ -647,12 +648,7 @@ class RespuestaObtenerActividad(BaseModel):
     ruta_polilinea: Optional[str] = None
     ruta_mapa_url: Optional[str] = None
     fecha_ruta: datetime
-    # Cuando se guarda la actividad se mandan los puntos actuales.
     nuevo_total_puntos: Optional[int] = None
-
-    class Config:
-        from_attributes = True
-        populate_by_name = True
 
 
 class RespuestaBorrarActividad(BaseModel):

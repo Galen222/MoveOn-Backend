@@ -35,8 +35,7 @@ def validar_nombre_real_logica(v: str) -> str:
     # + : uno o más caracteres
     # $ : fin
     if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$", v):
-        raise ValueError(
-            'Error: El nombre no puede contener números ni símbolos especiales')
+        raise ValueError('Error: El nombre no puede contener números ni símbolos especiales')
 
     return v
 

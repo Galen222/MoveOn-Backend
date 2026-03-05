@@ -148,27 +148,40 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad
     }
 
 async def eliminar_actividades(db: AsyncSession, usuario_actual: str):
-    # Buscar usuario
+    # Buscar usuario (bloqueo para evitar race conditions con crear_actividad/eliminar_actividad)
     usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
+        select(database.Usuario)
+        .where(database.Usuario.nombre_usuario == usuario_actual)
+        .with_for_update()
     )).scalar_one_or_none()
+
     if not usuario:
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    # Borrado masivo. Buscar todas las actividades donde el usuario_id coincida y borrarlas de golpe.
-    # Primero contamos cuántas hay, para poder devolver el número borrado.
+    # Contar cuántas hay, para devolver el número borrado.
     num_borrados = (await db.execute(
         select(func.count())
         .select_from(database.Actividad)
         .where(database.Actividad.usuario_id == usuario.id)
     )).scalar_one()
 
+    # Borrado masivo de actividades
     await db.execute(
         sa_delete(database.Actividad).where(database.Actividad.usuario_id == usuario.id)
     )
 
+    # Reset de metros (tu backend trabaja en metros enteros)
+    usuario.total_metros = 0
+
+    await db.commit()
+
+    return {
+        "estatus": "success",
+        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
+    }
+
     # Borrar todos los metros recorridos de las actividades del usuario.
-    usuario.total_metros = 0.0
+    usuario.total_metros = 0
 
     await db.commit()
 

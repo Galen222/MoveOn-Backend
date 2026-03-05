@@ -39,7 +39,6 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
         )
         return True
     except Exception as e:
-        # Imprime el error en consola para debuguear
-        print(f"ERROR AL ENVIAR EMAIL: {str(e)}")
+        # Imprime el error para debuguear
         logger.exception("ERROR AL ENVIAR EMAIL a %s", email_destino)
         return False
