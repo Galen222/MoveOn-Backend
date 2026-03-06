@@ -22,3 +22,4 @@ docs/
 .docs/
 .env
 *.pyc
+.pytest_cache

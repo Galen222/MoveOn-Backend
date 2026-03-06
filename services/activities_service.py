@@ -29,7 +29,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.
         duracion=datos.duracion,
         calorias_quemadas=datos.calorias_quemadas,
         ruta_polilinea=datos.ruta_polilinea,
-        ruta_mapa_url=datos.ruta_mapa_url,        
+        ruta_mapa_url=str(datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
         fecha_ruta=datos.fecha_ruta
     )
 

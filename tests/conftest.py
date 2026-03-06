@@ -1,4 +1,4 @@
-# tests/test_config.py
+# tests/conftest.py
 #
 # Variables de entorno para el entorno de test.
 # Los secretos JWT deben tener al menos 32 bytes para HS256 (RFC 7518 §3.2).

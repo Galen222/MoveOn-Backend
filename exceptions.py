@@ -63,7 +63,7 @@ def manejador_validacion_personalizado(request: Request, exc: Any) -> JSONRespon
             })
 
     return error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         mensaje="Solicitud inválida",
         detail=errores_limpios
     )
