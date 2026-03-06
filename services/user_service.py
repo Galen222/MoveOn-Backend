@@ -104,7 +104,11 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
             detail="Error: El nombre de usuario o el email ya están en uso"
         )
 
-    return {"estatus": "success", "mensaje": "Usuario registrado correctamente"}
+    return {
+        "estatus": "success",
+        "mensaje": "Usuario registrado correctamente",
+        "nombre_usuario": nuevo_usuario.nombre_usuario
+    }
 
 
 async def obtener_perfil(db: AsyncSession, usuario_actual: str):
