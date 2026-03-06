@@ -16,7 +16,8 @@ def setup_logging() -> None:
     handler.addFilter(RequestIdFilter())
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s %(levelname)s request_id=%(request_id)s logger=%(name)s %(message)s"
+        fmt="%(levelname)s: %(asctime)s [%(name)s] %(message)s | request_id=%(request_id)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     handler.setFormatter(formatter)
 
@@ -24,3 +25,4 @@ def setup_logging() -> None:
     root.handlers.clear()
     root.setLevel(logging.INFO)
     root.addHandler(handler)
+    

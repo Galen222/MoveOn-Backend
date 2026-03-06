@@ -1,4 +1,5 @@
 # middlewares/request_context.py
+
 import logging
 import time
 import uuid
@@ -19,17 +20,31 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         try:
             response = await call_next(request)
-        finally:
-            duration_ms = round((time.perf_counter() - start) * 1000, 2)
-            logging.getLogger("app.request").info(
-                "request method=%s path=%s client=%s duration_ms=%s",
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000)
+            logging.getLogger("app.request").exception(
+                '%s - "%s %s HTTP/1.1" %s %s ms',
+                request.client.host if request.client else "-",
                 request.method,
                 request.url.path,
-                request.client.host if request.client else "-",
+                500,
                 duration_ms,
             )
             request_id_ctx.reset(token)
+            raise
+
+        duration_ms = round((time.perf_counter() - start) * 1000)
+
+        logging.getLogger("app.request").info(
+            '%s - "%s %s HTTP/1.1" %s %s ms',
+            request.client.host if request.client else "-",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
 
         response.headers["X-Request-ID"] = request_id
+        request_id_ctx.reset(token)
         return response
     
