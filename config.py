@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     RL_PERFIL_BUSCAR: str = "240/minute"
     RL_RANKING: str = "240/minute"
     # IP Actividades (autenticados)
-    RL_ACTIVIDAD_GUARDAR: str = "300/minute"
+    RL_ACTIVIDAD_GUARDAR: str = "60/minute"
     RL_ACTIVIDAD_OBTENER: str = "600/minute"
     RL_ACTIVIDAD_OBTENER_TODAS: str = "240/minute"
     RL_ACTIVIDAD_BORRAR: str = "120/minute"
@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     RL_ROOT: str = "120/minute"
     RL_FAVICON: str = "120/minute"
     # ID Usuarios (autenticados)
+    RL_REGISTRO_ID: str = "5/hour"    
     RL_LOGIN_ID: str = "10/minute"
     RL_PASSWORD_SOLICITAR_ID: str = "5/hour"
     RL_PASSWORD_CONFIRMAR_ID: str = "10/hour"

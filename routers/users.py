@@ -12,6 +12,7 @@ import auth
 import schemas
 from typing import List, Optional
 from services import user_service, file_service
+from services.identity_rate_limit import check_identity_limit
 from database import obtener_db
 from schemas import ProvinciaEspaña
 from utils import calculos
@@ -34,6 +35,9 @@ async def registro(
     db: AsyncSession = Depends(obtener_db)
 ):
     """Registro de nuevo usuario con validación de duplicados."""
+    # Rate-limit adicional por identidad/email (anti-abuso distribuido)
+    check_identity_limit("registro", str(datos.email), settings.RL_REGISTRO_ID)
+
     return await user_service.registrar_nuevo_usuario(db, datos)
 
 
@@ -189,19 +193,16 @@ async def borrar_perfil(
 @rate_limit(settings.RL_PERFIL_BUSCAR)
 async def buscar_perfil(
     request: Request,
-    # 'q' es el parámetro de la URL: /perfil/buscar?q=pepe
-    # min_length=3 valida que escriban al menos 3 letras antes de molestar a la base de datos
     q: str = Query(..., min_length=3, max_length=50, description="Término de búsqueda (min 3 caracteres)"),
     db: AsyncSession = Depends(obtener_db),
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """
     Busca usuarios por nombre (coincidencia parcial).
-    Solo devuelve usuarios con perfil público.
+    Solo devuelve usuarios con perfil público y excluye al usuario autenticado.
     """
-    resultados = await user_service.buscar_usuario(db, q)
+    resultados = await user_service.buscar_usuario(db, q, usuario_actual)
 
-    # Procesamos para añadir la URL completa de la foto
     lista_final = []
     for usuario in resultados:
         url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)

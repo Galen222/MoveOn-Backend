@@ -10,12 +10,15 @@ import time
 import hashlib
 from typing import Optional
 from io import BytesIO
+import logging
 
 from fastapi import UploadFile, HTTPException, Request
 import cloudinary.uploader
 import cloudinary
 
 from config import settings
+
+logger = logging.getLogger("app.files")
 
 # Pillow para verificar que el archivo es realmente una imagen
 from PIL import Image, UnidentifiedImageError
@@ -251,7 +254,15 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
         )
         return resultado.get("secure_url")
     except Exception:
-        raise HTTPException(status_code=500, detail="Error: No se ha podido subir la imagen a la nube")
+        logger.exception(
+            "Error: No se ha podido subir la imagen a la nube. usuario=%s content_type=%s",
+            usuario_actual,
+            archivo.content_type
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Error: No se ha podido subir la imagen a la nube"
+        )
 
 
 def borrar_foto(foto_perfil: str, usuario_actual: str):
@@ -274,7 +285,12 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
                 invalidate=True
             )
         except Exception:
-            pass
+            logger.warning(
+                "Error: El borrado de foto en cloudinary ha fallado. usuario=%s foto=%s",
+                usuario_actual,
+                foto_perfil,
+                exc_info=True
+            )
         return
 
     # Local (tu lógica actual)
@@ -284,5 +300,11 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
         if os.path.exists(ruta):
             os.remove(ruta)
     except Exception:
+        logger.warning(
+            "Error: El borrado de foto local ha fallado. usuario=%s foto=%s",
+            usuario_actual,
+            foto_perfil,
+            exc_info=True
+        )
         return
     

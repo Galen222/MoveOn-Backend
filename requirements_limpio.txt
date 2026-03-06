@@ -33,3 +33,8 @@ pdoc
 
 # --- Gestion de librerias ---
 pip-review
+
+# --- tests ---
+pytest
+pytest-asyncio
+httpx

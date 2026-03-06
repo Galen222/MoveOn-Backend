@@ -265,22 +265,21 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
     return usuario
 
 
-async def buscar_usuario(db: AsyncSession, termino_busqueda: str):
+async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual: str):
     """
     Busca usuarios cuyo nombre_usuario contenga el término.
     Filtros:
     1. Coincidencia parcial (ilike)
     2. Perfil visible (Privacidad)
-    3. Límite de 20 (Rendimiento)
+    3. Excluye al usuario autenticado
+    4. Límite de 20 (Rendimiento)
     """
-    # Limpiamos espacios
     termino = termino_busqueda.strip()
+    usuario_actual_key = usuario_actual.strip().lower()
 
     if not termino or len(termino) < 3:
         return []
 
-    # Escapamos metacaracteres de LIKE: %, _ y la propia barra '\'
-    # (SQLAlchemy parametriza valores, pero NO escapa el patrón LIKE automáticamente)
     termino_seguro = (
         termino
         .replace("\\", "\\\\")
@@ -292,7 +291,8 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str):
         select(database.Usuario)
         .where(
             database.Usuario.perfil_visible == True,
-            database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\")
+            database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
+            func.lower(database.Usuario.nombre_usuario) != usuario_actual_key
         )
         .limit(20)
     )).scalars().all()
