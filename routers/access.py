@@ -15,10 +15,13 @@ import schemas
 from database import obtener_db
 from services import access_service
 from config import settings
-from limiter_config import rate_limit
+from ip_rate_limit import rate_limit
 from services.identity_rate_limit import check_identity_limit
 import hmac
+import logging
 from typing import Optional
+
+logger = logging.getLogger("app.auth")
 
 router = APIRouter(tags=["Seguridad"])
 
@@ -54,6 +57,7 @@ async def login(
 
     # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado:
+        logger.info("login_failed ident=%s motivo=usuario_no_encontrado", datos.identificador)
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
     es_valido = await run_in_threadpool(
@@ -62,8 +66,10 @@ async def login(
         str(usuario_encontrado.password_encriptada),
     )
     if not es_valido:
+        logger.info("login_failed ident=%s motivo=password_invalida", datos.identificador)
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
+    logger.info("login_success user_id=%s", usuario_encontrado.id)
     return await access_service.crear_sesion_login(db, usuario_encontrado)
 
 

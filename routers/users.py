@@ -17,7 +17,7 @@ from schemas import ProvinciaEspaña
 from utils import calculos
 from starlette.concurrency import run_in_threadpool
 from config import settings
-from limiter_config import rate_limit
+from ip_rate_limit import rate_limit
 
 # Inyectamos la dependencia a nivel de Router para todos los endpoints de este archivo
 router = APIRouter(
@@ -157,7 +157,7 @@ async def actualizar_perfil(
     usuario_actual: str = Depends(auth.obtener_usuario_actual)
 ):
     """Permite al usuario modificar su perfil."""
-    usuario = await user_service.obtener_perfil(db, usuario_actual)
+    usuario = await user_service.obtener_perfil(db, usuario_actual, for_update=True)
     return await user_service.actualizar_perfil_usuario(db, usuario, datos)
 
 

@@ -111,16 +111,23 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     }
 
 
-async def obtener_perfil(db: AsyncSession, usuario_actual: str):
+async def obtener_perfil(db: AsyncSession, usuario_actual: str, for_update: bool = False):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
-    usuario = (await db.execute(
-        select(database.Usuario).where(
-            database.Usuario.nombre_usuario == usuario_actual)
-    )).scalar_one_or_none()
+    query = select(database.Usuario).where(
+        database.Usuario.nombre_usuario == usuario_actual
+    )
+
+    if for_update:
+        query = query.with_for_update()
+
+    usuario = (await db.execute(query)).scalar_one_or_none()
 
     if not usuario:
         raise HTTPException(
-            status_code=404, detail="Error: Perfil de usuario no encontrado")
+            status_code=404,
+            detail="Error: Perfil de usuario no encontrado"
+        )
+
     return usuario
 
 
@@ -219,7 +226,17 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
             raise HTTPException(status_code=400, detail="Error: perfil_visible no puede ser null")
         usuario.perfil_visible = payload["perfil_visible"]
 
-    await db.commit()
+    # Persistencia con red de seguridad por si hay concurrencia (race condition)
+    # Aunque hayamos detectado duplicados, otra request puede colarse entre medias.
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Importante: rollback siempre
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Error: El email ya está en uso"
+        )
     return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
 
 

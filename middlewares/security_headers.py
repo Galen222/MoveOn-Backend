@@ -3,6 +3,7 @@
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from config import settings
+from ip_rate_limit import conn_from_trusted_proxy
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -11,14 +12,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if not settings.ENABLE_SECURITY_HEADERS:
             return response
 
-        # Detectar HTTPS real (directo) o detrás de proxy
+        # HTTPS directo
         is_https = request.url.scheme == "https"
-        if settings.SEC_HEADERS_RESPECT_X_FORWARDED_PROTO:
+
+        # Solo confiar en X-Forwarded-Proto si la conexión viene
+        # de un proxy que nosotros consideramos confiable
+        if settings.SEC_HEADERS_RESPECT_X_FORWARDED_PROTO and conn_from_trusted_proxy(request):
             xf_proto = request.headers.get("x-forwarded-proto")
             if xf_proto:
                 is_https = xf_proto.split(",")[0].strip().lower() == "https"
 
-        # HSTS solo si HTTPS
+        # HSTS solo si la request original fue HTTPS
         if is_https and settings.SEC_HEADERS_HSTS_SECONDS > 0:
             hsts = f"max-age={int(settings.SEC_HEADERS_HSTS_SECONDS)}"
             if settings.SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS:

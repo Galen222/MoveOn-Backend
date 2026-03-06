@@ -51,7 +51,7 @@ def validar_password_logica(v: str) -> str:
 
 
 def validar_fecha_nacimiento_logica(v: date) -> date:
-    """Regla para edad mínima (13 años) y evitar fechas futuras."""
+    """Regla para edad mínima (18 años) y evitar fechas futuras."""
     hoy = date.today()
     if v > hoy:
         raise ValueError(

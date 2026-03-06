@@ -8,7 +8,7 @@ import auth
 from database import obtener_db
 from services import activities_service
 from config import settings
-from limiter_config import rate_limit
+from ip_rate_limit import rate_limit
 
 # Inyectamos la dependencia a nivel de Router para todos los endpoints de este archivo
 router = APIRouter(

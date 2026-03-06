@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     CODE_HASH_SECRET: str
     
     # Almacenamiento
-    STORAGE_TYPE: str = "local"
+    STORAGE_TYPE: str = "cloudinary"
     UPLOAD_DIR: str = "uploads"
     
     # Cloudinary
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "https://miapp.com, http://localhost:3000"
     
     # SWAGGER
-    ENABLE_DOCS: bool = True
+    ENABLE_DOCS: bool = False
     
     # Proxy
     TRUST_PROXY_LAN: bool = False
@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     
     # Security headers
     ENABLE_SECURITY_HEADERS: bool = False
-    SEC_HEADERS_RESPECT_X_FORWARDED_PROTO: bool = True
+    SEC_HEADERS_RESPECT_X_FORWARDED_PROTO: bool = False
     SEC_HEADERS_HSTS_SECONDS: int = 31536000
     SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS: bool = True
     SEC_HEADERS_HSTS_PRELOAD: bool = False

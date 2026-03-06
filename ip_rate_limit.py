@@ -1,4 +1,4 @@
-# limiter_config.py
+# ip_rate_config.py
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ if not HEADER_ORDER:
     HEADER_ORDER = ["x-forwarded-for", "x-real-ip"]
 
 
-def _conn_from_trusted_proxy(request: Request) -> bool:
+def conn_from_trusted_proxy(request: Request) -> bool:
     """
     Solo confiamos en X-Forwarded-For / X-Real-IP si la conexión TCP viene
     de un proxy que nosotros consideramos confiable (LAN o WAN).
@@ -107,7 +107,7 @@ def get_client_ip(request: Request) -> str:
     - Si NO estamos detrás de proxy confiable -> IP real del socket (get_remote_address)
     - Si SÍ -> usamos headers (XFF/X-Real-IP) según orden en env
     """
-    if _conn_from_trusted_proxy(request):
+    if conn_from_trusted_proxy(request):
         ip = _extract_ip_from_headers(request)
         if ip:
             return ip
