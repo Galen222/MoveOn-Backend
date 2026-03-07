@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     EMAIL_PORT: int = 587
     EMAIL_USER: str
     EMAIL_PASS: str
+    EMAIL_TIMEOUT_SECONDS: float = 10.0
+    EMAIL_MAX_RETRIES: int = 3
+    EMAIL_RETRY_BASE_DELAY_SECONDS: float = 1.0    
 
     # JWT hardening (mismo issuer/audience para TODOS los JWT)
     JWT_ISSUER: str = "moveon_api"
