@@ -13,6 +13,7 @@ y el backend no puede distinguir “quiero borrarlo” de “no quiero tocarlo�
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Optional
 
 from fastapi import HTTPException
@@ -25,6 +26,8 @@ import auth
 import database
 import schemas
 from utils import calculos
+
+logger = logging.getLogger("app.users")
 
 
 async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
@@ -58,7 +61,22 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     if existente:
         # Mensaje específico: ayuda a UX y evita ambigüedad
         if str(existente.nombre_usuario).lower() == nombre_key:
+            logger.warning(
+                "registro_usuario_nombre_duplicado",
+                extra={
+                    "nombre_usuario": nombre_usuario,
+                    "email": email,
+                },
+            )
             raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
+
+        logger.warning(
+            "registro_usuario_email_duplicado",
+            extra={
+                "nombre_usuario": nombre_usuario,
+                "email": email,
+            },
+        )
         raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
 
     # 2) Hash de contraseña en threadpool (bcrypt es CPU-bound y bloquea el event loop)
@@ -99,10 +117,28 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         # Importante: rollback siempre
         await db.rollback()
         # Mensaje coherente (sin depender de parsear el error SQL del driver)
+        logger.warning(
+            "registro_usuario_error_integridad",
+            extra={
+                "nombre_usuario": nombre_usuario,
+                "email": email,
+            },
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=400,
             detail="Error: El nombre de usuario o el email ya están en uso"
         )
+
+    logger.info(
+        "usuario_registrado",
+        extra={
+            "usuario": nuevo_usuario.nombre_usuario,
+            "usuario_id": nuevo_usuario.id,
+            "perfil_visible": nuevo_usuario.perfil_visible,
+            "provincia": nuevo_usuario.provincia,
+        },
+    )
 
     return {
         "estatus": "success",
@@ -123,6 +159,13 @@ async def obtener_perfil(db: AsyncSession, usuario_actual: str, for_update: bool
     usuario = (await db.execute(query)).scalar_one_or_none()
 
     if not usuario:
+        logger.warning(
+            "perfil_no_encontrado",
+            extra={
+                "usuario": usuario_actual,
+                "for_update": for_update,
+            },
+        )
         raise HTTPException(
             status_code=404,
             detail="Error: Perfil de usuario no encontrado"
@@ -147,6 +190,7 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
 
     # Solo incluye campos presentes en el JSON (incluye explícitos null)
     payload = datos.model_dump(exclude_unset=True)
+    campos_actualizados = sorted(payload.keys())
 
     # -------------------------
     # Campos opcionales BORRABLES (permiten null)
@@ -193,6 +237,14 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
         )).scalar_one_or_none()
 
         if duplicado:
+            logger.warning(
+                "actualizacion_perfil_email_duplicado",
+                extra={
+                    "usuario": usuario.nombre_usuario,
+                    "usuario_id": usuario.id,
+                    "nuevo_email": email,
+                },
+            )
             raise HTTPException(
                 status_code=400, detail="Error: El email ya está en uso")
 
@@ -233,10 +285,31 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
     except IntegrityError:
         # Importante: rollback siempre
         await db.rollback()
+        logger.warning(
+            "actualizacion_perfil_error_integridad",
+            extra={
+                "usuario": usuario.nombre_usuario,
+                "usuario_id": usuario.id,
+                "campos": campos_actualizados,
+            },
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=400,
             detail="Error: El email ya está en uso"
         )
+
+    logger.info(
+        "perfil_actualizado",
+        extra={
+            "usuario": usuario.nombre_usuario,
+            "usuario_id": usuario.id,
+            "campos": campos_actualizados,
+            "password_cambiada": "password" in payload,
+            "email_cambiado": "email" in payload,
+        },
+    )
+
     return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
 
 
@@ -254,11 +327,23 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
     )).scalar_one_or_none()
 
     if not usuario:
+        logger.info(
+            "perfil_publico_no_encontrado",
+            extra={
+                "nombre_objetivo": nombre_objetivo,
+            },
+        )
         raise HTTPException(
             status_code=404, detail="Error: Usuario no encontrado")
 
     # LÓGICA DE PRIVACIDAD
     if not usuario.perfil_visible:
+        logger.info(
+            "perfil_publico_privado",
+            extra={
+                "usuario_objetivo": usuario.nombre_usuario,
+            },
+        )
         raise HTTPException(
             status_code=403, detail="Error: Este perfil es privado")
 
@@ -297,6 +382,15 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual
         .limit(20)
     )).scalars().all()
 
+    logger.debug(
+        "busqueda_usuarios_completada",
+        extra={
+            "usuario": usuario_actual,
+            "termino": termino,
+            "resultados": len(usuarios),
+        },
+    )
+
     return usuarios
 
 
@@ -304,6 +398,15 @@ async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
     """Elimina permanentemente el registro de la base de datos."""
     await db.delete(usuario)
     await db.commit()
+
+    logger.info(
+        "cuenta_eliminada",
+        extra={
+            "usuario": usuario.nombre_usuario,
+            "usuario_id": usuario.id,
+        },
+    )
+
     return {"estatus": "success", "mensaje": "Cuenta eliminada correctamente"}
 
 
@@ -332,5 +435,13 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
             "foto_perfil": foto_perfil,
             "total_puntos": puntos
         })
+
+    logger.debug(
+        "ranking_generado",
+        extra={
+            "provincia": provincia,
+            "resultados": len(ranking),
+        },
+    )
 
     return ranking

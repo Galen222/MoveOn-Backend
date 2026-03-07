@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import time
+import logging
 from threading import RLock
 from typing import Optional, Tuple
 
 from cachetools import TTLCache
 
 from config import settings
+
+logger = logging.getLogger("app.security")
 
 
 class IdentityRateLimitExceeded(Exception):
@@ -93,5 +96,15 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
         _BUCKETS[key] = (window_start, count)
 
     if count > max_hits:
+        logger.warning(
+            "limite_por_identidad_superado",
+            extra={
+                "scope": scope,
+                "identidad": ident,
+                "max_hits": max_hits,
+                "window_seconds": window_seconds,
+                "hits_actuales": count,
+            },
+        )
         raise IdentityRateLimitExceeded()
     

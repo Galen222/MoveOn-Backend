@@ -35,10 +35,27 @@ async def handshake(
     x_app_id: Optional[str] = Header(default=None)
 ):
     if not hmac.compare_digest((x_app_id or ""), settings.APP_ID):
+        logger.warning(
+            "handshake_fallido",
+            extra={
+                "motivo": "app_id_invalido",
+                "path": request.url.path,
+                "method": request.method,
+            },
+        )
         raise HTTPException(
             status_code=403,
             detail="Error: El acceso no proviene de la aplicación MoveOn"
         )
+
+    logger.info(
+        "handshake_correcto",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+        },
+    )
+
     return {"app_session_token": auth.crear_token_aplicacion()}
 
 
@@ -60,7 +77,13 @@ async def login(
 
     # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado:
-        logger.info("login_failed ident=%s motivo=usuario_no_encontrado", datos.identificador)
+        logger.info(
+            "inicio_sesion_fallido",
+            extra={
+                "identificador": datos.identificador,
+                "motivo": "usuario_no_encontrado",
+            },
+        )
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
     es_valido = await run_in_threadpool(
@@ -69,10 +92,22 @@ async def login(
         str(usuario_encontrado.password_encriptada),
     )
     if not es_valido:
-        logger.info("login_failed ident=%s motivo=password_invalida", datos.identificador)
+        logger.info(
+            "inicio_sesion_fallido",
+            extra={
+                "identificador": datos.identificador,
+                "motivo": "password_invalida",
+            },
+        )
         raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
 
-    logger.info("login_success user_id=%s", usuario_encontrado.id)
+    logger.info(
+        "inicio_sesion_correcto",
+        extra={
+            "usuario_id": usuario_encontrado.id,
+            "usuario": usuario_encontrado.nombre_usuario,
+        },
+    )
     return await access_service.crear_sesion_login(db, usuario_encontrado)
 
 

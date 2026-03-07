@@ -158,7 +158,7 @@ class TestManejadorExcepcionNoControlada:
         fake_logger.exception.assert_called_once()
 
         args, kwargs = fake_logger.exception.call_args
-        assert args[0] == "unhandled_exception"
+        assert args[0] == "excepcion_no_controlada"
         assert kwargs["extra"] == {
             "method": "GET",
             "path": "/test",

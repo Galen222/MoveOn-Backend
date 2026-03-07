@@ -216,6 +216,15 @@ def guardar_local(
         with open(ruta_final, "wb") as buffer:
             buffer.write(data_limpia)
     except Exception:
+        logger.exception(
+            "error_guardado_archivo_local",
+            extra={
+                "usuario": usuario_actual,
+                "content_type": archivo.content_type,
+                "storage_type": settings.STORAGE_TYPE,
+                "ruta_destino": ruta_final,
+            },
+        )
         raise HTTPException(
             status_code=500,
             detail="Error: No se ha podido guardar la imagen localmente"
@@ -257,7 +266,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str, raw: bytes) -> str:
         raise
     except Exception:
         logger.exception(
-            "cloudinary_upload_failed",
+            "error_subida_cloudinary",
             extra={
                 "usuario": usuario_actual,
                 "content_type": archivo.content_type,
@@ -291,7 +300,7 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
             )
         except Exception:
             logger.warning(
-                "cloudinary_delete_failed",
+                "error_borrado_cloudinary",
                 extra={
                     "usuario": usuario_actual,
                     "foto": foto_perfil,
@@ -309,7 +318,7 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
             os.remove(ruta)
     except Exception:
         logger.warning(
-            "local_file_delete_failed",
+            "error_borrado_archivo_local",
             extra={
                 "usuario": usuario_actual,
                 "foto": foto_perfil,

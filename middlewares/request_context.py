@@ -31,7 +31,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             duration_ms = round((time.perf_counter() - start) * 1000)
 
             logger.exception(
-                "request_failed",
+                "peticion_fallida",
                 extra={
                     "client_ip": client_ip,
                     "method": request.method,
@@ -47,7 +47,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         duration_ms = round((time.perf_counter() - start) * 1000)
 
         logger.info(
-            "request_completed",
+            "peticion_completada",
             extra={
                 "client_ip": client_ip,
                 "method": request.method,

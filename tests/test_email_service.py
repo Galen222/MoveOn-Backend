@@ -153,7 +153,7 @@ class TestConstruirMensaje:
 
         assert msg["To"] == "pepe@test.com"
         record = next(r for r in caplog.records if r.name == "app.email")
-        assert record.getMessage() == "email_logo_missing"
+        assert record.getMessage() == "logo_correo_no_encontrado"
         assert record.email_destino == "pepe@test.com"
 
 

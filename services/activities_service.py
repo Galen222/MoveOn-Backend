@@ -3,9 +3,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, case, select, delete as sa_delete, func
 from fastapi import HTTPException
+import logging
 import database
 import schemas
 from utils import calculos
+
+logger = logging.getLogger("app.activities")
+
 
 async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.GuardarActividad):
     """
@@ -19,6 +23,12 @@ async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.
     )).scalar_one_or_none()
     
     if not usuario:
+        logger.warning(
+            "crear_actividad_usuario_no_encontrado",
+            extra={
+                "usuario": usuario_actual,
+            },
+        )
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Se Crea el objeto de base de datos.
@@ -45,6 +55,19 @@ async def crear_actividad(db: AsyncSession, usuario_actual: str, datos: schemas.
     # Debido a eso se refresca el usuario.
     await db.refresh(usuario)
     
+    logger.info(
+        "actividad_creada",
+        extra={
+            "usuario": usuario_actual,
+            "usuario_id": usuario.id,
+            "actividad_id": nueva_actividad.id,
+            "tipo": nueva_actividad.tipo,
+            "distancia": nueva_actividad.distancia,
+            "duracion": nueva_actividad.duracion,
+            "nuevo_total_metros": usuario.total_metros,
+        },
+    )
+
     # Calcular los puntos para el Ranking.
     puntos_actualizados = calculos.calcular_puntos_nivel(usuario.total_metros)
 
@@ -68,6 +91,13 @@ async def obtener_actividad(db: AsyncSession, usuario_actual: str, id_actividad:
         select(database.Usuario).where(database.Usuario.nombre_usuario == usuario_actual)
     )).scalar_one_or_none()
     if not usuario:
+        logger.warning(
+            "obtener_actividad_usuario_no_encontrado",
+            extra={
+                "usuario": usuario_actual,
+                "actividad_id": id_actividad,
+            },
+        )
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Buscar la actividad asegurando que pertenezca a este usuario
@@ -79,6 +109,14 @@ async def obtener_actividad(db: AsyncSession, usuario_actual: str, id_actividad:
     )).scalar_one_or_none()
 
     if not actividad:
+        logger.info(
+            "actividad_no_encontrada",
+            extra={
+                "usuario": usuario_actual,
+                "usuario_id": usuario.id,
+                "actividad_id": id_actividad,
+            },
+        )
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     return actividad
@@ -108,6 +146,18 @@ async def obtener_actividades(db: AsyncSession, usuario_actual: str, skip: int, 
         .limit(limit)
     )).scalars().all()
 
+    logger.debug(
+        "lista_actividades_obtenida",
+        extra={
+            "usuario": usuario_actual,
+            "skip": skip,
+            "limit": limit,
+            "total": total,
+            "devueltas": len(items),
+            "has_more": (skip + limit) < total,
+        },
+    )
+
     return {
         "items": items,
         "total": total,
@@ -127,6 +177,13 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad
         .with_for_update()
     )).scalar_one_or_none()
     if not usuario:
+        logger.warning(
+            "borrar_actividad_usuario_no_encontrado",
+            extra={
+                "usuario": usuario_actual,
+                "actividad_id": id_actividad,
+            },
+        )
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     actividad = (await db.execute(
@@ -137,6 +194,14 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad
     )).scalar_one_or_none()
 
     if not actividad:
+        logger.info(
+            "borrar_actividad_no_encontrada",
+            extra={
+                "usuario": usuario_actual,
+                "usuario_id": usuario.id,
+                "actividad_id": id_actividad,
+            },
+        )
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     # Se resta la distancia en metros recorrida de la ruta al borrarla.
@@ -153,6 +218,17 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual: str, id_actividad
     # Refrescar para traer de la BD el valor real de 'total_metros' tras el 'case'
     await db.refresh(usuario) 
     
+    logger.info(
+        "actividad_eliminada",
+        extra={
+            "usuario": usuario_actual,
+            "usuario_id": usuario.id,
+            "actividad_id": id_actividad,
+            "distancia_restada": actividad.distancia,
+            "nuevo_total_metros": usuario.total_metros,
+        },
+    )
+
     # Recalcular los puntos con el valor actualizado
     puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
     return {
@@ -170,6 +246,12 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual: str):
     )).scalar_one_or_none()
 
     if not usuario:
+        logger.warning(
+            "borrar_todas_actividades_usuario_no_encontrado",
+            extra={
+                "usuario": usuario_actual,
+            },
+        )
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Contar cuántas hay, para devolver el número borrado.
@@ -188,6 +270,16 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual: str):
     usuario.total_metros = 0
 
     await db.commit()
+
+    logger.info(
+        "borrado_total_actividades_completado",
+        extra={
+            "usuario": usuario_actual,
+            "usuario_id": usuario.id,
+            "num_borradas": int(num_borrados),
+            "nuevo_total_metros": 0,
+        },
+    )
 
     return {
         "estatus": "success",

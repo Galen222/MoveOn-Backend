@@ -9,11 +9,14 @@ para sesiones de usuario y el sistema de validación de handshake.
 import bcrypt
 from datetime import datetime, timedelta, timezone
 import jwt
+import logging
 from jwt.exceptions import InvalidTokenError
 from fastapi import HTTPException, Header, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Any, Optional
 from config import settings
+
+logger = logging.getLogger("app.auth")
 
 # Parámetros de configuración del sistema de tokens
 ACCESS_TOKEN_SECRET = settings.ACCESS_TOKEN_SECRET
@@ -106,6 +109,10 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
     """Middleware que valida que la petición contenga un token de handshake."""
     # Validar presencia del encabezado
     if not x_app_session:
+        logger.warning(
+            "sesion_aplicacion_ausente",
+            extra={},
+        )
         raise HTTPException(
             status_code=403,
             detail="Error: Falta el token de sesión",
@@ -117,12 +124,20 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
         decodifica_jwt(x_app_session, APP_SESSION_SECRET, "app_session")
         return x_app_session
     except InvalidTokenError:
+        logger.warning(
+            "sesion_aplicacion_invalida_o_expirada",
+            extra={},
+        )
         raise HTTPException(
             status_code=403,
             detail="Error: Token inválido o expirado",
             headers={"x-app-session-expired": "1"}
         )
     except HTTPException:
+        logger.warning(
+            "validacion_sesion_aplicacion_fallida",
+            extra={},
+        )
         # Si falla por typ u otras validaciones, lo tratamos igual que expirado/inválido
         raise HTTPException(
             status_code=403,
@@ -161,6 +176,10 @@ def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
     try:
         return decodifica_jwt(refresh_token, REFRESH_TOKEN_SECRET, "refresh")
     except InvalidTokenError:
+        logger.warning(
+            "decodificacion_refresh_fallida",
+            extra={},
+        )
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido o expirado")
 
 
@@ -177,9 +196,17 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
 
         usuario_id = payload.get("sub")
         if usuario_id is None or not isinstance(usuario_id, str):
+            logger.warning(
+                "access_token_sin_sub_valido",
+                extra={},
+            )
             raise HTTPException(status_code=401, detail="Error: Token no contiene un usuario válido")
 
         return usuario_id
     except InvalidTokenError:
+        logger.warning(
+            "access_token_invalido_o_expirado",
+            extra={},
+        )
         raise HTTPException(status_code=401, detail="Error: Token de acceso inválido o expirado")
     

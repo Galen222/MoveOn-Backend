@@ -8,6 +8,7 @@ posterior del perfil (consulta, actualización, foto y borrado).
 from fastapi import APIRouter, Depends, File, UploadFile, Request, Query, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
+import logging
 import auth
 import schemas
 from typing import List, Optional
@@ -19,6 +20,8 @@ from utils import calculos
 from starlette.concurrency import run_in_threadpool
 from config import settings
 from ip_rate_limit import rate_limit
+
+logger = logging.getLogger("app.users")
 
 # Inyectamos la dependencia a nivel de Router para todos los endpoints de este archivo
 router = APIRouter(
@@ -105,6 +108,16 @@ async def foto_perfil(
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
+    logger.info(
+        "actualizacion_foto_perfil_iniciada",
+        extra={
+            "usuario": usuario_actual,
+            "nombre_archivo": archivo.filename,
+            "content_type": archivo.content_type,
+            "storage_type": settings.STORAGE_TYPE,
+        },
+    )
+
     # 1) Validar imagen y recuperar los bytes ya leídos
     raw = await run_in_threadpool(file_service.validar_seguridad, archivo)
 
@@ -132,7 +145,27 @@ async def foto_perfil(
 
         await db.commit()
 
+        logger.info(
+            "foto_perfil_actualizada",
+            extra={
+                "usuario": usuario_actual,
+                "storage_type": settings.STORAGE_TYPE,
+                "tenia_foto_anterior": bool(foto_antigua),
+            },
+        )
+
     except HTTPException:
+        logger.warning(
+            "actualizacion_foto_perfil_error_controlado",
+            extra={
+                "usuario": usuario_actual,
+                "nombre_archivo": archivo.filename,
+                "content_type": archivo.content_type,
+                "storage_type": settings.STORAGE_TYPE,
+            },
+            exc_info=True,
+        )
+
         # En tests puede venir db=None; en producción normalmente será una sesión real
         if db is not None and hasattr(db, "rollback"):
             await db.rollback()
@@ -148,6 +181,16 @@ async def foto_perfil(
         raise
 
     except Exception:
+        logger.exception(
+            "actualizacion_foto_perfil_error_no_controlado",
+            extra={
+                "usuario": usuario_actual,
+                "nombre_archivo": archivo.filename,
+                "content_type": archivo.content_type,
+                "storage_type": settings.STORAGE_TYPE,
+            },
+        )
+
         if db is not None and hasattr(db, "rollback"):
             await db.rollback()
 
@@ -170,6 +213,15 @@ async def foto_perfil(
         and not str(foto_antigua).startswith("http")
         and (os.path.basename(str(foto_antigua)) != file_service.DEFAULT_AVATAR_SENTINEL)
     ):
+        logger.info(
+            "foto_perfil_antigua_programada_para_borrado",
+            extra={
+                "usuario": usuario_actual,
+                "foto_antigua": foto_antigua,
+                "storage_type": settings.STORAGE_TYPE,
+            },
+        )
+
         background_tasks.add_task(
             file_service.borrar_foto,
             foto_antigua,

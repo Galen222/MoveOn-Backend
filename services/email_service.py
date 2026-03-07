@@ -96,7 +96,7 @@ def _construir_mensaje(
             )
         else:
             logger.warning(
-                "email_html_part_missing",
+                "falta_parte_html_en_correo",
                 extra={
                     "email_destino": email_destino,
                     "logo_path": str(logo_path),
@@ -104,7 +104,7 @@ def _construir_mensaje(
             )
     else:
         logger.warning(
-            "email_logo_missing",
+            "logo_correo_no_encontrado",
             extra={
                 "email_destino": email_destino,
                 "logo_path": str(logo_path),
@@ -143,7 +143,7 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
             )
 
             logger.info(
-                "recovery_email_sent",
+                "correo_recuperacion_enviado",
                 extra={
                     "email_destino": email_destino,
                     "intento": intento,
@@ -160,7 +160,7 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
 
             if not transitorio:
                 logger.exception(
-                    "recovery_email_send_permanent_error",
+                    "error_permanente_envio_correo_recuperacion",
                     extra={
                         "email_destino": email_destino,
                         "intento": intento,
@@ -173,7 +173,7 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
                 return False
 
             logger.warning(
-                "recovery_email_send_transient_error",
+                "error_transitorio_envio_correo_recuperacion",
                 extra={
                     "email_destino": email_destino,
                     "intento": intento,
@@ -189,7 +189,7 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
                 await asyncio.sleep(base_delay * (2 ** (intento - 1)))
 
     logger.exception(
-        "recovery_email_send_exhausted",
+        "intentos_envio_correo_recuperacion_agotados",
         extra={
             "email_destino": email_destino,
             "max_retries": max_retries,

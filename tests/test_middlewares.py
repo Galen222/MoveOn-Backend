@@ -124,7 +124,7 @@ class TestRequestIdMiddlewareLogging:
         assert response.status_code == 200
 
         record = next(r for r in caplog.records if r.name == "app.request")
-        assert record.getMessage() == "request_completed"
+        assert record.getMessage() == "peticion_completada"
         assert record.request_id == "req-123"
         assert record.method == "GET"
         assert record.path == "/ping"
@@ -140,7 +140,7 @@ class TestRequestIdMiddlewareLogging:
         assert response.status_code == 500
 
         record = next(r for r in caplog.records if r.name == "app.request")
-        assert record.getMessage() == "request_failed"
+        assert record.getMessage() == "peticion_fallida"
         assert record.request_id == "req-err"
         assert record.method == "GET"
         assert record.path == "/boom"

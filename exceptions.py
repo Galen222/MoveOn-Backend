@@ -149,7 +149,7 @@ def manejador_excepcion_no_controlada(request: Request, exc: Exception) -> JSONR
     Captura errores no controlados para no devolver respuestas inconsistentes.
     """
     logging.getLogger("app.error").exception(
-        "unhandled_exception",
+        "excepcion_no_controlada",
         extra={
             "method": request.method,
             "path": request.url.path,

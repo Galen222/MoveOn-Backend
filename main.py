@@ -21,6 +21,7 @@ from exceptions import (
 import database
 from fastapi.staticfiles import StaticFiles
 import os
+import logging
 from config import settings
 
 from slowapi.errors import RateLimitExceeded
@@ -33,9 +34,22 @@ from services.identity_rate_limit import IdentityRateLimitExceeded
 
 setup_logging()
 
+logger = logging.getLogger("app.main")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info(
+        "aplicacion_iniciando",
+        extra={
+            "storage_type": settings.STORAGE_TYPE,
+            "enable_docs": settings.ENABLE_DOCS,
+            "enable_cors": settings.ENABLE_CORS,
+            "enable_rate_limit_ip": settings.ENABLE_RATE_LIMIT_IP,
+            "enable_rate_limit_id": settings.ENABLE_RATE_LIMIT_ID,
+        },
+    )
+
     # Inicializar base de datos.
     await database.init_db()
 
@@ -53,17 +67,30 @@ async def lifespan(app: FastAPI):
         # http://127.0.0.1:8000/imagenes/default_avatar.jpg
         app.mount("/imagenes", StaticFiles(directory=carpeta_imagenes), name="imagenes")
 
+    logger.info(
+        "aplicacion_iniciada",
+        extra={
+            "storage_type": settings.STORAGE_TYPE,
+            "upload_dir": settings.UPLOAD_DIR if settings.STORAGE_TYPE == "local" else None,
+        },
+    )
+
     yield
 
     # (Opcional) Cerrar recursos de la BD al apagar la app.
     await database.close_db()
+
+    logger.info(
+        "aplicacion_detenida",
+        extra={},
+    )
 
 
 # Declaración de API.
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.6.0",
+    version="0.6.5",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
@@ -88,6 +115,16 @@ if settings.ENABLE_SECURITY_HEADERS:
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     headers = getattr(exc, "headers", None) or {}
+
+    logger.warning(
+        "limite_por_ip_superado",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+            "client_ip": request.client.host if request.client else "-",
+        },
+    )
+
     return error_response(
         status_code=429,
         mensaje="Demasiadas peticiones. Inténtalo más tarde.",
@@ -148,8 +185,19 @@ async def healthz():
 async def readyz(db: AsyncSession = Depends(database.obtener_db)):
     try:
         await db.execute(text("SELECT 1"))
+
+        logger.debug(
+            "comprobacion_readiness_correcta",
+            extra={},
+        )
+
         return {"status": "ready", "database": "ok"}
     except Exception:
+        logger.exception(
+            "comprobacion_readiness_fallida",
+            extra={},
+        )
+
         return JSONResponse(
             status_code=503,
             content={"status": "not_ready", "database": "error"},

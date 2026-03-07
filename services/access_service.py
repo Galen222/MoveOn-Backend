@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import hashlib
 import hmac
+import logging
 import secrets
 import uuid
 
@@ -21,6 +22,8 @@ import schemas
 from config import settings
 from services import email_service
 from typing import Optional
+
+logger = logging.getLogger("app.auth")
 
 def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -91,6 +94,17 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
     db.add(sesion)
     await db.commit()
 
+    logger.info(
+        "sesion_login_creada",
+        extra={
+            "usuario": usuario.nombre_usuario,
+            "usuario_id": usuario.id,
+            "jti": jti,
+            "familia_id": familia_id,
+            "refresh_expira_dias": auth.REFRESH_TOKEN_EXPIRE_DAYS,
+        },
+    )
+
     token_acceso = auth.crear_token_acceso({"sub": usuario.nombre_usuario})
 
     return {
@@ -135,16 +149,40 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     )).scalar_one_or_none()
 
     if not sesion:
+        logger.warning(
+            "sesion_refresh_no_encontrada",
+            extra={
+                "usuario": nombre_usuario,
+                "jti": jti,
+                "familia_id": familia_id,
+            },
+        )
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido")
 
     refresh_hash = _hash_refresh_token(refresh_token)
     if not hmac.compare_digest(str(sesion.token_hash), refresh_hash):
+        logger.warning(
+            "hash_refresh_no_coincide",
+            extra={
+                "jti": jti,
+                "familia_id": sesion.familia_id,
+                "usuario_id": sesion.usuario_id,
+            },
+        )
         # Token manipulado / no coincide con el registrado
         await _revocar_familia_refresh(db, sesion.familia_id)
         await db.commit()
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido o reutilizado")
 
     if sesion.revocada_en is not None:
+        logger.warning(
+            "reutilizacion_refresh_detectada",
+            extra={
+                "jti": sesion.jti,
+                "familia_id": sesion.familia_id,
+                "usuario_id": sesion.usuario_id,
+            },
+        )
         # Reutilización de token rotado/revocado => revocamos toda la familia
         await _revocar_familia_refresh(db, sesion.familia_id)
         await db.commit()
@@ -152,6 +190,14 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
 
     ahora = _ahora_utc()
     if ahora > _normalizar_utc(sesion.expira_en):
+        logger.info(
+            "refresh_expirado",
+            extra={
+                "jti": sesion.jti,
+                "familia_id": sesion.familia_id,
+                "usuario_id": sesion.usuario_id,
+            },
+        )
         sesion.revocada_en = ahora
         await db.commit()
         raise HTTPException(status_code=401, detail="Error: Refresh token expirado")
@@ -161,6 +207,14 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     )).scalar_one_or_none()
 
     if not usuario:
+        logger.warning(
+            "usuario_refresh_no_encontrado",
+            extra={
+                "usuario_id": sesion.usuario_id,
+                "jti": sesion.jti,
+                "familia_id": sesion.familia_id,
+            },
+        )
         sesion.revocada_en = ahora
         await db.commit()
         raise HTTPException(status_code=401, detail="Error: Usuario no encontrado")
@@ -189,6 +243,17 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     await _limpiar_sesiones_refresh_usuario(db, usuario.id)
     db.add(nueva_sesion)
     await db.commit()
+
+    logger.info(
+        "sesion_refresh_rotada",
+        extra={
+            "usuario": usuario.nombre_usuario,
+            "usuario_id": usuario.id,
+            "jti_antiguo": jti,
+            "jti_nuevo": nuevo_jti,
+            "familia_id": sesion.familia_id,
+        },
+    )
     
     nuevo_token_acceso = auth.crear_token_acceso({"sub": usuario.nombre_usuario})
     
@@ -227,11 +292,19 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
     try:
         payload = auth.decodificar_token_refresh(refresh_token)
     except HTTPException:
+        logger.info(
+            "logout_idempotente_refresh_invalido",
+            extra={},
+        )
         # Idempotencia: no revelamos demasiado
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     jti = payload.get("jti")
     if not isinstance(jti, str) or not jti:
+        logger.warning(
+            "logout_payload_refresh_invalido",
+            extra={},
+        )
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     sesion = (await db.execute(
@@ -239,10 +312,23 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
     )).scalar_one_or_none()
 
     if not sesion:
+        logger.info(
+            "logout_idempotente_sesion_no_encontrada",
+            extra={
+                "jti": jti,
+            },
+        )
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     # Validamos hash para evitar revocar jti con token distinto manipulado
     if not hmac.compare_digest(str(sesion.token_hash), _hash_refresh_token(refresh_token)):
+        logger.warning(
+            "logout_hash_refresh_no_coincide",
+            extra={
+                "jti": jti,
+                "usuario_id": sesion.usuario_id,
+            },
+        )
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     if sesion.revocada_en is None:
@@ -250,6 +336,24 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
         sesion.revocada_en = ahora
         sesion.ultimo_uso_en = ahora
         await db.commit()
+
+        logger.info(
+            "logout_correcto",
+            extra={
+                "usuario_id": sesion.usuario_id,
+                "jti": sesion.jti,
+                "familia_id": sesion.familia_id,
+            },
+        )
+    else:
+        logger.info(
+            "logout_idempotente_ya_revocado",
+            extra={
+                "usuario_id": sesion.usuario_id,
+                "jti": sesion.jti,
+                "familia_id": sesion.familia_id,
+            },
+        )
 
     return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
@@ -274,6 +378,22 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
         # Envia el código por correo al usuario.
         background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo, int(settings.RECOVERY_CODE_EXPIRE_MINUTES))
 
+        logger.info(
+            "codigo_recuperacion_generado",
+            extra={
+                "usuario_id": usuario.id,
+                "email": email.lower(),
+                "expira_minutos": int(settings.RECOVERY_CODE_EXPIRE_MINUTES),
+            },
+        )
+    else:
+        logger.info(
+            "recuperacion_password_email_no_registrado",
+            extra={
+                "email": email.lower(),
+            },
+        )
+
     return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
 
 async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
@@ -289,9 +409,22 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
     )).scalar_one_or_none()
 
     if not usuario or not usuario.codigo_expiracion:
+        logger.warning(
+            "reset_password_codigo_o_email_invalidos",
+            extra={
+                "email": datos.email.lower(),
+            },
+        )
         raise HTTPException(status_code=400, detail="Error: Código o email inválidos")
 
     if _ahora_utc() > _normalizar_utc(usuario.codigo_expiracion):
+        logger.info(
+            "reset_password_codigo_expirado",
+            extra={
+                "usuario_id": usuario.id,
+                "email": datos.email.lower(),
+            },
+        )
         raise HTTPException(status_code=400, detail="Error: El código ha expirado")
 
     usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, datos.nueva_password)
@@ -309,4 +442,14 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
         .values(revocada_en=ahora)
     )
     await db.commit()
+
+    logger.info(
+        "password_actualizada_correctamente",
+        extra={
+            "usuario": usuario.nombre_usuario,
+            "usuario_id": usuario.id,
+            "tokens_refresh_revocados": True,
+        },
+    )
+
     return {"estatus": "success", "mensaje": "Contraseña actualizada correctamente"}
