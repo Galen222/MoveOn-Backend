@@ -18,6 +18,7 @@ pydantic-settings
 
 # --- Rate limiting ---
 slowapi
+cachetools
 
 # --- Servicios externos ---
 cloudinary
