@@ -246,8 +246,9 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
         return {"estatus": "success", "mensaje": "Sesión cerrada"}
 
     if sesion.revocada_en is None:
-        sesion.revocada_en = _ahora_utc()
-        sesion.ultimo_uso_en = _ahora_utc()
+        ahora = _ahora_utc()
+        sesion.revocada_en = ahora
+        sesion.ultimo_uso_en = ahora
         await db.commit()
 
     return {"estatus": "success", "mensaje": "Sesión cerrada"}

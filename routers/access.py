@@ -27,15 +27,18 @@ router = APIRouter(tags=["Seguridad"])
 
 
 # Valida el identificador de app y entrega un token de sesión temporal.
+# routers/access.py
 @router.get("/handshake", response_model=schemas.RespuestaHandshake)
 @rate_limit(settings.RL_HANDSHAKE)
-def handshake(
+async def handshake(
     request: Request,
     x_app_id: Optional[str] = Header(default=None)
 ):
     if not hmac.compare_digest((x_app_id or ""), settings.APP_ID):
-        raise HTTPException(status_code=403, detail="Error: El acceso no proviene de la aplicación MoveOn")
-    # Crea el token de corta duración.
+        raise HTTPException(
+            status_code=403,
+            detail="Error: El acceso no proviene de la aplicación MoveOn"
+        )
     return {"app_session_token": auth.crear_token_aplicacion()}
 
 

@@ -10,7 +10,8 @@ from datetime import datetime, date, timezone
 from typing import Optional, AsyncGenerator
 from urllib.parse import quote_plus
 from sqlalchemy import (
-    String, Date, DateTime, Boolean, Integer, BigInteger, Float, ForeignKey, Text, Index, func
+    String, Date, DateTime, Boolean, Integer, BigInteger, Float,
+    ForeignKey, Text, Index, func, CheckConstraint
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import (
@@ -159,7 +160,10 @@ class Actividad(Base):
         timezone=True),  default=lambda: datetime.now(timezone.utc), index=True)
     
     __table_args__ = (
-        # WHERE usuario_id = X ORDER BY fecha_ruta DESC, id DESC
+        CheckConstraint(
+            "ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048",
+            name="ck_actividades_ruta_mapa_url_len"
+        ),
         Index(
             "ix_actividades_usuario_fecha",
             "usuario_id",

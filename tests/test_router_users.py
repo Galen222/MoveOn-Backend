@@ -382,7 +382,8 @@ class TestFotoPerfil:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        monkeypatch.setattr(file_service, "validar_seguridad", lambda a: True)
+        monkeypatch.setattr(file_service, "validar_seguridad", lambda a: _make_jpeg_bytes())
+        monkeypatch.setattr(file_service, "procesar_subida", lambda a, u, raw, f=None: "temp.jpg")
 
         async def fake_obtener(db, usuario_actual, for_update=False):
             raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
@@ -394,8 +395,8 @@ class TestFotoPerfil:
     def test_subida_exitosa_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        monkeypatch.setattr(file_service, "validar_seguridad", lambda a: True)
-        monkeypatch.setattr(file_service, "procesar_subida", lambda a, u, f: "nueva_foto.jpg")
+        monkeypatch.setattr(file_service, "validar_seguridad", lambda a: _make_jpeg_bytes())
+        monkeypatch.setattr(file_service, "procesar_subida", lambda a, u, raw, f=None: "nueva_foto.jpg")
 
         db_mock = MagicMock()
         db_mock.commit = MagicMock(return_value=None)

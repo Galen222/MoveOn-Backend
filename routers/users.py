@@ -105,14 +105,15 @@ async def foto_perfil(
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
-    # 1) Validar imagen
-    await run_in_threadpool(file_service.validar_seguridad, archivo)
+    # 1) Validar imagen y recuperar los bytes ya leídos
+    raw = await run_in_threadpool(file_service.validar_seguridad, archivo)
 
-    # 2) Subir primero la nueva imagen (sin tocar aún la BD)
+    # 2) Subir primero la nueva imagen (sin releer el archivo)
     nueva_ruta_foto = await run_in_threadpool(
         file_service.procesar_subida,
         archivo,
         usuario_actual,
+        raw,
         None
     )
 

@@ -98,21 +98,23 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 
     return f"{url_base}/imagenes/{ruta}"
 
-def validar_seguridad(archivo: UploadFile):
-    # Validar tipo de archivo.
+# services/file_service.py
+
+def validar_seguridad(archivo: UploadFile) -> bytes:
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Error: Solo imágenes JPG o PNG")
 
-    # Validar tamaño máximo (por env). Leemos el tamaño del archivo desde el descriptor.
     archivo.file.seek(0, os.SEEK_END)
     tamano = archivo.file.tell()
     archivo.file.seek(0)
 
     if tamano > MAX_IMAGE_BYTES:
         mb = MAX_IMAGE_BYTES / (1024 * 1024)
-        raise HTTPException(status_code=400, detail=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)"
+        )
 
-    # Escaneo de firmas maliciosas
     content = archivo.file.read()
     archivo.file.seek(0)
 
@@ -121,14 +123,12 @@ def validar_seguridad(archivo: UploadFile):
         if signature in content_lower:
             raise HTTPException(status_code=400, detail="Error: Contenido malicioso detectado")
 
-    # Verificar que el archivo ES realmente una imagen (no solo el content_type)
     try:
         img = Image.open(BytesIO(content))
         img.verify()
     except (UnidentifiedImageError, OSError):
         raise HTTPException(status_code=400, detail="Error: El archivo no es una imagen válida")
 
-    # Validar dimensiones/píxeles (anti "decompression bomb")
     try:
         img2 = Image.open(BytesIO(content))
         img2.load()
@@ -139,19 +139,12 @@ def validar_seguridad(archivo: UploadFile):
     except Exception:
         raise HTTPException(status_code=400, detail="Error: El archivo no es una imagen válida")
 
-    return True
+    return content
 
 
-def _reencode_image(archivo: UploadFile, extension: str) -> bytes:
-    """
-    Re-encodea la imagen para:
-    - asegurar formato real (JPEG/PNG)
-    - eliminar metadata
-    """
-    archivo.file.seek(0)
-    raw = archivo.file.read()
-    archivo.file.seek(0)
+# services/file_service.py
 
+def _reencode_image(raw: bytes, extension: str) -> bytes:
     try:
         im = Image.open(BytesIO(raw))
         im.load()
@@ -160,67 +153,67 @@ def _reencode_image(archivo: UploadFile, extension: str) -> bytes:
 
     out = BytesIO()
 
-    # Elegimos formato final según la extensión calculada
     if extension == ".png":
-        # PNG puede mantener transparencia
         if im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGBA")
         im.save(out, format="PNG", optimize=True)
         data = out.getvalue()
 
-        # OJO: re-encode puede inflar tamaño -> revalidamos
         if len(data) > MAX_IMAGE_BYTES:
             mb = MAX_IMAGE_BYTES / (1024 * 1024)
-            raise HTTPException(status_code=400, detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)"
+            )
         return data
 
-    # JPEG por defecto
-    # JPEG no soporta alpha, convertimos a RGB si hace falta
     if im.mode in ("RGBA", "P"):
         im = im.convert("RGB")
 
     im.save(out, format="JPEG", optimize=True, quality=IMAGE_JPEG_QUALITY)
     data = out.getvalue()
 
-    # Revalidar tamaño tras re-encode
     if len(data) > MAX_IMAGE_BYTES:
         mb = MAX_IMAGE_BYTES / (1024 * 1024)
-        raise HTTPException(status_code=400, detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)"
+        )
 
     return data
 
 
-def procesar_subida(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Optional[str] = None) -> str:
-    """
-    Manejador de subida que elige entre Local o Nube.
-    - El parámetro `foto_anterior_bd` se mantiene por compatibilidad, pero NO se usa
-      para borrar la foto antigua durante la subida.
-    - La foto antigua se borra en routers/users.py tras un commit exitoso.
-    """
+# services/file_service.py
+
+def procesar_subida(
+    archivo: UploadFile,
+    usuario_actual: str,
+    raw: bytes,
+    foto_anterior_bd: Optional[str] = None
+) -> str:
     if settings.STORAGE_TYPE == "cloudinary":
-        return guardar_nube(archivo, usuario_actual)
-    return guardar_local(archivo, usuario_actual, foto_anterior_bd)
+        return guardar_nube(archivo, usuario_actual, raw)
+    return guardar_local(archivo, usuario_actual, raw, foto_anterior_bd)
 
 
-def guardar_local(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Optional[str] = None) -> str:
-    """Lógica de guardado local segura."""
+def guardar_local(
+    archivo: UploadFile,
+    usuario_actual: str,
+    raw: bytes,
+    foto_anterior_bd: Optional[str] = None
+) -> str:
     carpeta_imagenes = settings.UPLOAD_DIR
-
-    # Genera un HASH SHA-256 para el nombre del archivo de la foto de perfil.
     nombre_seguro = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
-    # Definir extensión segura basada en content_type
     mapa_extensiones = {
         "image/jpeg": ".jpg",
         "image/jpg": ".jpg",
-        "image/png": ".png"
+        "image/png": ".png",
     }
     extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 
-    # Re-encode para limpiar metadata y asegurar formato real
-    data_limpia = _reencode_image(archivo, extension)
+    data_limpia = _reencode_image(raw, extension)
 
-    # Construir la ruta final usando el hash.
     nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
     ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
 
@@ -228,24 +221,26 @@ def guardar_local(archivo: UploadFile, usuario_actual: str, foto_anterior_bd: Op
         with open(ruta_final, "wb") as buffer:
             buffer.write(data_limpia)
     except Exception:
-        raise HTTPException(status_code=500, detail="Error: No se ha podido guardar la imagen localmente")
+        raise HTTPException(
+            status_code=500,
+            detail="Error: No se ha podido guardar la imagen localmente"
+        )
 
     return nombre_archivo
 
 
-def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
-    """Lógica de guardado en Cloudinary usando Hash."""
+def guardar_nube(archivo: UploadFile, usuario_actual: str, raw: bytes) -> str:
     try:
         usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
 
         mapa_extensiones = {
             "image/jpeg": ".jpg",
             "image/jpg": ".jpg",
-            "image/png": ".png"
+            "image/png": ".png",
         }
         extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 
-        data_limpia = _reencode_image(archivo, extension)
+        data_limpia = _reencode_image(raw, extension)
 
         resultado = cloudinary.uploader.upload(
             BytesIO(data_limpia),
@@ -262,6 +257,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
                 detail="Error: Cloudinary no devolvió URL válida"
             )
         return url
+
     except HTTPException:
         raise
     except Exception:
