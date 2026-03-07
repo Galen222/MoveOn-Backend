@@ -257,3 +257,46 @@ class TestValidarFechaRuta:
     def test_acepta_none(self):
         # Si se pasa None, el validador devuelve None sin error
         assert validators.validar_fecha_ruta_logica(None) is None  # type: ignore[arg-type]
+
+
+# ─────────────────────────────────────────────
+# INTERCEPTAR ERROR PYDANTIC
+# ─────────────────────────────────────────────
+
+class TestInterceptarErrorPydantic:
+    def test_handler_ok_devuelve_resultado(self):
+        """Si el handler no lanza excepción, devuelve su resultado."""
+        handler = lambda v: v.upper()
+        resultado = validators.interceptar_error_pydantic("hola", handler, "Error custom")
+        assert resultado == "HOLA"
+
+    def test_handler_falla_lanza_valueerror_con_mensaje_custom(self):
+        """Si el handler lanza cualquier excepción, se reemplaza por ValueError con mensaje personalizado."""
+        def handler_que_falla(v):
+            raise TypeError("error interno de pydantic")
+
+        with pytest.raises(ValueError, match="Mi mensaje personalizado"):
+            validators.interceptar_error_pydantic("dato", handler_que_falla, "Mi mensaje personalizado")
+
+    def test_captura_cualquier_tipo_de_excepcion(self):
+        """No solo TypeError: cualquier Exception se intercepta."""
+        def handler_runtime(v):
+            raise RuntimeError("algo raro")
+
+        with pytest.raises(ValueError, match="Error capturado"):
+            validators.interceptar_error_pydantic(42, handler_runtime, "Error capturado")
+
+    def test_handler_con_none_funciona(self):
+        """Si el valor es None y el handler lo acepta, devuelve None."""
+        handler = lambda v: v
+        resultado = validators.interceptar_error_pydantic(None, handler, "Error")
+        assert resultado is None
+
+    def test_handler_con_valueerror_tambien_se_intercepta(self):
+        """Un ValueError del handler se reemplaza por el mensaje personalizado."""
+        def handler_value_error(v):
+            raise ValueError("mensaje original de pydantic")
+
+        with pytest.raises(ValueError, match="Mensaje limpio"):
+            validators.interceptar_error_pydantic("x", handler_value_error, "Mensaje limpio")
+            

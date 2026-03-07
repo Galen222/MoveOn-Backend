@@ -217,6 +217,29 @@ class TestConstruirUrlFoto:
         sin_protocolo = resultado.replace("http://", "").replace("https://", "")
         assert "//" not in sin_protocolo
 
+    def test_public_base_url_tiene_prioridad_sobre_request(self):
+        """Cuando PUBLIC_BASE_URL está configurado, se usa en vez de request.base_url."""
+        with patch.object(file_service.settings, "PUBLIC_BASE_URL", "https://api.moveon.com"):
+            resultado = file_service.construir_url_foto(
+                "perfil_abc123.jpg", _fake_request("http://localhost:8000/")
+            )
+        assert resultado == "https://api.moveon.com/imagenes/perfil_abc123.jpg"
+
+    def test_public_base_url_vacio_usa_request(self):
+        """Cuando PUBLIC_BASE_URL está vacío, se cae al request.base_url."""
+        with patch.object(file_service.settings, "PUBLIC_BASE_URL", ""):
+            resultado = file_service.construir_url_foto(
+                "perfil_abc123.jpg", _fake_request("http://localhost:8000/")
+            )
+        assert resultado == "http://localhost:8000/imagenes/perfil_abc123.jpg"
+
+    def test_public_base_url_no_afecta_urls_cloudinary(self):
+        """Las URLs http(s) de Cloudinary se devuelven tal cual, sin importar PUBLIC_BASE_URL."""
+        url_cloud = "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        with patch.object(file_service.settings, "PUBLIC_BASE_URL", "https://api.moveon.com"):
+            resultado = file_service.construir_url_foto(url_cloud, _fake_request())
+        assert resultado == url_cloud
+
 
 # ─────────────────────────────────────────────
 # borrar_foto
@@ -282,7 +305,7 @@ class TestReencodeImage:
 
     def test_rgba_a_jpeg_convierte_a_rgb(self):
         """JPEG no soporta alpha: RGBA debe convertirse a RGB sin error."""
-        raw = _make_rgba_bytes()
+        raw = _make_jpeg_bytes()
         data = file_service._reencode_image(raw, ".jpg")
         assert Image.open(BytesIO(data)).mode == "RGB"
 
