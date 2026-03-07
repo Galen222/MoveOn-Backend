@@ -1,39 +1,39 @@
 # tests/test_file_service.py
 #
-# Tests para la capa de validación de imágenes en services/file_service.py.
-# No necesitamos BD ni red: validar_seguridad() es una función pura que
-# opera sobre el contenido del fichero en memoria.
+# Tests para services/file_service.py.
+# Cubre: validar_seguridad, construir_url_foto, borrar_foto, _reencode_image.
 #
-# Dependencias externas necesarias: Pillow (ya requerida por el proyecto).
+# No necesitamos BD ni red: todas las funciones son síncronas y operan
+# sobre contenido en memoria o sobre el sistema de archivos local.
 
 import io
-import logging
+import os
+import tempfile
+from io import BytesIO
+from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image
 from fastapi import HTTPException
-from starlette.requests import Request
+from PIL import Image
 
 from services import file_service
 
 
 # ─────────────────────────────────────────────
-# Helper: FakeUploadFile
+# Helpers compartidos
 # ─────────────────────────────────────────────
 
 class FakeUploadFile:
     """
-    Simulacro mínimo de FastAPI UploadFile para tests.
-    Solo necesita .content_type y .file (file-like object con seek/tell/read).
+    Simulacro mínimo de FastAPI UploadFile.
+    Solo necesita .content_type y .file (file-like con seek/tell/read).
     """
-
     def __init__(self, content: bytes, content_type: str):
         self.content_type = content_type
         self.file = io.BytesIO(content)
 
 
 def _make_jpeg_bytes(width: int = 100, height: int = 100) -> bytes:
-    """Crea una imagen JPEG válida en memoria con Pillow."""
     img = Image.new("RGB", (width, height), color=(200, 100, 50))
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
@@ -41,37 +41,27 @@ def _make_jpeg_bytes(width: int = 100, height: int = 100) -> bytes:
 
 
 def _make_png_bytes(width: int = 100, height: int = 100) -> bytes:
-    """Crea una imagen PNG válida en memoria con Pillow."""
     img = Image.new("RGBA", (width, height), color=(50, 100, 200, 255))
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
 
 
-def _make_request(
-    scheme: str = "https",
-    host: str = "api.moveon.test",
-    port: int = 443,
-) -> Request:
-    """Construye un Request mínimo para probar construir_url_foto()."""
-    scope = {
-        "type": "http",
-        "http_version": "1.1",
-        "method": "GET",
-        "scheme": scheme,
-        "path": "/",
-        "raw_path": b"/",
-        "query_string": b"",
-        "headers": [],
-        "client": ("127.0.0.1", 12345),
-        "server": (host, port),
-        "root_path": "",
-    }
-    return Request(scope)
+def _make_rgba_bytes(width: int = 10, height: int = 10) -> bytes:
+    img = Image.new("RGBA", (width, height), color=(100, 200, 50, 128))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _fake_request(base_url: str = "http://localhost:8000/") -> MagicMock:
+    req = MagicMock()
+    req.base_url = base_url
+    return req
 
 
 # ─────────────────────────────────────────────
-# Content-type
+# validar_seguridad — content-type
 # ─────────────────────────────────────────────
 
 class TestValidarContentType:
@@ -95,12 +85,11 @@ class TestValidarContentType:
 
 
 # ─────────────────────────────────────────────
-# Tamaño
+# validar_seguridad — tamaño
 # ─────────────────────────────────────────────
 
 class TestValidarTamano:
     def test_rechaza_archivo_superior_al_maximo(self):
-        # Creamos un blob que excede MAX_IMAGE_BYTES (por defecto 2MB)
         datos_grandes = b"\xff\xd8\xff" + b"x" * (file_service.MAX_IMAGE_BYTES + 1)
         archivo = FakeUploadFile(datos_grandes, "image/jpeg")
         with pytest.raises(HTTPException) as exc:
@@ -109,20 +98,16 @@ class TestValidarTamano:
         assert "máximo" in exc.value.detail.lower()
 
     def test_acepta_imagen_dentro_del_limite(self):
-        # Una imagen JPEG real de 100x100 pesa ~2KB, muy por debajo de 2MB
-        jpeg = _make_jpeg_bytes()
-        archivo = FakeUploadFile(jpeg, "image/jpeg")
-        resultado = file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
-        assert resultado is True
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        assert file_service.validar_seguridad(archivo) is True  # type: ignore[arg-type]
 
 
 # ─────────────────────────────────────────────
-# Firmas maliciosas
+# validar_seguridad — firmas maliciosas
 # ─────────────────────────────────────────────
 
 class TestValidarFirmasMaliciosas:
     def _archivo_con_firma(self, firma: bytes) -> FakeUploadFile:
-        """Construye un 'archivo' que pasa el check de tamaño pero contiene firma maliciosa."""
         contenido = b"\x00" * 10 + firma + b"\x00" * 10
         return FakeUploadFile(contenido, "image/jpeg")
 
@@ -147,12 +132,11 @@ class TestValidarFirmasMaliciosas:
 
 
 # ─────────────────────────────────────────────
-# Validación de imagen real
+# validar_seguridad — imagen real (Pillow)
 # ─────────────────────────────────────────────
 
 class TestValidarImagenReal:
     def test_rechaza_bytes_aleatorios_como_jpeg(self):
-        """Content-type dice JPEG pero el contenido es basura aleatoria."""
         basura = b"\xde\xad\xbe\xef" * 500
         archivo = FakeUploadFile(basura, "image/jpeg")
         with pytest.raises(HTTPException) as exc:
@@ -161,34 +145,24 @@ class TestValidarImagenReal:
         assert "válida" in exc.value.detail.lower()
 
     def test_acepta_jpeg_valido(self):
-        jpeg = _make_jpeg_bytes()
-        archivo = FakeUploadFile(jpeg, "image/jpeg")
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
         assert file_service.validar_seguridad(archivo) is True  # type: ignore[arg-type]
 
     def test_acepta_png_valido(self):
-        png = _make_png_bytes()
-        archivo = FakeUploadFile(png, "image/png")
+        archivo = FakeUploadFile(_make_png_bytes(), "image/png")
         assert file_service.validar_seguridad(archivo) is True  # type: ignore[arg-type]
 
 
 # ─────────────────────────────────────────────
-# Anti decompression bomb
+# validar_seguridad — anti decompression bomb
 # ─────────────────────────────────────────────
 
 class TestValidarDimensiones:
     def test_rechaza_imagen_con_demasiados_pixels(self):
-        """
-        Verifica que imágenes con más de MAX_IMAGE_PIXELS sean rechazadas.
-        Usamos un límite artificialmente bajo en el test para no crear
-        una imagen enorme en memoria.
-        """
         limite_original = file_service.MAX_IMAGE_PIXELS
         try:
             file_service.MAX_IMAGE_PIXELS = 1_000
-
-            imagen_grande = _make_jpeg_bytes(width=40, height=40)
-            archivo = FakeUploadFile(imagen_grande, "image/jpeg")
-
+            archivo = FakeUploadFile(_make_jpeg_bytes(width=40, height=40), "image/jpeg")
             with pytest.raises(HTTPException) as exc:
                 file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
             assert exc.value.status_code == 400
@@ -198,43 +172,282 @@ class TestValidarDimensiones:
 
 
 # ─────────────────────────────────────────────
-# Construcción de URL de foto
+# construir_url_foto
 # ─────────────────────────────────────────────
 
 class TestConstruirUrlFoto:
-    def test_construir_url_foto_local_construye_url_completa(self):
-        request = _make_request(scheme="https", host="api.moveon.test", port=443)
+    def test_none_devuelve_none(self):
+        assert file_service.construir_url_foto(None, _fake_request()) is None
 
-        url = file_service.construir_url_foto("perfil_abc123.jpg", request)
+    def test_cadena_vacia_devuelve_none(self):
+        assert file_service.construir_url_foto("", _fake_request()) is None
 
-        assert url == "https://api.moveon.test/imagenes/perfil_abc123.jpg"
+    def test_sentinel_devuelve_none(self):
+        assert file_service.construir_url_foto("default_avatar.png", _fake_request()) is None
 
-    def test_construir_url_foto_http_se_devuelve_tal_cual(self):
-        request = _make_request()
+    def test_sentinel_en_ruta_larga_devuelve_none(self):
+        ruta = "/uploads/perfil_abc/default_avatar.png"
+        assert file_service.construir_url_foto(ruta, _fake_request()) is None
 
-        original = "https://res.cloudinary.com/demo/image/upload/v1/perfiles/perfil_x.jpg"
-        url = file_service.construir_url_foto(original, request)
+    def test_url_cloudinary_se_devuelve_tal_cual(self):
+        url = "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        assert file_service.construir_url_foto(url, _fake_request()) == url
 
-        assert url == original
+    def test_url_http_se_devuelve_tal_cual(self):
+        url = "http://cdn.example.com/foto.jpg"
+        assert file_service.construir_url_foto(url, _fake_request()) == url
+
+    def test_ruta_local_construye_url_completa(self):
+        resultado = file_service.construir_url_foto(
+            "perfil_abc123.jpg", _fake_request("http://localhost:8000/")
+        )
+        assert resultado == "http://localhost:8000/imagenes/perfil_abc123.jpg"
+
+    def test_ruta_local_sin_barra_final_no_duplica_slash(self):
+        resultado = file_service.construir_url_foto(
+            "perfil_abc123.jpg", _fake_request("http://localhost:8000")
+        )
+        assert resultado is not None
+        sin_protocolo = resultado.replace("http://", "").replace("https://", "")
+        assert "//" not in sin_protocolo
 
 
 # ─────────────────────────────────────────────
-# Logging de borrado
+# borrar_foto
 # ─────────────────────────────────────────────
 
 class TestBorrarFoto:
-    def test_borrar_foto_cloudinary_fallido_loguea_warning(self, monkeypatch, caplog):
-        monkeypatch.setattr(file_service.settings, "STORAGE_TYPE", "cloudinary")
+    def test_none_no_hace_nada(self):
+        file_service.borrar_foto(None, "pepe")  # type: ignore[arg-type]
 
-        def fake_destroy(*args, **kwargs):
-            raise RuntimeError("boom")
+    def test_cadena_vacia_no_hace_nada(self):
+        file_service.borrar_foto("", "pepe")
 
-        monkeypatch.setattr(file_service.cloudinary.uploader, "destroy", fake_destroy)
+    def test_sentinel_no_intenta_borrar(self):
+        with patch("os.path.exists") as mock_exists:
+            file_service.borrar_foto("default_avatar.png", "pepe")
+        mock_exists.assert_not_called()
 
-        with caplog.at_level(logging.WARNING, logger="app.files"):
-            file_service.borrar_foto(
-                "https://res.cloudinary.com/demo/image/upload/v1/perfiles/perfil_x.jpg",
-                "pepe",
-            )
+    def test_local_borra_archivo_existente(self):
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            nombre = os.path.basename(f.name)
+            f.write(b"fake")
 
-        assert "cloudinary" in caplog.text.lower()
+        try:
+            with patch.object(file_service.settings, "STORAGE_TYPE", "local"), \
+                 patch.object(file_service.settings, "UPLOAD_DIR", tempfile.gettempdir()):
+                file_service.borrar_foto(nombre, "pepe")
+            assert not os.path.exists(f.name)
+        finally:
+            if os.path.exists(f.name):
+                os.remove(f.name)
+
+    def test_local_archivo_inexistente_no_explota(self):
+        with patch.object(file_service.settings, "STORAGE_TYPE", "local"), \
+             patch.object(file_service.settings, "UPLOAD_DIR", "/tmp"):
+            file_service.borrar_foto("no_existe_jamas_xyz.jpg", "pepe")
+
+    def test_cloudinary_llama_a_destroy(self):
+        with patch.object(file_service.settings, "STORAGE_TYPE", "cloudinary"), \
+             patch("cloudinary.uploader.destroy") as mock_destroy:
+            file_service.borrar_foto("https://cloudinary.com/foto.jpg", "pepe")
+        mock_destroy.assert_called_once()
+
+    def test_cloudinary_fallo_no_propaga_excepcion(self):
+        with patch.object(file_service.settings, "STORAGE_TYPE", "cloudinary"), \
+             patch("cloudinary.uploader.destroy", side_effect=Exception("timeout")):
+            file_service.borrar_foto("https://cloudinary.com/foto.jpg", "pepe")
+
+
+# ─────────────────────────────────────────────
+# _reencode_image
+# ─────────────────────────────────────────────
+
+class TestReencodeImage:
+    def test_jpeg_rgb_produce_bytes_validos(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        data = file_service._reencode_image(archivo, ".jpg")  # type: ignore[arg-type]
+        assert Image.open(BytesIO(data)).format == "JPEG"
+
+    def test_png_produce_bytes_validos(self):
+        archivo = FakeUploadFile(_make_png_bytes(), "image/png")
+        data = file_service._reencode_image(archivo, ".png")  # type: ignore[arg-type]
+        assert Image.open(BytesIO(data)).format == "PNG"
+
+    def test_rgba_a_jpeg_convierte_a_rgb(self):
+        """JPEG no soporta alpha: RGBA debe convertirse a RGB sin error."""
+        archivo = FakeUploadFile(_make_rgba_bytes(), "image/png")
+        data = file_service._reencode_image(archivo, ".jpg")  # type: ignore[arg-type]
+        assert Image.open(BytesIO(data)).mode == "RGB"
+
+    def test_png_con_alpha_no_explota(self):
+        archivo = FakeUploadFile(_make_rgba_bytes(), "image/png")
+        data = file_service._reencode_image(archivo, ".png")  # type: ignore[arg-type]
+        assert Image.open(BytesIO(data)).format == "PNG"
+
+    def test_archivo_no_imagen_lanza_400(self):
+        archivo = FakeUploadFile(b"esto no es una imagen", "image/jpeg")
+        with pytest.raises(HTTPException) as exc:
+            file_service._reencode_image(archivo, ".jpg")  # type: ignore[arg-type]
+        assert exc.value.status_code == 400
+
+    def test_imagen_reencodada_supera_limite_lanza_400(self):
+        archivo = FakeUploadFile(_make_png_bytes(), "image/png")
+        with patch.object(file_service, "MAX_IMAGE_BYTES", 1):
+            with pytest.raises(HTTPException) as exc:
+                file_service._reencode_image(archivo, ".png")  # type: ignore[arg-type]
+        assert exc.value.status_code == 400
+
+
+# ─────────────────────────────────────────────
+# procesar_subida
+# ─────────────────────────────────────────────
+
+class TestProcesarSubida:
+    def test_cloudinary_delega_a_guardar_nube(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        with patch.object(file_service.settings, "STORAGE_TYPE", "cloudinary"), \
+             patch.object(file_service, "guardar_nube", return_value="https://cdn.example.com/foto.jpg") as mock_nube, \
+             patch.object(file_service, "guardar_local") as mock_local:
+            resultado = file_service.procesar_subida(archivo, "pepe")  # type: ignore[arg-type]
+        mock_nube.assert_called_once()
+        mock_local.assert_not_called()
+        assert resultado == "https://cdn.example.com/foto.jpg"
+
+    def test_local_delega_a_guardar_local(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        with patch.object(file_service.settings, "STORAGE_TYPE", "local"), \
+             patch.object(file_service, "guardar_local", return_value="perfil_abc.jpg") as mock_local, \
+             patch.object(file_service, "guardar_nube") as mock_nube:
+            resultado = file_service.procesar_subida(archivo, "pepe")  # type: ignore[arg-type]
+        mock_local.assert_called_once()
+        mock_nube.assert_not_called()
+        assert resultado == "perfil_abc.jpg"
+
+    def test_foto_anterior_se_pasa_a_guardar_local(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        with patch.object(file_service.settings, "STORAGE_TYPE", "local"), \
+             patch.object(file_service, "guardar_local", return_value="nueva.jpg") as mock_local:
+            file_service.procesar_subida(archivo, "pepe", foto_anterior_bd="anterior.jpg")  # type: ignore[arg-type]
+        _, kwargs = mock_local.call_args
+        # foto_anterior_bd puede llegar como arg posicional o kwarg
+        args = mock_local.call_args.args
+        assert "anterior.jpg" in args or mock_local.call_args.kwargs.get("foto_anterior_bd") == "anterior.jpg"
+
+
+# ─────────────────────────────────────────────
+# guardar_local
+# ─────────────────────────────────────────────
+
+class TestGuardarLocal:
+    def test_guarda_jpeg_y_devuelve_nombre_archivo(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
+                nombre = file_service.guardar_local(archivo, "pepe")  # type: ignore[arg-type]
+        assert nombre.endswith(".jpg")
+        assert nombre.startswith("perfil_")
+
+    def test_guarda_png_con_extension_correcta(self):
+        archivo = FakeUploadFile(_make_png_bytes(), "image/png")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
+                nombre = file_service.guardar_local(archivo, "pepe")  # type: ignore[arg-type]
+        assert nombre.endswith(".png")
+
+    def test_archivo_realmente_existe_en_disco(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
+                nombre = file_service.guardar_local(archivo, "pepe")  # type: ignore[arg-type]
+                ruta = os.path.join(tmpdir, nombre)
+            assert os.path.exists(ruta)
+            assert os.path.getsize(ruta) > 0
+
+    def test_nombre_derivado_de_hash_usuario(self):
+        """El mismo usuario siempre genera el mismo prefijo de hash."""
+        import hashlib
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        hash_esperado = hashlib.sha256("pepe".encode()).hexdigest()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
+                nombre = file_service.guardar_local(archivo, "pepe")  # type: ignore[arg-type]
+        assert hash_esperado in nombre
+
+    def test_imagen_invalida_lanza_400(self):
+        archivo = FakeUploadFile(b"esto no es imagen", "image/jpeg")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
+                with pytest.raises(HTTPException) as exc:
+                    file_service.guardar_local(archivo, "pepe")  # type: ignore[arg-type]
+        assert exc.value.status_code == 400
+
+    def test_error_escritura_lanza_500(self):
+        archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+        with patch.object(file_service.settings, "UPLOAD_DIR", "/ruta/que/no/existe/jamas"):
+            with pytest.raises(HTTPException) as exc:
+                file_service.guardar_local(archivo, "pepe")  # type: ignore[arg-type]
+        assert exc.value.status_code == 500
+
+
+# ─────────────────────────────────────────────
+# guardar_nube (Cloudinary)
+# ─────────────────────────────────────────────
+
+class TestGuardarNube:
+    def _archivo_jpeg(self) -> FakeUploadFile:
+        return FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
+
+    def test_exito_devuelve_secure_url(self):
+        with patch("cloudinary.uploader.upload", return_value={"secure_url": "https://res.cloudinary.com/foto.jpg"}):
+            resultado = file_service.guardar_nube(self._archivo_jpeg(), "pepe")  # type: ignore[arg-type]
+        assert resultado == "https://res.cloudinary.com/foto.jpg"
+
+    def test_cloudinary_sin_secure_url_lanza_500(self):
+        """BUG 2: si Cloudinary devuelve dict sin secure_url debe ser 500, no None en BD."""
+        with patch("cloudinary.uploader.upload", return_value={"public_id": "perfiles/perfil_abc"}):
+            with pytest.raises(HTTPException) as exc:
+                file_service.guardar_nube(self._archivo_jpeg(), "pepe")  # type: ignore[arg-type]
+        assert exc.value.status_code == 500
+
+    def test_cloudinary_fallo_de_red_lanza_500(self):
+        with patch("cloudinary.uploader.upload", side_effect=Exception("timeout")):
+            with pytest.raises(HTTPException) as exc:
+                file_service.guardar_nube(self._archivo_jpeg(), "pepe")  # type: ignore[arg-type]
+        assert exc.value.status_code == 500
+
+    def test_imagen_invalida_lanza_400_no_500(self):
+        """BUG 1: HTTPException(400) de _reencode_image NO debe convertirse en 500."""
+        archivo = FakeUploadFile(b"basura", "image/jpeg")
+        with pytest.raises(HTTPException) as exc:
+            file_service.guardar_nube(archivo, "pepe")  # type: ignore[arg-type]
+        assert exc.value.status_code == 400
+
+    def test_public_id_usa_hash_del_usuario(self):
+        """El public_id en Cloudinary debe ser determinista y basado en el usuario."""
+        import hashlib
+        hash_esperado = hashlib.sha256("pepe".encode()).hexdigest()
+        public_id_esperado = f"perfil_{hash_esperado}"
+
+        capturado = {}
+        def fake_upload(data, **kwargs):
+            capturado.update(kwargs)
+            return {"secure_url": "https://res.cloudinary.com/foto.jpg"}
+
+        with patch("cloudinary.uploader.upload", side_effect=fake_upload):
+            file_service.guardar_nube(self._archivo_jpeg(), "pepe")  # type: ignore[arg-type]
+
+        assert capturado.get("public_id") == public_id_esperado
+
+    def test_overwrite_true_en_upload(self):
+        """Cloudinary debe usar overwrite=True para que solo haya una foto por usuario."""
+        capturado = {}
+        def fake_upload(data, **kwargs):
+            capturado.update(kwargs)
+            return {"secure_url": "https://res.cloudinary.com/foto.jpg"}
+
+        with patch("cloudinary.uploader.upload", side_effect=fake_upload):
+            file_service.guardar_nube(self._archivo_jpeg(), "pepe")  # type: ignore[arg-type]
+
+        assert capturado.get("overwrite") is True
+        

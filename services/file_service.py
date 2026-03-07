@@ -252,7 +252,16 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str) -> str:
             overwrite=True,
             resource_type="image"
         )
-        return resultado.get("secure_url")
+
+        url = resultado.get("secure_url")
+        if not url:
+            raise HTTPException(
+                status_code=500,
+                detail="Error: Cloudinary no devolvió URL válida"
+            )
+        return url
+    except HTTPException:
+        raise
     except Exception:
         logger.exception(
             "Error: No se ha podido subir la imagen a la nube. usuario=%s content_type=%s",
