@@ -132,19 +132,23 @@ async def foto_perfil(
         await db.commit()
 
     except HTTPException:
-        await db.rollback()
+        # En tests puede venir db=None; en producción normalmente será una sesión real
+        if db is not None and hasattr(db, "rollback"):
+            await db.rollback()
 
-        # Si falla después de subir la nueva y estamos en local, la limpiamos
+        # Si ya habíamos subido la nueva imagen y luego falla el flujo, la limpiamos
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
             await run_in_threadpool(
                 file_service.borrar_foto,
                 nueva_ruta_foto,
                 usuario_actual
             )
+
         raise
 
     except Exception:
-        await db.rollback()
+        if db is not None and hasattr(db, "rollback"):
+            await db.rollback()
 
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
             await run_in_threadpool(
