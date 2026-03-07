@@ -104,7 +104,7 @@ async def identity_rate_limit_handler(request: Request, exc: IdentityRateLimitEx
 if settings.ENABLE_CORS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
+        allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
