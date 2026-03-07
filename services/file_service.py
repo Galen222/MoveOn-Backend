@@ -84,17 +84,19 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
         return None
 
     # Si alguien guardó "default_avatar.png" en BD (o viene en ruta), no se sirve desde backend
-    if os.path.basename(foto_perfil) == DEFAULT_AVATAR_SENTINEL:
+    if os.path.basename(str(foto_perfil)) == DEFAULT_AVATAR_SENTINEL:
         return None
 
-    # Si la foto es de Cloudinary (empieza por http), se usa tal cual.
-    if foto_perfil.startswith("http"):
-        return foto_perfil
+    # Si la foto es de Cloudinary (empieza por http), se usa tal cual
+    if str(foto_perfil).startswith("http"):
+        return str(foto_perfil)
 
-    # Si es local, se construye la URL.
-    url_base = str(request.base_url).rstrip("/")
-    return f"{url_base}/imagenes/{foto_perfil}"
+    # Si hay URL pública configurada, se usa siempre
+    url_base = settings.PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
 
+    ruta = str(foto_perfil).lstrip("/")
+
+    return f"{url_base}/imagenes/{ruta}"
 
 def validar_seguridad(archivo: UploadFile):
     # Validar tipo de archivo.

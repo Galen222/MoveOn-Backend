@@ -105,49 +105,71 @@ async def foto_perfil(
     usuario_actual: str = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
-    # Validaciones de seguridad de la imagen (se ejecutan en threadpool porque Pillow es CPU/IO)
+    # 1) Validar imagen
     await run_in_threadpool(file_service.validar_seguridad, archivo)
 
-    # Obtenemos el usuario para saber qué foto tiene actualmente
-    usuario = await user_service.obtener_perfil(db, usuario_actual)
-
-    foto_antigua = usuario.foto_perfil
-
-    # Subimos la nueva imagen.
-    # Importante: NO borramos aquí la foto antigua (eso se hace tras commit).
+    # 2) Subir primero la nueva imagen (sin tocar aún la BD)
     nueva_ruta_foto = await run_in_threadpool(
         file_service.procesar_subida,
         archivo,
         usuario_actual,
-        None  # <- no pasar foto anterior para evitar borrados prematuros
+        None
     )
 
-    # Si la subida fue exitosa, se actualiza la base de datos con la nueva ruta
-    usuario.foto_perfil = nueva_ruta_foto
+    foto_antigua = None
 
-    # Commit protegido: si falla, hacemos rollback y limpiamos la nueva foto (evitar huérfanas)
     try:
+        # 3) Bloquear la fila solo en el momento de actualizar la BD
+        usuario = await user_service.obtener_perfil(
+            db,
+            usuario_actual,
+            for_update=True
+        )
+
+        foto_antigua = usuario.foto_perfil
+        usuario.foto_perfil = nueva_ruta_foto
+
         await db.commit()
+
+    except HTTPException:
+        await db.rollback()
+
+        # Si falla después de subir la nueva y estamos en local, la limpiamos
+        if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
+            await run_in_threadpool(
+                file_service.borrar_foto,
+                nueva_ruta_foto,
+                usuario_actual
+            )
+        raise
+
     except Exception:
         await db.rollback()
 
-        # Si el storage es local, podemos borrar la imagen recién subida.
-        # En Cloudinary, el flujo actual hace overwrite por public_id, así que "borrar la nueva"
-        # equivaldría a borrar la imagen del usuario (y no podemos restaurar la anterior sin más).
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
-            await run_in_threadpool(file_service.borrar_foto, nueva_ruta_foto, usuario_actual)
+            await run_in_threadpool(
+                file_service.borrar_foto,
+                nueva_ruta_foto,
+                usuario_actual
+            )
 
-        raise HTTPException(status_code=500, detail="Error: No se ha podido actualizar la foto de perfil")
+        raise HTTPException(
+            status_code=500,
+            detail="Error: No se ha podido actualizar la foto de perfil"
+        )
 
-    # Solo si el commit fue exitoso, borramos la antigua (evita desync).
-    # Solo aplica a almacenamiento local (en Cloudinary se usa overwrite).
+    # 4) Solo después del commit borramos la antigua
     if (
         settings.STORAGE_TYPE != "cloudinary"
         and foto_antigua
         and not str(foto_antigua).startswith("http")
         and (os.path.basename(str(foto_antigua)) != file_service.DEFAULT_AVATAR_SENTINEL)
     ):
-        background_tasks.add_task(file_service.borrar_foto, foto_antigua, usuario_actual)
+        background_tasks.add_task(
+            file_service.borrar_foto,
+            foto_antigua,
+            usuario_actual
+        )
 
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
