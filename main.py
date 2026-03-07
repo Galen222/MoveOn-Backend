@@ -4,11 +4,13 @@
 Punto de Entrada Principal - MoveOn API.
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from routers import users, access, activities
 from exceptions import (
     manejador_validacion_personalizado,
@@ -136,6 +138,22 @@ app.include_router(activities.router)
 @rate_limit(settings.RL_ROOT)
 async def home(request: Request):
     return {"estado": "en linea", "aplicacion": "MoveOn API"}
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    return {"status": "ok"}
+
+
+@app.get("/readyz", include_in_schema=False)
+async def readyz(db: AsyncSession = Depends(database.obtener_db)):
+    try:
+        await db.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "ok"}
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "database": "error"},
+        )
 
 # Endpoint icono.
 @app.get("/favicon.ico", include_in_schema=False)
