@@ -1,13 +1,13 @@
-# exceptions.py
-
 """
 Módulo de Manejo de Excepciones Personalizadas.
 """
-from fastapi import Request, status, HTTPException
-from fastapi.responses import JSONResponse
+
 from typing import Any, Mapping
-import re
 import logging
+import re
+
+from fastapi import HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 
 def error_response(
@@ -23,7 +23,7 @@ def error_response(
     """
     content: dict[str, Any] = {
         "estatus": "error",
-        "mensaje": mensaje
+        "mensaje": mensaje,
     }
 
     if detail is not None:
@@ -32,40 +32,88 @@ def error_response(
     return JSONResponse(
         status_code=status_code,
         content=content,
-        headers=headers
+        headers=headers,
     )
+
+
+def _limpiar_mensaje_validacion(error: dict[str, Any]) -> str:
+    """
+    Limpia el mensaje de validación manteniendo compatibilidad con la salida actual.
+
+    Estrategia:
+    - Si Pydantic V2 expone la excepción original en ctx["error"], la usamos.
+      Esto evita depender de prefijos técnicos como "Value error, ".
+    - Para el resto, mantenemos una limpieza conservadora del mensaje original.
+    - No introducimos traducciones nuevas para no cambiar la salida actual.
+    """
+    tipo = error.get("type", "")
+    ctx = error.get("ctx") or {}
+    mensaje_original = str(error.get("msg", "") or "")
+
+    # Caso ideal en Pydantic V2: recuperamos el ValueError/AssertionError original
+    if tipo in ("value_error", "assertion_error"):
+        ctx_error = ctx.get("error")
+        if ctx_error:
+            msg = str(ctx_error).strip()
+            return (msg[:1].upper() + msg[1:]) if msg else msg
+
+    # Compatibilidad con el comportamiento actual:
+    # limpiar solo prefijos técnicos conocidos, sin reinterpretar el mensaje.
+    msg = mensaje_original
+
+    prefijos_a_limpiar = (
+        "Value error, ",
+        "Assertion failed, ",
+    )
+    for prefijo in prefijos_a_limpiar:
+        if msg.startswith(prefijo):
+            msg = msg[len(prefijo):]
+            break
+
+    # Conserva tu limpieza anterior por regex para casos residuales
+    # sin tocar el significado del mensaje.
+    msg = re.sub(r"^(Value error,\s*)", "", msg, flags=re.IGNORECASE).strip()
+
+    # Capitalizar como hasta ahora
+    return (msg[:1].upper() + msg[1:]) if msg else msg
 
 
 def manejador_validacion_personalizado(request: Request, exc: Any) -> JSONResponse:
     """
-    Intercepta errores de validación y limpia los prefijos técnicos.
-    Mantiene el formato 'detail' + 'columna/mensaje' que Android ya soporta.
+    Intercepta errores de validación y los transforma al formato estándar que consume Android:
+    {
+      "estatus": "error",
+      "mensaje": "Solicitud inválida",
+      "detail": [
+        {"columna": "...", "mensaje": "..."}
+      ]
+    }
+
+    Mantiene compatibilidad:
+    - claves: columna, mensaje
+    - capitalización del mensaje
+    - limpieza del prefijo técnico de Pydantic
     """
     errores_limpios: list[dict[str, Any]] = []
 
     if hasattr(exc, "errors"):
         for error in exc.errors():
-            mensaje_original = error.get("msg", "")
-            mensaje_limpio = re.sub(
-                r"^(Value error,\s*|Assertion failed,\s*|Input should be.*,\s*)",
-                "",
-                mensaje_original
-            )
-
             loc = error.get("loc") or []
             campo = loc[-1] if loc else "general"
-            msg = mensaje_limpio.strip()
-            msg = (msg[:1].upper() + msg[1:]) if msg else msg
 
-            errores_limpios.append({
-                "columna": campo,
-                "mensaje": msg
-            })
+            msg = _limpiar_mensaje_validacion(error)
+
+            errores_limpios.append(
+                {
+                    "columna": str(campo),
+                    "mensaje": msg,
+                }
+            )
 
     return error_response(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         mensaje="Solicitud inválida",
-        detail=errores_limpios
+        detail=errores_limpios,
     )
 
 
@@ -78,7 +126,7 @@ def manejador_http_exception(request: Request, exc: HTTPException) -> JSONRespon
         return error_response(
             status_code=exc.status_code,
             mensaje=exc.detail,
-            headers=exc.headers
+            headers=exc.headers,
         )
 
     if isinstance(exc.detail, list):
@@ -86,13 +134,13 @@ def manejador_http_exception(request: Request, exc: HTTPException) -> JSONRespon
             status_code=exc.status_code,
             mensaje="Solicitud inválida",
             detail=exc.detail,
-            headers=exc.headers
+            headers=exc.headers,
         )
 
     return error_response(
         status_code=exc.status_code,
         mensaje="Error en la solicitud",
-        headers=exc.headers
+        headers=exc.headers,
     )
 
 
@@ -108,6 +156,6 @@ def manejador_excepcion_no_controlada(request: Request, exc: Exception) -> JSONR
 
     return error_response(
         status_code=500,
-        mensaje="Ha ocurrido un error interno"
+        mensaje="Ha ocurrido un error interno",
     )
     
