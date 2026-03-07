@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Operacional
     AUTO_CREATE_TABLES: bool = False
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+
     # Seguridad App
     APP_ID: str
     APP_SESSION_SECRET: str
@@ -63,7 +66,7 @@ class Settings(BaseSettings):
     EMAIL_PASS: str
     EMAIL_TIMEOUT_SECONDS: float = 10.0
     EMAIL_MAX_RETRIES: int = 3
-    EMAIL_RETRY_BASE_DELAY_SECONDS: float = 1.0    
+    EMAIL_RETRY_BASE_DELAY_SECONDS: float = 1.0
 
     # JWT hardening (mismo issuer/audience para TODOS los JWT)
     JWT_ISSUER: str = "moveon_api"
@@ -211,7 +214,7 @@ class Settings(BaseSettings):
             "cambiar",
             "cabiame",
             "secreto",
-            "contraseña",            
+            "contraseña",
         }
         if value.lower() in valores_inseguros:
             raise ValueError(f"{info.field_name} no puede ser un valor trivial")

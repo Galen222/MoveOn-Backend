@@ -98,7 +98,6 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 
     return f"{url_base}/imagenes/{ruta}"
 
-# services/file_service.py
 
 def validar_seguridad(archivo: UploadFile) -> bytes:
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
@@ -142,8 +141,6 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
     return content
 
 
-# services/file_service.py
-
 def _reencode_image(raw: bytes, extension: str) -> bytes:
     try:
         im = Image.open(BytesIO(raw))
@@ -182,8 +179,6 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
 
     return data
 
-
-# services/file_service.py
 
 def procesar_subida(
     archivo: UploadFile,
@@ -262,9 +257,12 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str, raw: bytes) -> str:
         raise
     except Exception:
         logger.exception(
-            "Error: No se ha podido subir la imagen a la nube. usuario=%s content_type=%s",
-            usuario_actual,
-            archivo.content_type
+            "cloudinary_upload_failed",
+            extra={
+                "usuario": usuario_actual,
+                "content_type": archivo.content_type,
+                "storage_type": settings.STORAGE_TYPE,
+            },
         )
         raise HTTPException(
             status_code=500,
@@ -293,10 +291,13 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
             )
         except Exception:
             logger.warning(
-                "Error: El borrado de foto en cloudinary ha fallado. usuario=%s foto=%s",
-                usuario_actual,
-                foto_perfil,
-                exc_info=True
+                "cloudinary_delete_failed",
+                extra={
+                    "usuario": usuario_actual,
+                    "foto": foto_perfil,
+                    "storage_type": settings.STORAGE_TYPE,
+                },
+                exc_info=True,
             )
         return
 
@@ -308,10 +309,13 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
             os.remove(ruta)
     except Exception:
         logger.warning(
-            "Error: El borrado de foto local ha fallado. usuario=%s foto=%s",
-            usuario_actual,
-            foto_perfil,
-            exc_info=True
+            "local_file_delete_failed",
+            extra={
+                "usuario": usuario_actual,
+                "foto": foto_perfil,
+                "storage_type": settings.STORAGE_TYPE,
+            },
+            exc_info=True,
         )
         return
     

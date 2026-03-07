@@ -8,7 +8,7 @@
 # que es la forma más fiable de disparar un RequestValidationError real.
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -109,7 +109,6 @@ class TestManejadorHttpException:
 
         assert resp.status_code == 500
         assert body["estatus"] == "error"
-        # No revela detalles internos
         assert "unexpected" not in body.get("mensaje", "")
 
     def test_propaga_headers_de_la_excepcion(self):
@@ -139,7 +138,6 @@ class TestManejadorExcepcionNoControlada:
 
         assert resp.status_code == 500
         assert body["estatus"] == "error"
-        # No revela el detalle del error interno
         assert "interno" in body["mensaje"].lower()
         assert "ValueError" not in body["mensaje"]
         assert "algo interno" not in body["mensaje"]
@@ -148,6 +146,23 @@ class TestManejadorExcepcionNoControlada:
         for exc in [RuntimeError("x"), KeyError("k"), Exception("genérica")]:
             resp = manejador_excepcion_no_controlada(_fake_request(), exc)
             assert resp.status_code == 500
+
+    def test_loggea_error_global_con_campos_estructurados(self):
+        fake_logger = MagicMock()
+
+        with patch("exceptions.logging.getLogger", return_value=fake_logger) as mock_get_logger:
+            resp = manejador_excepcion_no_controlada(_fake_request(), RuntimeError("boom"))
+
+        assert resp.status_code == 500
+        mock_get_logger.assert_called_once_with("app.error")
+        fake_logger.exception.assert_called_once()
+
+        args, kwargs = fake_logger.exception.call_args
+        assert args[0] == "unhandled_exception"
+        assert kwargs["extra"] == {
+            "method": "GET",
+            "path": "/test",
+        }
 
 
 # ─────────────────────────────────────────────

@@ -152,7 +152,9 @@ class TestConstruirMensaje:
             )
 
         assert msg["To"] == "pepe@test.com"
-        assert "No se encontró el logo del email" in caplog.text
+        record = next(r for r in caplog.records if r.name == "app.email")
+        assert record.getMessage() == "email_logo_missing"
+        assert record.email_destino == "pepe@test.com"
 
 
 class TestEnviarCodigoRecuperacion:
@@ -398,3 +400,4 @@ class TestEnviarCodigoRecuperacion:
         assert ok is False
         assert mock_send.await_count == 1
         mock_sleep.assert_not_awaited()
+        

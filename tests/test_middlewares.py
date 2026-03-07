@@ -31,6 +31,17 @@ def _build_request_id_app() -> FastAPI:
     return app
 
 
+def _build_request_id_error_app() -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(RequestContextMiddleware)
+
+    @app.get("/boom")
+    async def boom():
+        raise RuntimeError("boom")
+
+    return app
+
+
 def _build_security_headers_app() -> FastAPI:
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)
@@ -86,7 +97,6 @@ class TestRequestIdMiddleware:
         response = client.get("/ping")
 
         request_id = response.headers["X-Request-ID"]
-        # Lanza ValueError si no es un UUID válido
         parsed = uuid.UUID(request_id)
         assert str(parsed) == request_id
 
@@ -102,6 +112,40 @@ class TestRequestIdMiddleware:
         response = client.get("/ping", headers={"X-Request-ID": "mi-id-custom"})
 
         assert response.headers["X-Request-ID"] == "mi-id-custom"
+
+
+class TestRequestIdMiddlewareLogging:
+    def test_loggea_request_completed_con_campos_estructurados(self, caplog):
+        client = TestClient(_build_request_id_app())
+
+        with caplog.at_level("INFO", logger="app.request"):
+            response = client.get("/ping", headers={"X-Request-ID": "req-123"})
+
+        assert response.status_code == 200
+
+        record = next(r for r in caplog.records if r.name == "app.request")
+        assert record.getMessage() == "request_completed"
+        assert record.request_id == "req-123"
+        assert record.method == "GET"
+        assert record.path == "/ping"
+        assert record.status_code == 200
+        assert isinstance(record.duration_ms, int)
+
+    def test_loggea_request_failed_con_campos_estructurados(self, caplog):
+        client = TestClient(_build_request_id_error_app(), raise_server_exceptions=False)
+
+        with caplog.at_level("ERROR", logger="app.request"):
+            response = client.get("/boom", headers={"X-Request-ID": "req-err"})
+
+        assert response.status_code == 500
+
+        record = next(r for r in caplog.records if r.name == "app.request")
+        assert record.getMessage() == "request_failed"
+        assert record.request_id == "req-err"
+        assert record.method == "GET"
+        assert record.path == "/boom"
+        assert record.status_code == 500
+        assert isinstance(record.duration_ms, int)
 
 
 # ─────────────────────────────────────────────

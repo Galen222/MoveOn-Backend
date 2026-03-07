@@ -10,7 +10,6 @@ import aiosmtplib
 from aiosmtplib.errors import (
     SMTPAuthenticationError,
     SMTPConnectError,
-    SMTPException,
     SMTPNotSupported,
     SMTPRecipientRefused,
     SMTPRecipientsRefused,
@@ -23,7 +22,7 @@ from aiosmtplib.errors import (
 from services import email_templates
 from config import settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.email")
 
 
 def _es_error_transitorio(exc: Exception) -> bool:
@@ -61,7 +60,12 @@ def _es_error_transitorio(exc: Exception) -> bool:
     return False
 
 
-def _construir_mensaje(email_destino: str, codigo: str, minutos: int, smtp_username: str) -> EmailMessage:
+def _construir_mensaje(
+    email_destino: str,
+    codigo: str,
+    minutos: int,
+    smtp_username: str,
+) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = "Código de recuperación - MoveOn"
     msg["From"] = formataddr(("MoveOn App", smtp_username))
@@ -92,10 +96,20 @@ def _construir_mensaje(email_destino: str, codigo: str, minutos: int, smtp_usern
             )
         else:
             logger.warning(
-                "No se encontró la parte HTML del email para adjuntar el logo inline"
+                "email_html_part_missing",
+                extra={
+                    "email_destino": email_destino,
+                    "logo_path": str(logo_path),
+                },
             )
     else:
-        logger.warning("No se encontró el logo del email en %s", logo_path)
+        logger.warning(
+            "email_logo_missing",
+            extra={
+                "email_destino": email_destino,
+                "logo_path": str(logo_path),
+            },
+        )
 
     return msg
 
@@ -127,11 +141,16 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
                 start_tls=True,
                 timeout=timeout,
             )
+
             logger.info(
-                "Correo de recuperación enviado a %s en intento %s/%s",
-                email_destino,
-                intento,
-                max_retries,
+                "recovery_email_sent",
+                extra={
+                    "email_destino": email_destino,
+                    "intento": intento,
+                    "max_retries": max_retries,
+                    "smtp_host": smtp_server,
+                    "smtp_port": smtp_port,
+                },
             )
             return True
 
@@ -141,28 +160,43 @@ async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: i
 
             if not transitorio:
                 logger.exception(
-                    "ERROR SMTP permanente al enviar email a %s (intento %s/%s)",
-                    email_destino,
-                    intento,
-                    max_retries,
+                    "recovery_email_send_permanent_error",
+                    extra={
+                        "email_destino": email_destino,
+                        "intento": intento,
+                        "max_retries": max_retries,
+                        "smtp_host": smtp_server,
+                        "smtp_port": smtp_port,
+                        "error_type": type(exc).__name__,
+                    },
                 )
                 return False
 
             logger.warning(
-                "Fallo transitorio al enviar email a %s (intento %s/%s): %s",
-                email_destino,
-                intento,
-                max_retries,
-                exc,
+                "recovery_email_send_transient_error",
+                extra={
+                    "email_destino": email_destino,
+                    "intento": intento,
+                    "max_retries": max_retries,
+                    "smtp_host": smtp_server,
+                    "smtp_port": smtp_port,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
             )
 
             if intento < max_retries:
                 await asyncio.sleep(base_delay * (2 ** (intento - 1)))
 
     logger.exception(
-        "ERROR AL ENVIAR EMAIL a %s tras %s intentos",
-        email_destino,
-        max_retries,
+        "recovery_email_send_exhausted",
+        extra={
+            "email_destino": email_destino,
+            "max_retries": max_retries,
+            "smtp_host": smtp_server,
+            "smtp_port": smtp_port,
+            "error_type": type(ultimo_error).__name__ if ultimo_error else None,
+        },
         exc_info=ultimo_error,
     )
     return False
