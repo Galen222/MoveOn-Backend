@@ -7,6 +7,7 @@ python-dotenv
 # --- Base de Datos ---
 sqlalchemy
 asyncpg
+alembic
 
 # --- Seguridad / Autenticación ---
 PyJWT

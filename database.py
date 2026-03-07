@@ -11,7 +11,7 @@ from typing import Optional, AsyncGenerator
 from urllib.parse import quote_plus
 from sqlalchemy import (
     String, Date, DateTime, Boolean, Integer, BigInteger, Float,
-    ForeignKey, Text, Index, func, CheckConstraint
+    ForeignKey, Text, Index, func, CheckConstraint, text
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import (
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
 )
+import sqlalchemy as sa
 
 from config import settings
 
@@ -82,12 +83,13 @@ class Usuario(Base):
         codigo_expiracion: Tiempo de expiración del código de recuperación.
     """
     __tablename__ = "usuarios"
+
     # Identificadores y datos de acceso
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    nombre_usuario: Mapped[str] = mapped_column(
-        String, unique=True, index=True)
-    email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre_usuario: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False)
     password_encriptada: Mapped[str] = mapped_column(String, nullable=False)
+
     # Información personal y perfil
     nombre_real: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
@@ -96,36 +98,71 @@ class Usuario(Base):
     peso: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     provincia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     foto_perfil: Mapped[str] = mapped_column(
-        String, default="default_avatar.png")
-    total_metros: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", index=True)
-    # Metadatos automáticos del servidor
-    fecha_registro: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    fecha_eula: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    acepta_terminos: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False)
-    version_terminos: Mapped[Optional[str]] = mapped_column(
-        String(10), nullable=True)
-    # Ajustes de privacidad del usuario
-    perfil_visible: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False)
-    # Recuperación de contraseña
-    # Guardamos el HMAC-SHA256 del código (64 caracteres), no el código en claro
-    codigo_recuperacion: Mapped[Optional[str]
-                                ] = mapped_column(String(64), nullable=True)
-    codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        # Evita duplicados tipo Usuario/usuARio/USUARIO
-        Index("uq_usuarios_nombre_usuario_lower",
-              func.lower(nombre_usuario), unique=True),
-
-        # Blinda incluso si alguien guarda emails con mayúsculas
-        Index("uq_usuarios_email_lower", func.lower(email), unique=True),
+        String,
+        default="default_avatar.png",
+        server_default="default_avatar.png",
+        nullable=False,
+    )
+    total_metros: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        server_default=text("0"),
+        index=True,
     )
 
+    # Metadatos automáticos
+    fecha_registro: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
+    fecha_eula: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    acepta_terminos: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=sa.false(),
+        nullable=False,
+    )
+    version_terminos: Mapped[Optional[str]] = mapped_column(
+        String(10),
+        nullable=True,
+    )
+
+    # Ajustes de privacidad
+    perfil_visible: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=sa.true(),
+        nullable=False,
+    )
+
+    # Recuperación de contraseña
+    codigo_recuperacion: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    codigo_expiracion: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_usuarios_nombre_usuario_lower",
+            func.lower(nombre_usuario),
+            unique=True,
+        ),
+        Index(
+            "uq_usuarios_email_lower",
+            func.lower(email),
+            unique=True,
+        ),
+    )
 
 class Actividad(Base):
     """
@@ -143,7 +180,7 @@ class Actividad(Base):
         fecha_ruta: fecha en la que se realizo la ruta.
     """
     __tablename__ = "actividades"
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey(
         "usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
     # Datos de ruta.
@@ -156,8 +193,13 @@ class Actividad(Base):
     ruta_polilinea: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Instantanea del mapa
     ruta_mapa_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    fecha_ruta: Mapped[datetime] = mapped_column(DateTime(
-        timezone=True),  default=lambda: datetime.now(timezone.utc), index=True)
+    fecha_ruta: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+        index=True,
+    )
     
     __table_args__ = (
         CheckConstraint(
@@ -182,7 +224,7 @@ class SesionRefresh(Base):
     """
     __tablename__ = "sesiones_refresh"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey(
         "usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
     # Identidad del refresh token (JWT)
@@ -192,7 +234,11 @@ class SesionRefresh(Base):
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     # Ciclo de vida
     creada_en: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
     ultimo_uso_en: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
     expira_en: Mapped[datetime] = mapped_column(
