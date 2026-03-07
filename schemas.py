@@ -8,7 +8,7 @@ asegurando que cumplan con las reglas de negocio antes de tocar la DB.
 """
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator, StrictInt, ConfigDict, AnyHttpUrl
 from datetime import date, datetime
-from typing import Optional, Any
+from typing import Optional, Any, List
 import re
 from enum import Enum
 from utils import validators
@@ -652,6 +652,14 @@ class RespuestaObtenerActividad(BaseModel):
     ruta_mapa_url: Optional[str] = None
     fecha_ruta: datetime
     nuevo_total_puntos: Optional[int] = None
+
+
+class RespuestaObtenerActividadesPaginada(BaseModel):
+    items: List[RespuestaObtenerActividad]
+    total: int
+    skip: int
+    limit: int
+    has_more: bool
 
 
 class RespuestaBorrarActividad(BaseModel):

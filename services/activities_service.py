@@ -1,7 +1,7 @@
 # services/activities_service.py
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import case, select, delete as sa_delete, func
+from sqlalchemy import func, case, select, delete as sa_delete, func
 from fastapi import HTTPException
 import database
 import schemas
@@ -85,11 +85,8 @@ async def obtener_actividad(db: AsyncSession, usuario_actual: str, id_actividad:
 
 async def obtener_actividades(db: AsyncSession, usuario_actual: str, skip: int, limit: int):
     """
-    Obtiene la lista paginada de actividades del usuario autenticado.
-
-    Mejora de rendimiento:
-    - Evita el round-trip extra (buscar usuario -> luego actividades)
-    - Usa una subquery con el id del usuario
+    Obtiene la lista paginada de actividades del usuario autenticado
+    junto con metadata de paginación.
     """
     subq_usuario_id = (
         select(database.Usuario.id)
@@ -97,13 +94,27 @@ async def obtener_actividades(db: AsyncSession, usuario_actual: str, skip: int, 
         .scalar_subquery()
     )
 
-    actividades = (await db.execute(
+    total = (await db.execute(
+        select(func.count())
+        .select_from(database.Actividad)
+        .where(database.Actividad.usuario_id == subq_usuario_id)
+    )).scalar_one()
+
+    items = (await db.execute(
         select(database.Actividad)
         .where(database.Actividad.usuario_id == subq_usuario_id)
         .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())
         .offset(skip)
         .limit(limit)
     )).scalars().all()
+
+    return {
+        "items": items,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "has_more": (skip + limit) < total,
+    }
 
     # Nota: si el usuario no existiera (caso raro aquí), devolvería [] en vez de 404.
     # En un endpoint autenticado normalmente es aceptable.

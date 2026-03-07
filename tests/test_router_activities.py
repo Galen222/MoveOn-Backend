@@ -292,27 +292,51 @@ class TestObtenerTodasValidacion:
 
 
 class TestObtenerTodasLogica:
-    def test_devuelve_lista_de_actividades(self, monkeypatch):
+    def test_devuelve_lista_paginada_de_actividades(self, monkeypatch):
         app = _app_con_overrides()
 
         async def fake_obtener(db, usuario_actual, skip, limit):
-            return [_actividad_fake(id=1), _actividad_fake(id=2)]
+            return {
+                "items": [_actividad_fake(id=1), _actividad_fake(id=2)],
+                "total": 2,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
         response = TestClient(app).get("/actividad/obtener_todas")
         assert response.status_code == 200
-        assert len(response.json()) == 2
 
-    def test_lista_vacia_devuelve_200(self, monkeypatch):
+        body = response.json()
+        assert len(body["items"]) == 2
+        assert body["total"] == 2
+        assert body["skip"] == 0
+        assert body["limit"] == 20
+        assert body["has_more"] is False
+
+    def test_lista_vacia_devuelve_200_con_metadata(self, monkeypatch):
         app = _app_con_overrides()
 
         async def fake_obtener(db, usuario_actual, skip, limit):
-            return []
+            return {
+                "items": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
         response = TestClient(app).get("/actividad/obtener_todas")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "items": [],
+            "total": 0,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
 
     def test_skip_y_limit_se_pasan_al_servicio(self, monkeypatch):
         app = _app_con_overrides()
@@ -321,7 +345,13 @@ class TestObtenerTodasLogica:
         async def fake_obtener(db, usuario_actual, skip, limit):
             capturado["skip"] = skip
             capturado["limit"] = limit
-            return []
+            return {
+                "items": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
         TestClient(app).get("/actividad/obtener_todas", params={"skip": 20, "limit": 10})
@@ -334,12 +364,35 @@ class TestObtenerTodasLogica:
         async def fake_obtener(db, usuario_actual, skip, limit):
             capturado["skip"] = skip
             capturado["limit"] = limit
-            return []
+            return {
+                "items": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
         TestClient(app).get("/actividad/obtener_todas")
         assert capturado["skip"] == 0
         assert capturado["limit"] == 20
+
+    def test_has_more_true_se_refleja_en_la_respuesta(self, monkeypatch):
+        app = _app_con_overrides()
+
+        async def fake_obtener(db, usuario_actual, skip, limit):
+            return {
+                "items": [_actividad_fake(id=1), _actividad_fake(id=2)],
+                "total": 5,
+                "skip": skip,
+                "limit": limit,
+                "has_more": True,
+            }
+
+        monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
+        response = TestClient(app).get("/actividad/obtener_todas", params={"skip": 0, "limit": 2})
+        assert response.status_code == 200
+        assert response.json()["has_more"] is True
 
 
 # ─────────────────────────────────────────────

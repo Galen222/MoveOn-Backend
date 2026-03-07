@@ -220,26 +220,46 @@ class TestObtenerActividad:
 
 class TestObtenerActividades:
     @pytest.mark.asyncio
-    async def test_devuelve_lista_de_actividades(self):
+    async def test_devuelve_items_y_metadata(self):
         actividades = [_make_actividad(id=i) for i in range(3)]
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = actividades
+
+        mock_result_total = MagicMock()
+        mock_result_total.scalar_one.return_value = 3
+
+        mock_result_items = MagicMock()
+        mock_result_items.scalars.return_value.all.return_value = actividades
+
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=mock_result)
+        db.execute = AsyncMock(side_effect=[mock_result_total, mock_result_items])
 
-        resultado = await activities_service.obtener_actividades(db, "pepe", skip=0, limit=20)
+        resultado = await activities_service.obtener_actividades(db, "pepe", skip=0, limit=2)
 
-        assert resultado == actividades
+        assert resultado["items"] == actividades
+        assert resultado["total"] == 3
+        assert resultado["skip"] == 0
+        assert resultado["limit"] == 2
+        assert resultado["has_more"] is True
 
     @pytest.mark.asyncio
-    async def test_usuario_sin_actividades_devuelve_lista_vacia(self):
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
+    async def test_lista_vacia_devuelve_metadata_correcta(self):
+        mock_result_total = MagicMock()
+        mock_result_total.scalar_one.return_value = 0
+
+        mock_result_items = MagicMock()
+        mock_result_items.scalars.return_value.all.return_value = []
+
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=mock_result)
+        db.execute = AsyncMock(side_effect=[mock_result_total, mock_result_items])
 
         resultado = await activities_service.obtener_actividades(db, "pepe", skip=0, limit=20)
-        assert resultado == []
+
+        assert resultado == {
+            "items": [],
+            "total": 0,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
 
 
 # ─────────────────────────────────────────────

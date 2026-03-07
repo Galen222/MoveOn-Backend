@@ -43,7 +43,7 @@ async def obtener_actividad(
     return await activities_service.obtener_actividad(db, usuario_actual, id_actividad)
 
 
-@router.get("/actividad/obtener_todas", response_model=List[schemas.RespuestaObtenerActividad])
+@router.get("/actividad/obtener_todas", response_model=schemas.RespuestaObtenerActividadesPaginada)
 @rate_limit(settings.RL_ACTIVIDAD_OBTENER_TODAS)
 async def obtener_todas_actividades(
     request: Request,
