@@ -1,6 +1,6 @@
 MoveON - Aplicación deportiva para guardar rutas de movimiento andando o corriendo.
 
-Backend Python desarrollado en Visual Studio Code (FastAPI) y Base de Datos PostgreSQL.
+Backend desarrollado en Python con FastAPI y Base de Datos PostgreSQL.
 
 
 🚀 Guía para Colaboradores
