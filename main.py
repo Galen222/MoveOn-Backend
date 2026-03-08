@@ -41,17 +41,6 @@ logger = logging.getLogger("app.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(
-        "aplicacion_iniciando",
-        extra={
-            "storage_type": settings.STORAGE_TYPE,
-            "enable_docs": settings.ENABLE_DOCS,
-            "enable_cors": settings.ENABLE_CORS,
-            "enable_rate_limit_ip": settings.ENABLE_RATE_LIMIT_IP,
-            "enable_rate_limit_id": settings.ENABLE_RATE_LIMIT_ID,
-        },
-    )
-
     # Inicializar base de datos.
     await database.init_db()
 
@@ -73,7 +62,13 @@ async def lifespan(app: FastAPI):
         "aplicacion_iniciada",
         extra={
             "storage_type": settings.STORAGE_TYPE,
-            "upload_dir": settings.UPLOAD_DIR if settings.STORAGE_TYPE == "local" else None,
+            "enable_docs": settings.ENABLE_DOCS,
+            "enable_cors": settings.ENABLE_CORS,
+            "enable_rate_limit_ip": settings.ENABLE_RATE_LIMIT_IP,
+            "enable_rate_limit_id": settings.ENABLE_RATE_LIMIT_ID,
+            "enable_security_headers": settings.ENABLE_SECURITY_HEADERS,
+            "trust_proxy_lan": settings.TRUST_PROXY_LAN,
+            "trust_proxy_wan": settings.TRUST_PROXY_WAN,
         },
     )
 
@@ -92,7 +87,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.7.5",
+    version="0.7.6",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,

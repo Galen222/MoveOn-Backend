@@ -6,7 +6,9 @@
 #   - RequestContextMiddleware  (middlewares/request_context.py)
 #   - SecurityHeadersMiddleware (middlewares/security_headers.py)
 
+import logging
 import uuid
+from contextlib import contextmanager
 
 import middlewares.security_headers as security_headers_module
 import pytest
@@ -71,6 +73,22 @@ def _sec_monkeypatch(monkeypatch, **overrides):
         monkeypatch.setattr(security_headers_module.settings, key, value)
 
 
+@contextmanager
+def _capture_logger(caplog, logger_name: str, level: int):
+    logger = logging.getLogger(logger_name)
+    old_level = logger.level
+
+    caplog.clear()
+    logger.addHandler(caplog.handler)
+    logger.setLevel(level)
+
+    try:
+        yield logger
+    finally:
+        logger.removeHandler(caplog.handler)
+        logger.setLevel(old_level)
+
+
 # ─────────────────────────────────────────────
 # RequestContextMiddleware
 # ─────────────────────────────────────────────
@@ -118,7 +136,7 @@ class TestRequestIdMiddlewareLogging:
     def test_loggea_request_completed_con_campos_estructurados(self, caplog):
         client = TestClient(_build_request_id_app())
 
-        with caplog.at_level("INFO", logger="app.request"):
+        with _capture_logger(caplog, "app.request", logging.INFO):
             response = client.get("/ping", headers={"X-Request-ID": "req-123"})
 
         assert response.status_code == 200
@@ -134,7 +152,7 @@ class TestRequestIdMiddlewareLogging:
     def test_loggea_request_failed_con_campos_estructurados(self, caplog):
         client = TestClient(_build_request_id_error_app(), raise_server_exceptions=False)
 
-        with caplog.at_level("ERROR", logger="app.request"):
+        with _capture_logger(caplog, "app.request", logging.ERROR):
             response = client.get("/boom", headers={"X-Request-ID": "req-err"})
 
         assert response.status_code == 500

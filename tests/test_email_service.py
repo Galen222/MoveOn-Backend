@@ -1,5 +1,7 @@
 # tests/test_email_service.py
 
+import logging
+from contextlib import contextmanager
 from email.message import EmailMessage
 from unittest.mock import AsyncMock, mock_open, patch
 
@@ -37,6 +39,22 @@ def _extraer_html(msg: EmailMessage) -> str:
     html = html_part.get_content()
     assert isinstance(html, str)
     return html
+
+
+@contextmanager
+def _capture_logger(caplog, logger_name: str, level: int):
+    logger = logging.getLogger(logger_name)
+    old_level = logger.level
+
+    caplog.clear()
+    logger.addHandler(caplog.handler)
+    logger.setLevel(level)
+
+    try:
+        yield logger
+    finally:
+        logger.removeHandler(caplog.handler)
+        logger.setLevel(old_level)
 
 
 class TestEsErrorTransitorio:
@@ -139,17 +157,18 @@ class TestConstruirMensaje:
     def test_si_logo_no_existe_loggea_warning(self, monkeypatch, caplog):
         _configurar_settings(monkeypatch)
 
-        with patch.object(email_service.Path, "exists", return_value=False), patch.object(
-            email_service.email_templates,
-            "recuperacion_password_template",
-            return_value="<html><body>sin logo</body></html>",
-        ):
-            msg = email_service._construir_mensaje(
-                "pepe@test.com",
-                "123456",
-                15,
-                "test@example.com",
-            )
+        with _capture_logger(caplog, "app.email", logging.WARNING):
+            with patch.object(email_service.Path, "exists", return_value=False), patch.object(
+                email_service.email_templates,
+                "recuperacion_password_template",
+                return_value="<html><body>sin logo</body></html>",
+            ):
+                msg = email_service._construir_mensaje(
+                    "pepe@test.com",
+                    "123456",
+                    15,
+                    "test@example.com",
+                )
 
         assert msg["To"] == "pepe@test.com"
         record = next(r for r in caplog.records if r.name == "app.email")
