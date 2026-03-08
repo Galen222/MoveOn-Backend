@@ -428,7 +428,7 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     resultados = (await db.execute(query)).all()
 
     ranking = []
-    for nombre_usuario, foto_perfil, foto_fecha, total_metros in resultados:
+    for nombre_usuario, foto_perfil, total_metros, foto_fecha in resultados:
         puntos = calculos.calcular_puntos_nivel(total_metros)
         foto_version = int(foto_fecha.timestamp()) if foto_fecha else 0        
         ranking.append({

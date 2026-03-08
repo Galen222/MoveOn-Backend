@@ -381,8 +381,8 @@ class TestEliminarCuenta:
 class TestObtenerRanking:
     @pytest.mark.asyncio
     async def test_ranking_sin_filtro_devuelve_lista(self):
-        fila1 = ("pepe", None, 50_000)
-        fila2 = ("ana", None, 30_000)
+        fila1 = ("pepe", None, 50_000, None)
+        fila2 = ("ana", None, 30_000, None)
         mock_result = MagicMock()
         mock_result.all.return_value = [fila1, fila2]
         db = AsyncMock()
@@ -393,6 +393,7 @@ class TestObtenerRanking:
         assert len(resultado) == 2
         assert resultado[0]["nombre_usuario"] == "pepe"
         assert "total_puntos" in resultado[0]
+        assert resultado[0]["foto_version"] == 0
 
     @pytest.mark.asyncio
     async def test_ranking_con_provincia_filtra_correctamente(self):
@@ -410,7 +411,7 @@ class TestObtenerRanking:
     @pytest.mark.asyncio
     async def test_puntos_calculados_correctamente(self):
         """1 KM = 1 punto → 10.000 metros = 10 puntos."""
-        fila = ("runner", None, 10_000)
+        fila = ("runner", None, 10_000, None)
         mock_result = MagicMock()
         mock_result.all.return_value = [fila]
         db = AsyncMock()
@@ -419,3 +420,4 @@ class TestObtenerRanking:
         resultado = await user_service.obtener_ranking(db)
 
         assert resultado[0]["total_puntos"] == 10
+        assert resultado[0]["foto_version"] == 0

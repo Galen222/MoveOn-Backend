@@ -84,6 +84,7 @@ def _usuario_fake(**kwargs) -> SimpleNamespace:
         peso=70.0,
         provincia="Madrid",
         foto_perfil="default_avatar.png",
+        foto_fecha_actualizacion=None,
         perfil_visible=True,
         total_metros=5000,
     )
@@ -603,14 +604,26 @@ class TestBuscarPerfil:
         app = _app_con_overrides()
 
         async def fake_buscar(db, termino, usuario_actual_id):
-            return [SimpleNamespace(nombre_usuario="pepe", foto_perfil=None)]
+            return [
+                SimpleNamespace(
+                    nombre_usuario="pepe",
+                    foto_perfil=None,
+                    foto_fecha_actualizacion=None,
+                )
+            ]
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
         monkeypatch.setattr(file_service, "construir_url_foto", lambda foto, req: foto)
 
         response = TestClient(app).get("/perfil/buscar", params={"q": "pep"})
         assert response.status_code == 200
-        assert response.json() == [{"nombre_usuario": "pepe", "foto_perfil": None}]
+        assert response.json() == [
+            {
+                "nombre_usuario": "pepe",
+                "foto_perfil": None,
+                "foto_version": 0,
+            }
+        ]
 
     def test_excluye_usuario_actual_pasandolo_al_servicio(self, monkeypatch):
         app = _app_con_overrides(usuario_actual_id=99)
@@ -644,7 +657,13 @@ class TestBuscarPerfil:
         fotos_procesadas = []
 
         async def fake_buscar(db, termino, usuario_actual_id):
-            return [SimpleNamespace(nombre_usuario="ana", foto_perfil="ana.jpg")]
+            return [
+                SimpleNamespace(
+                    nombre_usuario="ana",
+                    foto_perfil="ana.jpg",
+                    foto_fecha_actualizacion=None,
+                )
+            ]
 
         def fake_construir(foto, req):
             fotos_procesadas.append(foto)
@@ -653,8 +672,10 @@ class TestBuscarPerfil:
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
         monkeypatch.setattr(file_service, "construir_url_foto", fake_construir)
 
-        TestClient(app).get("/perfil/buscar", params={"q": "ana"})
+        response = TestClient(app).get("/perfil/buscar", params={"q": "ana"})
+        assert response.status_code == 200
         assert "ana.jpg" in fotos_procesadas
+        assert response.json()[0]["foto_version"] == 0
 
 
 # ─────────────────────────────────────────────
