@@ -74,6 +74,14 @@ def _mock_execute_one(resultado):
     )
 
 
+
+
+def _mock_execute_first(fila):
+    """db.execute que devuelve first() con una fila concreta."""
+    return AsyncMock(
+        return_value=MagicMock(first=MagicMock(return_value=fila))
+    )
+
 def _mock_execute_seq(*resultados):
     """
     db.execute con side_effect: cada llamada devuelve el siguiente resultado.
@@ -179,7 +187,7 @@ class TestObtenerActividad:
     @pytest.mark.asyncio
     async def test_usuario_no_encontrado_lanza_404(self):
         db = AsyncMock()
-        db.execute = _mock_execute_one(None)
+        db.execute = _mock_execute_first(None)
 
         with pytest.raises(HTTPException) as exc:
             await activities_service.obtener_actividad(db, "fantasma", 1)
@@ -189,10 +197,7 @@ class TestObtenerActividad:
     async def test_actividad_no_encontrada_lanza_404(self):
         usuario = _make_usuario()
         db = AsyncMock()
-        db.execute = _mock_execute_seq(
-            ("one", usuario),   # SELECT usuario
-            ("one", None),      # SELECT actividad → no encontrada
-        )
+        db.execute = _mock_execute_first((usuario.id, None))
 
         with pytest.raises(HTTPException) as exc:
             await activities_service.obtener_actividad(db, 1, 999)
@@ -204,10 +209,7 @@ class TestObtenerActividad:
         usuario = _make_usuario()
         actividad = _make_actividad(id=42)
         db = AsyncMock()
-        db.execute = _mock_execute_seq(
-            ("one", usuario),
-            ("one", actividad),
-        )
+        db.execute = _mock_execute_first((usuario.id, actividad))
 
         resultado = await activities_service.obtener_actividad(db, 1, 42)
         assert resultado is actividad
@@ -269,7 +271,7 @@ class TestEliminarActividad:
     @pytest.mark.asyncio
     async def test_usuario_no_encontrado_lanza_404(self):
         db = AsyncMock()
-        db.execute = _mock_execute_one(None)
+        db.execute = _mock_execute_first(None)
 
         with pytest.raises(HTTPException) as exc:
             await activities_service.eliminar_actividad(db, "fantasma", 1)
@@ -279,10 +281,7 @@ class TestEliminarActividad:
     async def test_actividad_no_encontrada_lanza_404(self):
         usuario = _make_usuario()
         db = AsyncMock()
-        db.execute = _mock_execute_seq(
-            ("one", usuario),
-            ("one", None),
-        )
+        db.execute = _mock_execute_first((usuario, None))
 
         with pytest.raises(HTTPException) as exc:
             await activities_service.eliminar_actividad(db, 1, 999)
@@ -293,10 +292,7 @@ class TestEliminarActividad:
         usuario = _make_usuario(total_metros=10_000)
         actividad = _make_actividad(distancia=5_000)
         db = AsyncMock()
-        db.execute = _mock_execute_seq(
-            ("one", usuario),
-            ("one", actividad),
-        )
+        db.execute = _mock_execute_first((usuario, actividad))
         db.delete = AsyncMock()
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
@@ -312,10 +308,7 @@ class TestEliminarActividad:
         usuario = _make_usuario(total_metros=10_000)
         actividad = _make_actividad(distancia=5_000)
         db = AsyncMock()
-        db.execute = _mock_execute_seq(
-            ("one", usuario),
-            ("one", actividad),
-        )
+        db.execute = _mock_execute_first((usuario, actividad))
         db.delete = AsyncMock()
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
@@ -399,3 +392,4 @@ class TestEliminarActividades:
 
         resultado = await activities_service.eliminar_actividades(db, 1)
         assert "0" in resultado["mensaje"]
+

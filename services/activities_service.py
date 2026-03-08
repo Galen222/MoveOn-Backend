@@ -1,7 +1,7 @@
 # services/activities_service.py
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, case, select, delete as sa_delete, func
+from sqlalchemy import func, select, delete as sa_delete, and_
 from fastapi import HTTPException
 import logging
 import database
@@ -44,16 +44,15 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
     )
 
     # Sumar los metros recorridos de la actividad a los metros totales que tiene el usuario.
-    # Se toma el valor directo de la BD y no el valor en Python para no caer en una race condition.
-    usuario.total_metros = database.Usuario.total_metros + datos.distancia
+    # La fila del usuario ya está bloqueada con FOR UPDATE, así que el cálculo puede hacerse
+    # en Python sin caer en una race condition y manteniendo el tipo como int para Pylance.
+    total_actual = int(usuario.total_metros or 0)
+    usuario.total_metros = total_actual + int(datos.distancia)
 
     # Se guarda en BD.
     db.add(nueva_actividad)
     await db.commit()
     await db.refresh(nueva_actividad)
-    # Al haber hecho el calculo en la BD, Python no sabe el nuevo valor.
-    # Debido a eso se refresca el usuario.
-    await db.refresh(usuario)
     
     logger.info(
         "actividad_creada",
@@ -84,12 +83,26 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
     
     return respuesta
 
+
 async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_actividad: int):
     # Burcar usuario
-    usuario = (await db.execute(
-        select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
-    )).scalar_one_or_none()
-    if not usuario:
+    # Reducimos queries duplicadas: en vez de consultar primero el usuario y luego la actividad,
+    # se hace una sola query con OUTER JOIN para seguir distinguiendo entre usuario inexistente
+    # y actividad inexistente o que no pertenece a este usuario.
+    fila = (await db.execute(
+        select(database.Usuario.id, database.Actividad)
+        .select_from(database.Usuario)
+        .outerjoin(
+            database.Actividad,
+            and_(
+                database.Actividad.id == id_actividad,
+                database.Actividad.usuario_id == database.Usuario.id
+            )
+        )
+        .where(database.Usuario.id == usuario_actual_id)
+    )).first()
+
+    if not fila:
         logger.warning(
             "obtener_actividad_usuario_no_encontrado",
             extra={
@@ -99,25 +112,21 @@ async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_activid
         )
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    # Buscar la actividad asegurando que pertenezca a este usuario
-    actividad = (await db.execute(
-        select(database.Actividad).where(
-            database.Actividad.id == id_actividad,
-            database.Actividad.usuario_id == usuario.id
-        )
-    )).scalar_one_or_none()
+    _, actividad = fila
 
+    # Buscar la actividad asegurando que pertenezca a este usuario
     if not actividad:
         logger.info(
             "actividad_no_encontrada",
             extra={
-                "usuario_id": usuario.id,
+                "usuario_id": usuario_actual_id,
                 "actividad_id": id_actividad,
             },
         )
         raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     return actividad
+
 
 async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: int, limit: int):
     """
@@ -158,13 +167,25 @@ async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: in
         "has_more": (skip + limit) < total,
     }
 
+
 async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_actividad: int):
-    usuario = (await db.execute(
-        select(database.Usuario)
+    # Se sigue bloqueando el usuario porque se modifica total_metros,
+    # pero usuario + actividad se recuperan en una sola query.
+    fila = (await db.execute(
+        select(database.Usuario, database.Actividad)
+        .select_from(database.Usuario)
+        .outerjoin(
+            database.Actividad,
+            and_(
+                database.Actividad.id == id_actividad,
+                database.Actividad.usuario_id == database.Usuario.id
+            )
+        )
         .where(database.Usuario.id == usuario_actual_id)
-        .with_for_update()
-    )).scalar_one_or_none()
-    if not usuario:
+        .with_for_update(of=database.Usuario)
+    )).first()
+
+    if not fila:
         logger.warning(
             "borrar_actividad_usuario_no_encontrado",
             extra={
@@ -174,12 +195,7 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
         )
         raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    actividad = (await db.execute(
-        select(database.Actividad).where(
-            database.Actividad.id == id_actividad,
-            database.Actividad.usuario_id == usuario.id
-        )
-    )).scalar_one_or_none()
+    usuario, actividad = fila
 
     if not actividad:
         logger.info(
@@ -193,17 +209,14 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
 
     # Se resta la distancia en metros recorrida de la ruta al borrarla.
     # Evita números negativos por errores de redondeo flotante.
-    # Calculo directo en BD para evitar Race conditions.
-    usuario.total_metros = case(
-        (database.Usuario.total_metros - actividad.distancia < 0, 0),
-        else_=database.Usuario.total_metros - actividad.distancia
-    )
+    # La fila del usuario está bloqueada, así que el cálculo puede hacerse en Python
+    # y mantener el atributo tipado como int.
+    total_actual = int(usuario.total_metros or 0)
+    distancia_actividad = int(actividad.distancia or 0)
+    usuario.total_metros = max(0, total_actual - distancia_actividad)
 
     await db.delete(actividad)
     await db.commit()
-    
-    # Refrescar para traer de la BD el valor real de 'total_metros' tras el 'case'
-    await db.refresh(usuario) 
     
     logger.info(
         "actividad_eliminada",
@@ -222,6 +235,7 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
         "mensaje": "Actividad eliminada",
         "nuevo_total_puntos": puntos
     }
+
 
 async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
     # Buscar usuario (bloqueo para evitar race conditions con crear_actividad/eliminar_actividad)
@@ -270,4 +284,3 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
         "estatus": "success",
         "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
     }
-    
