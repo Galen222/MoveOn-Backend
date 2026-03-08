@@ -5,8 +5,7 @@ import time
 import uuid
 from contextvars import ContextVar
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
@@ -16,48 +15,75 @@ def get_request_id() -> str:
     return request_id_ctx.get()
 
 
-class RequestContextMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+class RequestContextMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+
+        request_id = headers.get("x-request-id") or str(uuid.uuid4())
         token = request_id_ctx.set(request_id)
         start = time.perf_counter()
 
-        client_ip = request.client.host if request.client else "-"
+        client = scope.get("client")
+        client_ip = client[0] if client else "-"
+        method = scope.get("method", "-")
+        path = scope.get("path", "-")
         logger = logging.getLogger("app.request")
 
+        status_code = 500
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+
+            if message["type"] == "http.response.start":
+                status_code = int(message["status"])
+
+                response_headers = list(message.get("headers", []))
+                response_headers.append((b"x-request-id", request_id.encode("latin-1")))
+                message = {**message, "headers": response_headers}
+
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                duration_ms = round((time.perf_counter() - start) * 1000)
+
+                logger.info(
+                    "peticion_completada",
+                    extra={
+                        "request_id": request_id,
+                        "client_ip": client_ip,
+                        "method": method,
+                        "path": path,
+                        "status_code": status_code,
+                        "duration_ms": duration_ms,
+                    },
+                )
+
+            await send(message)
+
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
         except Exception:
             duration_ms = round((time.perf_counter() - start) * 1000)
 
             logger.exception(
                 "peticion_fallida",
                 extra={
+                    "request_id": request_id,
                     "client_ip": client_ip,
-                    "method": request.method,
-                    "path": request.url.path,
+                    "method": method,
+                    "path": path,
                     "status_code": 500,
                     "duration_ms": duration_ms,
                 },
             )
-
-            request_id_ctx.reset(token)
             raise
-
-        duration_ms = round((time.perf_counter() - start) * 1000)
-
-        logger.info(
-            "peticion_completada",
-            extra={
-                "client_ip": client_ip,
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-                "duration_ms": duration_ms,
-            },
-        )
-
-        response.headers["X-Request-ID"] = request_id
-        request_id_ctx.reset(token)
-        return response
-    
+        finally:
+            request_id_ctx.reset(token)
