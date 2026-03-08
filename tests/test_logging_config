@@ -4,6 +4,7 @@
 # Cubre:
 # - RequestIdFilter
 # - JsonPipeFormatter
+# - ConsolePipeFormatter
 # - setup_logging
 
 import json
@@ -33,7 +34,7 @@ class TestRequestIdFilter:
 
 
 class TestJsonPipeFormatter:
-    def test_formatea_json_con_display_y_extras(self):
+    def test_formatea_json_sin_display_y_con_extras(self):
         formatter = logging_config.JsonPipeFormatter()
 
         record = logging.LogRecord(
@@ -60,10 +61,7 @@ class TestJsonPipeFormatter:
         assert payload["method"] == "GET"
         assert payload["path"] == "/healthz"
         assert payload["status_code"] == 200
-        assert "display" in payload
-        assert "INFO | " in payload["display"]
-        assert "request_id=req-abc" in payload["display"]
-        assert "method=GET" in payload["display"]
+        assert "display" not in payload
 
     def test_incluye_exception_si_hay_exc_info(self):
         formatter = logging_config.JsonPipeFormatter()
@@ -92,9 +90,58 @@ class TestJsonPipeFormatter:
         assert "ValueError: boom" in payload["exception"]
 
 
+class TestConsolePipeFormatter:
+    def test_formatea_texto_plano_tipo_uvicorn_con_extras(self):
+        formatter = logging_config.ConsolePipeFormatter()
+        formatter.formatTime = lambda record, datefmt=None: "2026-03-08 13:10:00"
+
+        record = logging.LogRecord(
+            name="app.main",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=20,
+            msg="aplicacion_iniciando",
+            args=(),
+            exc_info=None,
+        )
+        setattr(record, "request_id", "abc123")
+        setattr(record, "storage_type", "local")
+
+        out = formatter.format(record)
+
+        assert out == (
+            "INFO:     2026-03-08 13:10:00 | app.main | aplicacion_iniciando | "
+            "request_id=abc123 | storage_type=local"
+        )
+
+    def test_incluye_exception_si_hay_exc_info(self):
+        formatter = logging_config.ConsolePipeFormatter()
+        formatter.formatTime = lambda record, datefmt=None: "2026-03-08 13:10:00"
+
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            record = logging.LogRecord(
+                name="app.test",
+                level=logging.ERROR,
+                pathname=__file__,
+                lineno=40,
+                msg="evento_error",
+                args=(),
+                exc_info=sys.exc_info(),
+            )
+            setattr(record, "request_id", "req-err")
+
+        out = formatter.format(record)
+
+        assert "ERROR:    2026-03-08 13:10:00 | app.test | evento_error | request_id=req-err" in out
+        assert "ValueError: boom" in out
+
+
 class TestSetupLogging:
-    def test_configura_root_logger_con_handler_y_formatter(self, monkeypatch):
+    def test_configura_root_logger_con_formatter_json(self, monkeypatch):
         monkeypatch.setattr(logging_config.settings, "LOG_LEVEL", "DEBUG")
+        monkeypatch.setattr(logging_config.settings, "LOG_FORMAT", "json")
 
         logging_config.setup_logging()
 
@@ -106,5 +153,21 @@ class TestSetupLogging:
         handler = root.handlers[0]
         assert isinstance(handler, logging.StreamHandler)
         assert isinstance(handler.formatter, logging_config.JsonPipeFormatter)
+        assert any(isinstance(f, logging_config.RequestIdFilter) for f in handler.filters)
+
+    def test_configura_root_logger_con_formatter_console(self, monkeypatch):
+        monkeypatch.setattr(logging_config.settings, "LOG_LEVEL", "INFO")
+        monkeypatch.setattr(logging_config.settings, "LOG_FORMAT", "console")
+
+        logging_config.setup_logging()
+
+        root = logging.getLogger()
+
+        assert root.level == logging.INFO
+        assert len(root.handlers) == 1
+
+        handler = root.handlers[0]
+        assert isinstance(handler, logging.StreamHandler)
+        assert isinstance(handler.formatter, logging_config.ConsolePipeFormatter)
         assert any(isinstance(f, logging_config.RequestIdFilter) for f in handler.filters)
         

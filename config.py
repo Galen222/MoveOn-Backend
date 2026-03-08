@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Logging
     LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"    
 
     # Seguridad App
     APP_ID: str
