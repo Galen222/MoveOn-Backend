@@ -1,4 +1,4 @@
-# ip_rate_config.py
+# ip_rate_limit.py
 
 from __future__ import annotations
 
@@ -8,16 +8,24 @@ from typing import Optional
 from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from starlette.types import Scope
 
 from config import settings
+from utils.ip_cliente import (
+    extract_ip_from_headers as _extract_ip_from_headers_common,
+    get_client_ip as _get_client_ip_common,
+    get_client_ip_from_scope as _get_client_ip_from_scope_common,
+)
 
 
+# Parsear listas CSV de configuración.
 def _parse_csv(value: str) -> list[str]:
     if not value:
         return []
     return [x.strip() for x in value.split(",") if x.strip()]
 
 
+# Compilar rangos CIDR válidos desde env.
 def _compile_networks(cidrs_csv: str) -> list:
     nets = []
     for cidr in _parse_csv(cidrs_csv):
@@ -29,6 +37,7 @@ def _compile_networks(cidrs_csv: str) -> list:
     return nets
 
 
+# Compilar IPs sueltas válidas desde env.
 def _compile_ips(ips_csv: str) -> set[str]:
     out = set()
     for ip in _parse_csv(ips_csv):
@@ -46,6 +55,7 @@ WAN_IPS = _compile_ips(settings.TRUST_PROXY_WAN_IPS if settings.TRUST_PROXY_WAN 
 HEADER_ORDER = [h.strip().lower() for h in _parse_csv(settings.TRUST_PROXY_HEADER_ORDER)]
 if not HEADER_ORDER:
     HEADER_ORDER = ["x-forwarded-for", "x-real-ip"]
+
 
 
 def conn_from_trusted_proxy(request: Request) -> bool:
@@ -79,43 +89,46 @@ def conn_from_trusted_proxy(request: Request) -> bool:
     return False
 
 
+
 def _extract_ip_from_headers(request: Request) -> Optional[str]:
     """
     Extrae IP cliente desde headers en orden de prioridad.
     - X-Forwarded-For puede traer una lista "client, proxy1, proxy2"
       -> nos quedamos con el primer valor.
     """
-    for header in HEADER_ORDER:
-        raw = request.headers.get(header)
-        if not raw:
-            continue
+    return _extract_ip_from_headers_common(request.headers, HEADER_ORDER)
 
-        if header == "x-forwarded-for":
-            raw = raw.split(",")[0].strip()
-
-        try:
-            return str(ip_address(raw.strip()))
-        except Exception:
-            continue
-
-    return None
 
 
 def get_client_ip(request: Request) -> str:
     """
     Key func para SlowAPI.
-    - Si NO estamos detrás de proxy confiable -> IP real del socket (get_remote_address)
-    - Si SÍ -> usamos headers (XFF/X-Real-IP) según orden en env
+    - Si NO estamos detrás de proxy confiable -> IP real del socket.
+    - Si SÍ -> usamos headers (XFF/X-Real-IP) según orden en env.
     """
-    if conn_from_trusted_proxy(request):
-        ip = _extract_ip_from_headers(request)
-        if ip:
-            return ip
+    return _get_client_ip_common(
+        request,
+        is_trusted_proxy=conn_from_trusted_proxy,
+        header_order=HEADER_ORDER,
+    )
 
-    return get_remote_address(request)
 
 
+def get_client_ip_from_scope(scope: Scope) -> str:
+    """
+    Variante para middlewares ASGI puros que solo disponen del scope.
+    Reutiliza la misma lógica de resolución de IP que get_client_ip.
+    """
+    return _get_client_ip_from_scope_common(
+        scope,
+        is_trusted_proxy=conn_from_trusted_proxy,
+        header_order=HEADER_ORDER,
+    )
+
+
+# Limiter global por IP.
 limiter = Limiter(key_func=get_client_ip)
+
 
 
 def rate_limit(limit_value: str):

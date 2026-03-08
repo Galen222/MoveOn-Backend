@@ -7,10 +7,14 @@ from contextvars import ContextVar
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from ip_rate_limit import HEADER_ORDER, conn_from_trusted_proxy
+from utils.ip_cliente import get_client_ip_from_scope
+
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 
+# Obtener request_id actual para logging estructurado.
 def get_request_id() -> str:
     return request_id_ctx.get()
 
@@ -33,8 +37,11 @@ class RequestContextMiddleware:
         token = request_id_ctx.set(request_id)
         start = time.perf_counter()
 
-        client = scope.get("client")
-        client_ip = client[0] if client else "-"
+        client_ip = get_client_ip_from_scope(
+            scope,
+            is_trusted_proxy=conn_from_trusted_proxy,
+            header_order=HEADER_ORDER,
+        )
         method = scope.get("method", "-")
         path = scope.get("path", "-")
         logger = logging.getLogger("app.request")

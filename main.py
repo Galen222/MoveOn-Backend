@@ -30,8 +30,9 @@ from middlewares.security_headers import SecurityHeadersMiddleware
 from middlewares.request_context import RequestContextMiddleware
 from middlewares.request_size import RequestSizeLimitMiddleware
 from logging_config import setup_logging
-from ip_rate_limit import limiter, rate_limit
+from ip_rate_limit import HEADER_ORDER, conn_from_trusted_proxy, limiter, rate_limit
 from services.identity_rate_limit import IdentityRateLimitExceeded
+from utils.ip_cliente import get_client_ip
 
 setup_logging()
 
@@ -91,7 +92,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.6.5",
+    version="0.7.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
@@ -137,7 +138,11 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         extra={
             "method": request.method,
             "path": request.url.path,
-            "client_ip": request.client.host if request.client else "-",
+            "client_ip": get_client_ip(
+                request,
+                is_trusted_proxy=conn_from_trusted_proxy,
+                header_order=HEADER_ORDER,
+            ),
         },
     )
 
