@@ -1,4 +1,3 @@
-# tests/test_activities_service.py
 #
 # Tests para services/activities_service.py.
 # Cubre la lógica de negocio de actividades: crear, obtener, eliminar unitaria
@@ -120,7 +119,7 @@ class TestCrearActividad:
         db.refresh = AsyncMock()
 
         with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=15):
-            await activities_service.crear_actividad(db, "pepe", _make_datos_actividad())
+            await activities_service.crear_actividad(db, 1, _make_datos_actividad())
 
         db.add.assert_called_once()
         db.commit.assert_called_once()
@@ -135,7 +134,7 @@ class TestCrearActividad:
         db.refresh = AsyncMock()
 
         with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=10):
-            resultado = await activities_service.crear_actividad(db, "pepe", _make_datos_actividad())
+            resultado = await activities_service.crear_actividad(db, 1, _make_datos_actividad())
 
         campos = {"tipo", "distancia", "duracion", "calorias_quemadas", "fecha_ruta", "nuevo_total_puntos"}
         for campo in campos:
@@ -151,7 +150,7 @@ class TestCrearActividad:
         db.refresh = AsyncMock()
 
         with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=42) as mock_calc:
-            resultado = await activities_service.crear_actividad(db, "pepe", _make_datos_actividad())
+            resultado = await activities_service.crear_actividad(db, 1, _make_datos_actividad())
 
         assert resultado["nuevo_total_puntos"] == 42
         mock_calc.assert_called_once()
@@ -167,7 +166,7 @@ class TestCrearActividad:
 
         datos = _make_datos_actividad(distancia=12_500)
         with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=0):
-            resultado = await activities_service.crear_actividad(db, "pepe", datos)
+            resultado = await activities_service.crear_actividad(db, 1, datos)
 
         assert resultado["distancia"] == 12_500
 
@@ -196,7 +195,7 @@ class TestObtenerActividad:
         )
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.obtener_actividad(db, "pepe", 999)
+            await activities_service.obtener_actividad(db, 1, 999)
         assert exc.value.status_code == 404
         assert "actividad" in exc.value.detail.lower()
 
@@ -210,7 +209,7 @@ class TestObtenerActividad:
             ("one", actividad),
         )
 
-        resultado = await activities_service.obtener_actividad(db, "pepe", 42)
+        resultado = await activities_service.obtener_actividad(db, 1, 42)
         assert resultado is actividad
 
 
@@ -232,7 +231,7 @@ class TestObtenerActividades:
         db = AsyncMock()
         db.execute = AsyncMock(side_effect=[mock_result_total, mock_result_items])
 
-        resultado = await activities_service.obtener_actividades(db, "pepe", skip=0, limit=2)
+        resultado = await activities_service.obtener_actividades(db, 1, skip=0, limit=2)
 
         assert resultado["items"] == actividades
         assert resultado["total"] == 3
@@ -251,7 +250,7 @@ class TestObtenerActividades:
         db = AsyncMock()
         db.execute = AsyncMock(side_effect=[mock_result_total, mock_result_items])
 
-        resultado = await activities_service.obtener_actividades(db, "pepe", skip=0, limit=20)
+        resultado = await activities_service.obtener_actividades(db, 1, skip=0, limit=20)
 
         assert resultado == {
             "items": [],
@@ -286,7 +285,7 @@ class TestEliminarActividad:
         )
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.eliminar_actividad(db, "pepe", 999)
+            await activities_service.eliminar_actividad(db, 1, 999)
         assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
@@ -303,7 +302,7 @@ class TestEliminarActividad:
         db.refresh = AsyncMock()
 
         with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=5):
-            await activities_service.eliminar_actividad(db, "pepe", 1)
+            await activities_service.eliminar_actividad(db, 1, 1)
 
         db.delete.assert_called_once_with(actividad)
         db.commit.assert_called_once()
@@ -322,7 +321,7 @@ class TestEliminarActividad:
         db.refresh = AsyncMock()
 
         with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=5):
-            resultado = await activities_service.eliminar_actividad(db, "pepe", 1)
+            resultado = await activities_service.eliminar_actividad(db, 1, 1)
 
         assert resultado["estatus"] == "success"
         assert resultado["nuevo_total_puntos"] == 5
@@ -353,7 +352,7 @@ class TestEliminarActividades:
         )
         db.commit = AsyncMock()
 
-        await activities_service.eliminar_actividades(db, "pepe")
+        await activities_service.eliminar_actividades(db, 1)
 
         assert usuario.total_metros == 0
 
@@ -368,7 +367,7 @@ class TestEliminarActividades:
         )
         db.commit = AsyncMock()
 
-        await activities_service.eliminar_actividades(db, "pepe")
+        await activities_service.eliminar_actividades(db, 1)
         db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -382,7 +381,7 @@ class TestEliminarActividades:
         )
         db.commit = AsyncMock()
 
-        resultado = await activities_service.eliminar_actividades(db, "pepe")
+        resultado = await activities_service.eliminar_actividades(db, 1)
 
         assert resultado["estatus"] == "success"
         assert "7" in resultado["mensaje"]
@@ -398,6 +397,5 @@ class TestEliminarActividades:
         )
         db.commit = AsyncMock()
 
-        resultado = await activities_service.eliminar_actividades(db, "pepe")
+        resultado = await activities_service.eliminar_actividades(db, 1)
         assert "0" in resultado["mensaje"]
-        

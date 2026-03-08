@@ -1,4 +1,3 @@
-# tests/test_auth.py
 #
 # Sustituye a: test_auth_tokens.py + test_auth_tokens_hardening.py
 # Cubre: creación/validación de tokens, hardening JWT (iss/aud/typ),
@@ -18,26 +17,26 @@ import auth
 
 class TestTiposDeToken:
     def test_access_token_tiene_typ_access(self):
-        token = auth.crear_token_acceso({"sub": "pepe"})
+        token = auth.crear_token_acceso({"sub": "123"})
         payload = auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
-        assert payload["sub"] == "pepe"
+        assert payload["sub"] == "123"
         assert payload["typ"] == "access"
 
     def test_refresh_token_tiene_typ_refresh(self):
-        token = auth.crear_token_refresh("pepe", "jti-1", "fam-1")
+        token = auth.crear_token_refresh(123, "jti-1", "fam-1")
         payload = auth.decodifica_jwt(token, auth.REFRESH_TOKEN_SECRET, "refresh")
 
-        assert payload["sub"] == "pepe"
+        assert payload["sub"] == "123"
         assert payload["typ"] == "refresh"
 
     def test_refresh_token_rechazado_como_access(self):
-        token = auth.crear_token_refresh("pepe", "jti-1", "familia-1")
+        token = auth.crear_token_refresh(123, "jti-1", "familia-1")
         with pytest.raises(HTTPException):
             auth.decodifica_jwt(token, auth.REFRESH_TOKEN_SECRET, "access")
 
     def test_access_token_rechazado_como_refresh(self):
-        token = auth.crear_token_acceso({"sub": "pepe"})
+        token = auth.crear_token_acceso({"sub": "123"})
         with pytest.raises(HTTPException):
             auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "refresh")
 
@@ -61,7 +60,7 @@ class TestHardeningJWT:
         audience_buena = auth.JWT_AUDIENCE
         monkeypatch.setattr(auth, "JWT_AUDIENCE", "audiencia-incorrecta")
         token = auth.codifica_jwt(
-            {"sub": "pepe"}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
+            {"sub": "123"}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
         )
         monkeypatch.setattr(auth, "JWT_AUDIENCE", audience_buena)
 
@@ -72,7 +71,7 @@ class TestHardeningJWT:
         issuer_bueno = auth.JWT_ISSUER
         monkeypatch.setattr(auth, "JWT_ISSUER", "issuer-incorrecto")
         token = auth.codifica_jwt(
-            {"sub": "pepe"}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
+            {"sub": "123"}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
         )
         monkeypatch.setattr(auth, "JWT_ISSUER", issuer_bueno)
 
@@ -90,7 +89,7 @@ class TestHardeningJWT:
             auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
     def test_token_manipulado_falla(self):
-        token = auth.crear_token_acceso({"sub": "pepe"})
+        token = auth.crear_token_acceso({"sub": "123"})
         partes = token.split(".")
         partes[1] = partes[1][:-2] + "ZZ"
         token_manipulado = ".".join(partes)
@@ -99,14 +98,14 @@ class TestHardeningJWT:
             auth.decodifica_jwt(token_manipulado, auth.ACCESS_TOKEN_SECRET, "access")
 
     def test_claims_iss_y_aud_presentes(self):
-        token = auth.crear_token_acceso({"sub": "pepe"})
+        token = auth.crear_token_acceso({"sub": "123"})
         payload = auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
         assert payload["iss"] == auth.JWT_ISSUER
         assert payload["aud"] == auth.JWT_AUDIENCE
 
     def test_claims_exp_e_iat_presentes(self):
-        token = auth.crear_token_acceso({"sub": "pepe"})
+        token = auth.crear_token_acceso({"sub": "123"})
         payload = auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
         assert "exp" in payload
@@ -114,15 +113,15 @@ class TestHardeningJWT:
         assert payload["exp"] > payload["iat"]
 
     def test_refresh_token_incluye_jti_y_familia(self):
-        token = auth.crear_token_refresh("pepe", "jti-test", "fam-test")
+        token = auth.crear_token_refresh(123, "jti-test", "fam-test")
         payload = auth.decodifica_jwt(token, auth.REFRESH_TOKEN_SECRET, "refresh")
 
         assert payload["jti"] == "jti-test"
         assert payload["fam"] == "fam-test"
 
     def test_dos_refresh_con_jti_distinto_son_tokens_distintos(self):
-        t1 = auth.crear_token_refresh("pepe", "jti-a", "fam-1")
-        t2 = auth.crear_token_refresh("pepe", "jti-b", "fam-1")
+        t1 = auth.crear_token_refresh(123, "jti-a", "fam-1")
+        t2 = auth.crear_token_refresh(123, "jti-b", "fam-1")
         assert t1 != t2
 
 
@@ -131,11 +130,11 @@ class TestHardeningJWT:
 # ─────────────────────────────────────────────
 
 class TestObtenerUsuarioActual:
-    def test_token_valido_devuelve_nombre_usuario(self):
-        token = auth.crear_token_acceso({"sub": "pepe"})
+    def test_token_valido_devuelve_usuario_id(self):
+        token = auth.crear_token_acceso({"sub": "123"})
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-        assert auth.obtener_usuario_actual(creds) == "pepe"
+        assert auth.obtener_usuario_actual(creds) == 123
 
     def test_rechaza_token_sin_sub(self):
         token = auth.codifica_jwt({}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access")
@@ -159,7 +158,7 @@ class TestObtenerUsuarioActual:
         assert exc.value.status_code == 401
 
     def test_token_de_refresh_rechazado_en_endpoint(self):
-        token = auth.crear_token_refresh("pepe", "jti-x", "fam-x")
+        token = auth.crear_token_refresh(123, "jti-x", "fam-x")
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
         with pytest.raises(HTTPException) as exc:
@@ -174,4 +173,3 @@ class TestObtenerUsuarioActual:
             auth.obtener_usuario_actual(creds)
 
         assert exc.value.status_code == 401
-        

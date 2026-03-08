@@ -1,4 +1,3 @@
-# tests/test_router_activities.py
 #
 # Tests de integración para routers/activities.py usando TestClient.
 # Cubre: /actividad/guardar, /actividad/obtener/{id},
@@ -48,11 +47,11 @@ async def _fake_db():
     return None
 
 
-def _app_con_overrides(usuario_actual: str = "pepe") -> FastAPI:
+def _app_con_overrides(usuario_actual_id: int = 1) -> FastAPI:
     app = _build_app()
     app.dependency_overrides[obtener_db] = _fake_db
     app.dependency_overrides[auth.verificar_sesion_aplicacion] = lambda: "ok"
-    app.dependency_overrides[auth.obtener_usuario_actual] = lambda: usuario_actual
+    app.dependency_overrides[auth.obtener_usuario_actual] = lambda: usuario_actual_id
     return app
 
 
@@ -169,7 +168,7 @@ class TestGuardarActividadLogica:
     def test_guardar_exitoso_devuelve_200_con_campos(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_crear(db, usuario_actual, datos):
+        async def fake_crear(db, usuario_actual_id, datos):
             return {
                 "id": 42,
                 "tipo": "Correr",
@@ -194,7 +193,7 @@ class TestGuardarActividadLogica:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_crear(db, usuario_actual, datos):
+        async def fake_crear(db, usuario_actual_id, datos):
             raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
         monkeypatch.setattr(activities_service, "crear_actividad", fake_crear)
@@ -204,7 +203,7 @@ class TestGuardarActividadLogica:
     def test_caminar_es_tipo_valido(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_crear(db, usuario_actual, datos):
+        async def fake_crear(db, usuario_actual_id, datos):
             return _actividad_fake(tipo="Caminar", nuevo_total_puntos=2).__dict__
 
         monkeypatch.setattr(activities_service, "crear_actividad", fake_crear)
@@ -237,7 +236,7 @@ class TestObtenerActividadLogica:
     def test_actividad_encontrada_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, id_actividad):
+        async def fake_obtener(db, usuario_actual_id, id_actividad):
             return _actividad_fake(id=id_actividad)
 
         monkeypatch.setattr(activities_service, "obtener_actividad", fake_obtener)
@@ -248,7 +247,7 @@ class TestObtenerActividadLogica:
     def test_actividad_no_encontrada_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, id_actividad):
+        async def fake_obtener(db, usuario_actual_id, id_actividad):
             raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
         monkeypatch.setattr(activities_service, "obtener_actividad", fake_obtener)
@@ -257,9 +256,9 @@ class TestObtenerActividadLogica:
 
     def test_actividad_de_otro_usuario_devuelve_404(self, monkeypatch):
         """El servicio ya filtra por usuario_id, el router no debe bypassear esto."""
-        app = _app_con_overrides(usuario_actual="pepe")
+        app = _app_con_overrides(usuario_actual_id=1)
 
-        async def fake_obtener(db, usuario_actual, id_actividad):
+        async def fake_obtener(db, usuario_actual_id, id_actividad):
             # El servicio lanza 404 si la actividad no pertenece al usuario
             raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
@@ -295,7 +294,7 @@ class TestObtenerTodasLogica:
     def test_devuelve_lista_paginada_de_actividades(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, skip, limit):
+        async def fake_obtener(db, usuario_actual_id, skip, limit):
             return {
                 "items": [_actividad_fake(id=1), _actividad_fake(id=2)],
                 "total": 2,
@@ -318,7 +317,7 @@ class TestObtenerTodasLogica:
     def test_lista_vacia_devuelve_200_con_metadata(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, skip, limit):
+        async def fake_obtener(db, usuario_actual_id, skip, limit):
             return {
                 "items": [],
                 "total": 0,
@@ -342,7 +341,7 @@ class TestObtenerTodasLogica:
         app = _app_con_overrides()
         capturado = {}
 
-        async def fake_obtener(db, usuario_actual, skip, limit):
+        async def fake_obtener(db, usuario_actual_id, skip, limit):
             capturado["skip"] = skip
             capturado["limit"] = limit
             return {
@@ -361,7 +360,7 @@ class TestObtenerTodasLogica:
         app = _app_con_overrides()
         capturado = {}
 
-        async def fake_obtener(db, usuario_actual, skip, limit):
+        async def fake_obtener(db, usuario_actual_id, skip, limit):
             capturado["skip"] = skip
             capturado["limit"] = limit
             return {
@@ -380,7 +379,7 @@ class TestObtenerTodasLogica:
     def test_has_more_true_se_refleja_en_la_respuesta(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, skip, limit):
+        async def fake_obtener(db, usuario_actual_id, skip, limit):
             return {
                 "items": [_actividad_fake(id=1), _actividad_fake(id=2)],
                 "total": 5,
@@ -413,7 +412,7 @@ class TestBorrarActividadLogica:
     def test_borrar_exitoso_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_eliminar(db, usuario_actual, id_actividad):
+        async def fake_eliminar(db, usuario_actual_id, id_actividad):
             return {"estatus": "success", "mensaje": "Actividad eliminada", "nuevo_total_puntos": 3}
 
         monkeypatch.setattr(activities_service, "eliminar_actividad", fake_eliminar)
@@ -426,7 +425,7 @@ class TestBorrarActividadLogica:
     def test_actividad_no_encontrada_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_eliminar(db, usuario_actual, id_actividad):
+        async def fake_eliminar(db, usuario_actual_id, id_actividad):
             raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
         monkeypatch.setattr(activities_service, "eliminar_actividad", fake_eliminar)
@@ -437,7 +436,7 @@ class TestBorrarActividadLogica:
         app = _app_con_overrides()
         capturado = {}
 
-        async def fake_eliminar(db, usuario_actual, id_actividad):
+        async def fake_eliminar(db, usuario_actual_id, id_actividad):
             capturado["id"] = id_actividad
             return {"estatus": "success", "mensaje": "Actividad eliminada", "nuevo_total_puntos": 0}
 
@@ -459,7 +458,7 @@ class TestBorrarTodasLogica:
     def test_borrar_todas_exitoso_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_eliminar(db, usuario_actual):
+        async def fake_eliminar(db, usuario_actual_id):
             return {"estatus": "success", "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 5 actividades."}
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
@@ -470,7 +469,7 @@ class TestBorrarTodasLogica:
     def test_mensaje_incluye_numero_borradas(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_eliminar(db, usuario_actual):
+        async def fake_eliminar(db, usuario_actual_id):
             return {"estatus": "success", "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 3 actividades."}
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
@@ -480,7 +479,7 @@ class TestBorrarTodasLogica:
     def test_sin_actividades_devuelve_cero_borradas(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_eliminar(db, usuario_actual):
+        async def fake_eliminar(db, usuario_actual_id):
             return {"estatus": "success", "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 0 actividades."}
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
@@ -490,10 +489,9 @@ class TestBorrarTodasLogica:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_eliminar(db, usuario_actual):
+        async def fake_eliminar(db, usuario_actual_id):
             raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
         response = TestClient(app).delete("/actividad/borrar_todas")
         assert response.status_code == 404
-        

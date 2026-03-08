@@ -27,18 +27,13 @@ class TestValidarPassword:
         with pytest.raises(ValueError, match="número"):
             validators.validar_password_logica("Abcdefgh")
 
-    def test_rechaza_password_demasiado_larga(self):
-        # bcrypt trunca a 72 bytes; passwords >128 chars se rechazan antes
-        with pytest.raises(ValueError, match="128 caracteres"):
-            validators.validar_password_logica("A1" + "x" * 127)
+    def test_rechaza_password_si_supera_72_bytes_utf8(self):
+        pwd = "Á1" + ("ñ" * 36)  # 2 + 1 + (36*2) = 75 bytes
+        with pytest.raises(ValueError, match="72 bytes"):
+            validators.validar_password_logica(pwd)
 
-    def test_acepta_password_exactamente_8_chars(self):
-        resultado = validators.validar_password_logica("Abcde12!")
-        assert resultado == "Abcde12!"
-
-    def test_acepta_password_exactamente_128_chars(self):
-        pwd = "A1" + "b" * 126  # 128 chars total
-        assert len(pwd) == 128
+    def test_acepta_password_valida_en_limite_ascii(self):
+        pwd = "A1" + ("b" * 68)  # 70 bytes total
         resultado = validators.validar_password_logica(pwd)
         assert resultado == pwd
 

@@ -11,7 +11,7 @@ import secrets
 import uuid
 
 from fastapi import BackgroundTasks, HTTPException
-from sqlalchemy import select, update, func
+from sqlalchemy import and_, or_, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete as sa_delete
 from starlette.concurrency import run_in_threadpool
@@ -75,7 +75,7 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
     jti = uuid.uuid4().hex
     familia_id = uuid.uuid4().hex
 
-    refresh_token = auth.crear_token_refresh(usuario.nombre_usuario, jti, familia_id)
+    refresh_token = auth.crear_token_refresh(usuario.id, jti, familia_id)
     refresh_hash = _hash_refresh_token(refresh_token)
 
     sesion = database.SesionRefresh(
@@ -105,7 +105,7 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         },
     )
 
-    token_acceso = auth.crear_token_acceso({"sub": usuario.nombre_usuario})
+    token_acceso = auth.crear_token_acceso({"sub": str(usuario.id)})
 
     return {
         "estatus": "success",
@@ -129,16 +129,18 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     """
     payload = auth.decodificar_token_refresh(refresh_token)
 
-    nombre_usuario = payload.get("sub")
+    usuario_id_token = payload.get("sub")
     jti = payload.get("jti")
     familia_id = payload.get("fam")
 
-    if not isinstance(nombre_usuario, str) or not nombre_usuario:
+    if not isinstance(usuario_id_token, str) or not usuario_id_token.isdigit():
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido (sub)")
     if not isinstance(jti, str) or not jti:
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido (jti)")
     if not isinstance(familia_id, str) or not familia_id:
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido (familia)")
+
+    usuario_id_token = int(usuario_id_token)
 
     # Bloqueo de fila para evitar race condition: 2 refresh simultáneos con el mismo token
     # podrían rotar el token dos veces si no se bloquea la sesión.
@@ -152,7 +154,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         logger.warning(
             "sesion_refresh_no_encontrada",
             extra={
-                "usuario": nombre_usuario,
+                "usuario_id": usuario_id_token,
                 "jti": jti,
                 "familia_id": familia_id,
             },
@@ -221,7 +223,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
 
     # Rotación: invalidar refresh actual y crear uno nuevo en la misma familia
     nuevo_jti = uuid.uuid4().hex
-    nuevo_refresh_token = auth.crear_token_refresh(usuario.nombre_usuario, nuevo_jti, sesion.familia_id)
+    nuevo_refresh_token = auth.crear_token_refresh(usuario.id, nuevo_jti, sesion.familia_id)
     nuevo_refresh_hash = _hash_refresh_token(nuevo_refresh_token)
     
     nueva_sesion = database.SesionRefresh(
@@ -255,7 +257,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         },
     )
     
-    nuevo_token_acceso = auth.crear_token_acceso({"sub": usuario.nombre_usuario})
+    nuevo_token_acceso = auth.crear_token_acceso({"sub": str(usuario.id)})
     
     return {
         "estatus": "success",
@@ -264,23 +266,30 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         "refresh_token": nuevo_refresh_token
     }
     
-async def _limpiar_sesiones_refresh_usuario(db: AsyncSession, usuario_id: int, older_than_days: Optional[int] = None):
+async def _limpiar_sesiones_refresh_usuario(
+    db: AsyncSession,
+    usuario_id: int,
+    older_than_days: Optional[int] = None
+):
     if older_than_days is None:
         older_than_days = int(settings.REFRESH_SESSION_CLEANUP_DAYS)
+
     ahora = _ahora_utc()
     cutoff = ahora - timedelta(days=older_than_days)
 
     await db.execute(
         sa_delete(database.SesionRefresh).where(
-            database.SesionRefresh.usuario_id == usuario_id,
-
-            # Estado: solo revocadas o expiradas
-            (database.SesionRefresh.revocada_en.is_not(None)) |
-            (database.SesionRefresh.expira_en < ahora),
-
-            # Antigüedad: antiguas o nunca usadas (NULL)
-            (database.SesionRefresh.ultimo_uso_en < cutoff) |
-            (database.SesionRefresh.ultimo_uso_en.is_(None))
+            and_(
+                database.SesionRefresh.usuario_id == usuario_id,
+                or_(
+                    database.SesionRefresh.revocada_en.is_not(None),
+                    database.SesionRefresh.expira_en < ahora,
+                ),
+                or_(
+                    database.SesionRefresh.ultimo_uso_en < cutoff,
+                    database.SesionRefresh.ultimo_uso_en.is_(None),
+                ),
+            )
         )
     )
 

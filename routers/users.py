@@ -49,10 +49,10 @@ async def registro(
 async def informacion_perfil(
     request: Request,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """Obtiene los datos del perfil."""
-    usuario = await user_service.obtener_perfil(db, usuario_actual)
+    usuario = await user_service.obtener_perfil(db, usuario_actual_id)
 
     # Calcular puntos (1 KM = 1 Punto).
     puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
@@ -78,7 +78,7 @@ async def informacion_perfil_publico(
     nombre_usuario: str,
     request: Request,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """
     Permite ver la ficha publica reducida de otro usuario si este tiene el perfil visible.
@@ -105,13 +105,13 @@ async def foto_perfil(
     request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual),
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...)
 ):
     logger.info(
         "actualizacion_foto_perfil_iniciada",
         extra={
-            "usuario": usuario_actual,
+            "usuario_id": usuario_actual_id,
             "nombre_archivo": archivo.filename,
             "content_type": archivo.content_type,
             "storage_type": settings.STORAGE_TYPE,
@@ -125,7 +125,7 @@ async def foto_perfil(
     nueva_ruta_foto = await run_in_threadpool(
         file_service.procesar_subida,
         archivo,
-        usuario_actual,
+        usuario_actual_id,
         raw,
         None
     )
@@ -136,7 +136,7 @@ async def foto_perfil(
         # 3) Bloquear la fila solo en el momento de actualizar la BD
         usuario = await user_service.obtener_perfil(
             db,
-            usuario_actual,
+            usuario_actual_id,
             for_update=True
         )
 
@@ -148,7 +148,7 @@ async def foto_perfil(
         logger.info(
             "foto_perfil_actualizada",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "storage_type": settings.STORAGE_TYPE,
                 "tenia_foto_anterior": bool(foto_antigua),
             },
@@ -158,7 +158,7 @@ async def foto_perfil(
         logger.warning(
             "actualizacion_foto_perfil_error_controlado",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "nombre_archivo": archivo.filename,
                 "content_type": archivo.content_type,
                 "storage_type": settings.STORAGE_TYPE,
@@ -175,7 +175,7 @@ async def foto_perfil(
             await run_in_threadpool(
                 file_service.borrar_foto,
                 nueva_ruta_foto,
-                usuario_actual
+                usuario_actual_id
             )
 
         raise
@@ -184,7 +184,7 @@ async def foto_perfil(
         logger.exception(
             "actualizacion_foto_perfil_error_no_controlado",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "nombre_archivo": archivo.filename,
                 "content_type": archivo.content_type,
                 "storage_type": settings.STORAGE_TYPE,
@@ -198,7 +198,7 @@ async def foto_perfil(
             await run_in_threadpool(
                 file_service.borrar_foto,
                 nueva_ruta_foto,
-                usuario_actual
+                usuario_actual_id
             )
 
         raise HTTPException(
@@ -213,20 +213,7 @@ async def foto_perfil(
         and not str(foto_antigua).startswith("http")
         and (os.path.basename(str(foto_antigua)) != file_service.DEFAULT_AVATAR_SENTINEL)
     ):
-        logger.info(
-            "foto_perfil_antigua_programada_para_borrado",
-            extra={
-                "usuario": usuario_actual,
-                "foto_antigua": foto_antigua,
-                "storage_type": settings.STORAGE_TYPE,
-            },
-        )
-
-        background_tasks.add_task(
-            file_service.borrar_foto,
-            foto_antigua,
-            usuario_actual
-        )
+        background_tasks.add_task(file_service.borrar_foto, foto_antigua, usuario_actual_id)
 
     return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
@@ -237,10 +224,10 @@ async def actualizar_perfil(
     request: Request,
     datos: schemas.ActualizarPerfil,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """Permite al usuario modificar su perfil."""
-    usuario = await user_service.obtener_perfil(db, usuario_actual, for_update=True)
+    usuario = await user_service.obtener_perfil(db, usuario_actual_id, for_update=True)
     return await user_service.actualizar_perfil_usuario(db, usuario, datos)
 
 
@@ -250,20 +237,20 @@ async def borrar_perfil(
     request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """
     Se elimina la cuenta (commit) y solo después se borra la foto
     (en background). Si el commit falla, NO se borra nada.
     """
-    usuario = await user_service.obtener_perfil(db, usuario_actual)
+    usuario = await user_service.obtener_perfil(db, usuario_actual_id)
     foto_perfil = usuario.foto_perfil  # guardar antes de borrar el usuario
 
     respuesta = await user_service.eliminar_cuenta(db, usuario)
 
     # Solo si commit OK (eliminar_cuenta hace commit), borramos la foto.
     # En background para no bloquear el endpoint con IO (disco / cloud).
-    background_tasks.add_task(file_service.borrar_foto, foto_perfil, usuario_actual)
+    background_tasks.add_task(file_service.borrar_foto, foto_perfil, usuario_actual_id)
 
     return respuesta
 
@@ -274,13 +261,13 @@ async def buscar_perfil(
     request: Request,
     q: str = Query(..., min_length=3, max_length=50, description="Término de búsqueda (min 3 caracteres)"),
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """
     Busca usuarios por nombre (coincidencia parcial).
     Solo devuelve usuarios con perfil público y excluye al usuario autenticado.
     """
-    resultados = await user_service.buscar_usuario(db, q, usuario_actual)
+    resultados = await user_service.buscar_usuario(db, q, usuario_actual_id)
 
     lista_final = []
     for usuario in resultados:
@@ -299,7 +286,7 @@ async def obtener_ranking(
     request: Request,
     provincia: Optional[ProvinciaEspaña] = None,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual: str = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """
     Devuelve el TOP 15 de usuarios con más puntos (KM recorridos).

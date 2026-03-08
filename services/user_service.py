@@ -147,10 +147,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     }
 
 
-async def obtener_perfil(db: AsyncSession, usuario_actual: str, for_update: bool = False):
+async def obtener_perfil(db: AsyncSession, usuario_actual_id: int, for_update: bool = False):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
     query = select(database.Usuario).where(
-        database.Usuario.nombre_usuario == usuario_actual
+        database.Usuario.id == usuario_actual_id
     )
 
     if for_update:
@@ -162,7 +162,7 @@ async def obtener_perfil(db: AsyncSession, usuario_actual: str, for_update: bool
         logger.warning(
             "perfil_no_encontrado",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "for_update": for_update,
             },
         )
@@ -350,7 +350,7 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
     return usuario
 
 
-async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual: str):
+async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual_id: int):
     """
     Busca usuarios cuyo nombre_usuario contenga el término.
     Filtros:
@@ -360,7 +360,6 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual
     4. Límite de 20 (Rendimiento)
     """
     termino = termino_busqueda.strip()
-    usuario_actual_key = usuario_actual.strip().lower()
 
     if not termino or len(termino) < 3:
         return []
@@ -377,7 +376,7 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual
         .where(
             database.Usuario.perfil_visible == True,
             database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
-            func.lower(database.Usuario.nombre_usuario) != usuario_actual_key
+            database.Usuario.id != usuario_actual_id
         )
         .limit(20)
     )).scalars().all()
@@ -385,7 +384,7 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual
     logger.debug(
         "busqueda_usuarios_completada",
         extra={
-            "usuario": usuario_actual,
+            "usuario_id": usuario_actual_id,
             "termino": termino,
             "resultados": len(usuarios),
         },

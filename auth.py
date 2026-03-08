@@ -156,10 +156,10 @@ def crear_token_acceso(datos: dict) -> str:
     )
 
 
-def crear_token_refresh(nombre_usuario: str, jti: str, familia_id: str) -> str:
+def crear_token_refresh(usuario_id: int, jti: str, familia_id: str) -> str:
     """Genera el refresh token (largo) con rotación."""
     payload = {
-        "sub": nombre_usuario,
+        "sub": str(usuario_id),
         "jti": jti,
         "fam": familia_id
     }
@@ -183,7 +183,7 @@ def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido o expirado")
 
 
-def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_scheme)) -> str:
+def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_scheme)) -> int:
     """
     Extrae el usuario validando el token de acceso.
     Usa la dependencia de FastAPI para capturar el token del botón Authorize.
@@ -194,15 +194,15 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
     try:
         payload = decodifica_jwt(token, ACCESS_TOKEN_SECRET, "access")
 
-        usuario_id = payload.get("sub")
-        if usuario_id is None or not isinstance(usuario_id, str):
+        sub = payload.get("sub")
+        if sub is None or not isinstance(sub, str) or not sub.isdigit():
             logger.warning(
                 "access_token_sin_sub_valido",
                 extra={},
             )
             raise HTTPException(status_code=401, detail="Error: Token no contiene un usuario válido")
 
-        return usuario_id
+        return int(sub)
     except InvalidTokenError:
         logger.warning(
             "access_token_invalido_o_expirado",

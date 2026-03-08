@@ -1,4 +1,3 @@
-# tests/test_access_service.py
 #
 # Sustituye a:
 #   - test_access_service_refresh.py
@@ -159,7 +158,7 @@ class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
     async def test_sesion_no_encontrada_lanza_401(self):
         jti, familia = "jti-miss-001", "fam-miss-001"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
 
         db = AsyncMock()
         db.execute = AsyncMock(return_value=MagicMock(
@@ -174,7 +173,7 @@ class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
     async def test_token_revocado_lanza_401_reutilizado(self):
         jti, familia = "jti-rotado-001", "familia-001"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -197,7 +196,7 @@ class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
     async def test_token_revocado_invoca_revocar_familia(self):
         jti, familia = "jti-reuse-101", "familia-reuse-101"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -219,7 +218,7 @@ class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
     async def test_hash_manipulado_revoca_familia_y_lanza_401(self):
         jti, familia = "jti-manipulado-002", "familia-002"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash="a" * 64,  # hash falso → jamás coincide
@@ -241,7 +240,7 @@ class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
     async def test_sesion_expirada_en_bd_lanza_401(self):
         jti, familia = "jti-expirado-004", "familia-004"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -262,7 +261,7 @@ class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
     async def test_usuario_no_encontrado_revoca_sesion_y_lanza_401(self):
         jti, familia = "jti-user-miss-102", "fam-user-miss-102"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -292,7 +291,7 @@ class TestRefrescarSesionExito:
     @pytest.mark.asyncio
     async def test_rotacion_exitosa_devuelve_nuevos_tokens(self):
         jti, familia = "jti-valido-005", "familia-005"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -319,7 +318,7 @@ class TestRefrescarSesionExito:
     @pytest.mark.asyncio
     async def test_rotacion_marca_sesion_anterior_como_revocada(self):
         jti, familia = "jti-valido-006", "familia-006"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -349,7 +348,7 @@ class TestCerrarSesion:
     @pytest.mark.asyncio
     async def test_logout_normal_revoca_sesion(self):
         jti, familia = "jti-logout-001", "familia-logout-001"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -370,7 +369,7 @@ class TestCerrarSesion:
     @pytest.mark.asyncio
     async def test_logout_idempotente_sesion_ya_revocada(self):
         jti, familia = "jti-logout-002", "familia-logout-002"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
@@ -398,7 +397,7 @@ class TestCerrarSesion:
 
     @pytest.mark.asyncio
     async def test_logout_sesion_no_encontrada_responde_success(self):
-        rt = auth.crear_token_refresh("pepe", "jti-logout-003", "fam-003")
+        rt = auth.crear_token_refresh(1, "jti-logout-003", "fam-003")
 
         db = AsyncMock()
         db.execute = AsyncMock(return_value=MagicMock(
@@ -411,7 +410,7 @@ class TestCerrarSesion:
     @pytest.mark.asyncio
     async def test_logout_hash_manipulado_no_revoca_la_sesion(self):
         jti, familia = "jti-logout-004", "fam-004"
-        rt = auth.crear_token_refresh("pepe", jti, familia)
+        rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
             jti=jti, familia_id=familia,
             token_hash="b" * 64,  # hash distinto al del token
@@ -620,16 +619,16 @@ class TestResetearPassword:
 
 class TestFuncionesHash:
     def test_hash_refresh_determinista(self):
-        rt = auth.crear_token_refresh("pepe", "jti-h1", "fam-h1")
+        rt = auth.crear_token_refresh(1, "jti-h1", "fam-h1")
         assert access_service._hash_refresh_token(rt) == access_service._hash_refresh_token(rt)
 
     def test_hash_refresh_distinto_por_token(self):
-        rt1 = auth.crear_token_refresh("pepe", "jti-1", "fam")
-        rt2 = auth.crear_token_refresh("pepe", "jti-2", "fam")
+        rt1 = auth.crear_token_refresh(1, "jti-1", "fam")
+        rt2 = auth.crear_token_refresh(1, "jti-2", "fam")
         assert access_service._hash_refresh_token(rt1) != access_service._hash_refresh_token(rt2)
 
     def test_hash_refresh_longitud_64(self):
-        rt = auth.crear_token_refresh("pepe", "jti-len", "fam-len")
+        rt = auth.crear_token_refresh(1, "jti-len", "fam-len")
         assert len(access_service._hash_refresh_token(rt)) == 64
 
     def test_hash_codigo_recuperacion_determinista(self):
@@ -641,4 +640,3 @@ class TestFuncionesHash:
     def test_hash_refresh_y_codigo_usan_secretos_distintos(self):
         texto = "mismo-texto"
         assert access_service._hash_refresh_token(texto) != access_service._hash_codigo_recuperacion(texto)
-        

@@ -182,23 +182,23 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
 
 def procesar_subida(
     archivo: UploadFile,
-    usuario_actual: str,
+    usuario_actual_id: int,
     raw: bytes,
     foto_anterior_bd: Optional[str] = None
 ) -> str:
     if settings.STORAGE_TYPE == "cloudinary":
-        return guardar_nube(archivo, usuario_actual, raw)
-    return guardar_local(archivo, usuario_actual, raw, foto_anterior_bd)
+        return guardar_nube(archivo, usuario_actual_id, raw)
+    return guardar_local(archivo, usuario_actual_id, raw, foto_anterior_bd)
 
 
 def guardar_local(
     archivo: UploadFile,
-    usuario_actual: str,
+    usuario_actual_id: int,
     raw: bytes,
     foto_anterior_bd: Optional[str] = None
 ) -> str:
     carpeta_imagenes = settings.UPLOAD_DIR
-    nombre_seguro = hashlib.sha256(usuario_actual.encode()).hexdigest()
+    nombre_seguro = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
 
     mapa_extensiones = {
         "image/jpeg": ".jpg",
@@ -219,7 +219,7 @@ def guardar_local(
         logger.exception(
             "error_guardado_archivo_local",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "content_type": archivo.content_type,
                 "storage_type": settings.STORAGE_TYPE,
                 "ruta_destino": ruta_final,
@@ -233,9 +233,9 @@ def guardar_local(
     return nombre_archivo
 
 
-def guardar_nube(archivo: UploadFile, usuario_actual: str, raw: bytes) -> str:
+def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str:
     try:
-        usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
+        usuario_hash = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
 
         mapa_extensiones = {
             "image/jpeg": ".jpg",
@@ -268,7 +268,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str, raw: bytes) -> str:
         logger.exception(
             "error_subida_cloudinary",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "content_type": archivo.content_type,
                 "storage_type": settings.STORAGE_TYPE,
             },
@@ -279,7 +279,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual: str, raw: bytes) -> str:
         )
 
 
-def borrar_foto(foto_perfil: str, usuario_actual: str):
+def borrar_foto(foto_perfil: str, usuario_actual_id: int):
     """Lógica de borrado permanente segura usando Hashing."""
     if not foto_perfil:
         return
@@ -291,7 +291,7 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
     # Cloudinary: borrado fiable por el mismo public_id con el que subimos
     if settings.STORAGE_TYPE == "cloudinary":
         try:
-            usuario_hash = hashlib.sha256(usuario_actual.encode()).hexdigest()
+            usuario_hash = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
             public_id = f"perfiles/perfil_{usuario_hash}"
             cloudinary.uploader.destroy(
                 public_id,
@@ -302,7 +302,7 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
             logger.warning(
                 "error_borrado_cloudinary",
                 extra={
-                    "usuario": usuario_actual,
+                    "usuario_id": usuario_actual_id,
                     "foto": foto_perfil,
                     "storage_type": settings.STORAGE_TYPE,
                 },
@@ -320,7 +320,7 @@ def borrar_foto(foto_perfil: str, usuario_actual: str):
         logger.warning(
             "error_borrado_archivo_local",
             extra={
-                "usuario": usuario_actual,
+                "usuario_id": usuario_actual_id,
                 "foto": foto_perfil,
                 "storage_type": settings.STORAGE_TYPE,
             },

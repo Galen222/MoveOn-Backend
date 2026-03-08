@@ -1,4 +1,3 @@
-# tests/test_user_service.py
 #
 # Tests para services/user_service.py.
 # Cubre: registrar_nuevo_usuario, obtener_perfil, actualizar_perfil_usuario,
@@ -163,7 +162,7 @@ class TestObtenerPerfil:
         db = _make_db_one(None)
 
         with pytest.raises(HTTPException) as exc:
-            await user_service.obtener_perfil(db, "fantasma")
+            await user_service.obtener_perfil(db, 999)
 
         assert exc.value.status_code == 404
 
@@ -172,7 +171,7 @@ class TestObtenerPerfil:
         usuario = _make_usuario()
         db = _make_db_one(usuario)
 
-        resultado = await user_service.obtener_perfil(db, "pepe")
+        resultado = await user_service.obtener_perfil(db, 1)
 
         assert resultado is usuario
 
@@ -331,14 +330,14 @@ class TestBuscarUsuario:
     @pytest.mark.asyncio
     async def test_termino_menor_de_3_caracteres_devuelve_lista_vacia(self):
         db = AsyncMock()
-        resultado = await user_service.buscar_usuario(db, "ab", "pepe")
+        resultado = await user_service.buscar_usuario(db, "ab", 1)
         assert resultado == []
         db.execute.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_termino_vacio_devuelve_lista_vacia(self):
         db = AsyncMock()
-        resultado = await user_service.buscar_usuario(db, "", "pepe")
+        resultado = await user_service.buscar_usuario(db, "", 1)
         assert resultado == []
 
     @pytest.mark.asyncio
@@ -346,13 +345,13 @@ class TestBuscarUsuario:
         usuarios = [_make_usuario(nombre_usuario="galen"), _make_usuario(nombre_usuario="galeria")]
         db = _make_db_seq(("all", usuarios))
 
-        resultado = await user_service.buscar_usuario(db, "gale", "pepe")
+        resultado = await user_service.buscar_usuario(db, "gale", 1)
         assert resultado == usuarios
 
     @pytest.mark.asyncio
     async def test_sin_resultados_devuelve_lista_vacia(self):
         db = _make_db_seq(("all", []))
-        resultado = await user_service.buscar_usuario(db, "xyz_raro_xyz", "pepe")
+        resultado = await user_service.buscar_usuario(db, "xyz_raro_xyz", 1)
         assert resultado == []
 
 
@@ -420,4 +419,3 @@ class TestObtenerRanking:
         resultado = await user_service.obtener_ranking(db)
 
         assert resultado[0]["total_puntos"] == 10
-        

@@ -1,4 +1,3 @@
-# tests/test_router_users.py
 #
 # Tests de integración para routers/users.py usando TestClient.
 # Cubre: /registro, /perfil/informacion, /perfil/informacion/{nombre},
@@ -58,11 +57,11 @@ async def _fake_db():
     return None
 
 
-def _app_con_overrides(usuario_actual: str = "pepe") -> FastAPI:
+def _app_con_overrides(usuario_actual_id: int = 1) -> FastAPI:
     app = _build_app()
     app.dependency_overrides[obtener_db] = _fake_db
     app.dependency_overrides[auth.verificar_sesion_aplicacion] = lambda: "ok"
-    app.dependency_overrides[auth.obtener_usuario_actual] = lambda: usuario_actual
+    app.dependency_overrides[auth.obtener_usuario_actual] = lambda: usuario_actual_id
     return app
 
 
@@ -241,7 +240,7 @@ class TestInformacionPerfil:
         app = _app_con_overrides()
         usuario = _usuario_fake(total_metros=3000)
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return usuario
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -261,7 +260,7 @@ class TestInformacionPerfil:
         """3000 metros = 3 puntos (1000m = 1 punto)."""
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake(total_metros=3000)
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -274,7 +273,7 @@ class TestInformacionPerfil:
         """El router debe llamar a construir_url_foto y usar su resultado."""
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake(foto_perfil="foto.jpg")
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -289,7 +288,7 @@ class TestInformacionPerfil:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             raise HTTPException(status_code=404, detail="Error: Perfil de usuario no encontrado")
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -385,7 +384,7 @@ class TestFotoPerfil:
         monkeypatch.setattr(file_service, "validar_seguridad", lambda a: _make_jpeg_bytes())
         monkeypatch.setattr(file_service, "procesar_subida", lambda a, u, raw, f=None: "temp.jpg")
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -404,7 +403,7 @@ class TestFotoPerfil:
         async def fake_db_gen():
             return db_mock
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake(foto_perfil="foto_vieja.jpg")
 
         async def fake_commit(db_mock):
@@ -442,7 +441,7 @@ class TestActualizarPerfil:
         """PATCH con body vacío es válido: no toca ningún campo."""
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake()
 
         async def fake_actualizar(db, usuario, datos):
@@ -467,7 +466,7 @@ class TestActualizarPerfil:
     def test_actualizacion_exitosa_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake()
 
         async def fake_actualizar(db, usuario, datos):
@@ -483,7 +482,7 @@ class TestActualizarPerfil:
     def test_email_duplicado_devuelve_400(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake()
 
         async def fake_actualizar(db, usuario, datos):
@@ -500,7 +499,7 @@ class TestActualizarPerfil:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -516,7 +515,7 @@ class TestBorrarPerfil:
     def test_borrar_exitoso_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake()
 
         async def fake_eliminar(db, usuario):
@@ -533,7 +532,7 @@ class TestBorrarPerfil:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
@@ -545,7 +544,7 @@ class TestBorrarPerfil:
         app = _app_con_overrides()
         fotos_borradas = []
 
-        async def fake_obtener(db, usuario_actual, for_update=False):
+        async def fake_obtener(db, usuario_actual_id, for_update=False):
             return _usuario_fake(foto_perfil="foto_a_borrar.jpg")
 
         async def fake_eliminar(db, usuario):
@@ -603,7 +602,7 @@ class TestBuscarPerfil:
         from types import SimpleNamespace
         app = _app_con_overrides()
 
-        async def fake_buscar(db, termino, usuario_actual):
+        async def fake_buscar(db, termino, usuario_actual_id):
             return [SimpleNamespace(nombre_usuario="pepe", foto_perfil=None)]
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
@@ -614,24 +613,24 @@ class TestBuscarPerfil:
         assert response.json() == [{"nombre_usuario": "pepe", "foto_perfil": None}]
 
     def test_excluye_usuario_actual_pasandolo_al_servicio(self, monkeypatch):
-        app = _app_con_overrides(usuario_actual="mi_usuario")
+        app = _app_con_overrides(usuario_actual_id=99)
         llamada = {}
 
-        async def fake_buscar(db, termino, usuario_actual):
+        async def fake_buscar(db, termino, usuario_actual_id):
             llamada["termino"] = termino
-            llamada["usuario_actual"] = usuario_actual
+            llamada["usuario_actual_id"] = usuario_actual_id
             return []
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
 
         TestClient(app).get("/perfil/buscar", params={"q": "miu"})
         assert llamada["termino"] == "miu"
-        assert llamada["usuario_actual"] == "mi_usuario"
+        assert llamada["usuario_actual_id"] == 99
 
     def test_lista_vacia_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_buscar(db, termino, usuario_actual):
+        async def fake_buscar(db, termino, usuario_actual_id):
             return []
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
@@ -644,7 +643,7 @@ class TestBuscarPerfil:
         app = _app_con_overrides()
         fotos_procesadas = []
 
-        async def fake_buscar(db, termino, usuario_actual):
+        async def fake_buscar(db, termino, usuario_actual_id):
             return [SimpleNamespace(nombre_usuario="ana", foto_perfil="ana.jpg")]
 
         def fake_construir(foto, req):
@@ -743,4 +742,3 @@ class TestRankingObtener:
         monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
         response = TestClient(app).get("/ranking/obtener")
         assert response.json() == []
-        
