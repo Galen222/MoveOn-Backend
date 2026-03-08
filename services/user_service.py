@@ -414,7 +414,8 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     query = select(
         database.Usuario.nombre_usuario,
         database.Usuario.foto_perfil,
-        database.Usuario.total_metros
+        database.Usuario.total_metros,
+        database.Usuario.foto_fecha_actualizacion
     ).where(
         database.Usuario.perfil_visible == True
     )
@@ -427,11 +428,13 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     resultados = (await db.execute(query)).all()
 
     ranking = []
-    for nombre_usuario, foto_perfil, total_metros in resultados:
+    for nombre_usuario, foto_perfil, foto_fecha, total_metros in resultados:
         puntos = calculos.calcular_puntos_nivel(total_metros)
+        foto_version = int(foto_fecha.timestamp()) if foto_fecha else 0        
         ranking.append({
             "nombre_usuario": nombre_usuario,
             "foto_perfil": foto_perfil,
+            "foto_version": foto_version,
             "total_puntos": puntos
         })
 

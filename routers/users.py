@@ -20,6 +20,7 @@ from utils import calculos
 from starlette.concurrency import run_in_threadpool
 from config import settings
 from ip_rate_limit import rate_limit
+from datetime import datetime, timezone
 
 logger = logging.getLogger("app.users")
 
@@ -67,6 +68,7 @@ async def informacion_perfil(
         "peso": usuario.peso,
         "provincia": usuario.provincia,
         "foto_perfil": file_service.construir_url_foto(usuario.foto_perfil, request),
+        "foto_version": int(usuario.foto_fecha_actualizacion.timestamp()) if usuario.foto_fecha_actualizacion else 0,
         "perfil_visible": usuario.perfil_visible,
         "total_puntos": puntos
     }
@@ -95,6 +97,7 @@ async def informacion_perfil_publico(
         "nombre_usuario": usuario_objetivo.nombre_usuario,
         "provincia": usuario_objetivo.provincia,
         "foto_perfil": file_service.construir_url_foto(usuario_objetivo.foto_perfil, request),
+        "foto_version": int(usuario_objetivo.foto_fecha_actualizacion.timestamp()) if usuario_objetivo.foto_fecha_actualizacion else 0,        
         "total_puntos": puntos
     }
 
@@ -142,6 +145,8 @@ async def foto_perfil(
 
         foto_antigua = usuario.foto_perfil
         usuario.foto_perfil = nueva_ruta_foto
+        
+        usuario.foto_fecha_actualizacion = datetime.now(timezone.utc)
 
         await db.commit()
 
@@ -272,9 +277,11 @@ async def buscar_perfil(
     lista_final = []
     for usuario in resultados:
         url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)
+        foto_version = int(usuario.foto_fecha_actualizacion.timestamp()) if usuario.foto_fecha_actualizacion else 0
         lista_final.append({
             "nombre_usuario": usuario.nombre_usuario,
-            "foto_perfil": url_foto
+            "foto_perfil": url_foto,
+            "foto_version": foto_version
         })
 
     return lista_final

@@ -358,6 +358,7 @@ class RespuestaInformacionPerfil(BaseModel):
     peso: Optional[float] = None
     provincia: Optional[str] = None
     foto_perfil: Optional[str] = None
+    foto_version: int = 0
     perfil_visible: bool
     total_puntos: int
 
@@ -461,6 +462,7 @@ class InformacionPerfilPublico(BaseModel):
     nombre_usuario: str
     provincia: Optional[str] = None
     foto_perfil: Optional[str] = None
+    foto_version: int = 0
     total_puntos: int
 
 
@@ -470,6 +472,7 @@ class BusquedaUsuario(BaseModel):
     """
     nombre_usuario: str
     foto_perfil: Optional[str] = None
+    foto_version: int = 0
 
 
 class SolicitarPassword(BaseModel):
@@ -671,6 +674,7 @@ class RespuestaBorrarActividad(BaseModel):
 class ObtenerRanking(BaseModel):
     nombre_usuario: str
     foto_perfil: Optional[str] = None
+    foto_version: int = 0
     total_puntos: int
 
 

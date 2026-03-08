@@ -73,6 +73,7 @@ class Usuario(Base):
         peso: peso personal para control de calorias detallado.
         provincia: Ubicación geográfica opcional proporcionada por el usuario.
         foto_perfil: Ruta o nombre del archivo de imagen (predeterminado o subido).
+        foto_fecha_actualizacion: fecha de última modificación de la imagen.
         total_metros: Distancia total recorrida para calcular el Ranking.
         fecha_registro: Marca de tiempo automática de la creación de cuenta.
         fecha_eula: Registro de cuándo el usuario aceptó los términos de servicio.
@@ -103,6 +104,10 @@ class Usuario(Base):
         server_default="default_avatar.png",
         nullable=False,
     )
+    foto_fecha_actualizacion: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )    
     total_metros: Mapped[int] = mapped_column(
         BigInteger,
         default=0,
