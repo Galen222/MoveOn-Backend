@@ -133,6 +133,25 @@ async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: in
     Obtiene la lista paginada de actividades del usuario autenticado
     junto con metadata de paginación.
     """
+    # Validar que el usuario exista, igual que en el resto de operaciones
+    # de actividades, para no devolver una lista vacía si el token apunta
+    # a un usuario ya inexistente.
+    usuario_existe = (await db.execute(
+        select(database.Usuario.id)
+        .where(database.Usuario.id == usuario_actual_id)
+    )).scalar_one_or_none()
+
+    if not usuario_existe:
+        logger.warning(
+            "obtener_actividades_usuario_no_encontrado",
+            extra={
+                "usuario_id": usuario_actual_id,
+                "skip": skip,
+                "limit": limit,
+            },
+        )
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+
     total = (await db.execute(
         select(func.count())
         .select_from(database.Actividad)
@@ -284,3 +303,4 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
         "estatus": "success",
         "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
     }
+    

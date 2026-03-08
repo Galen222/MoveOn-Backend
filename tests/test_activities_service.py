@@ -1,4 +1,3 @@
-#
 # Tests para services/activities_service.py.
 # Cubre la lógica de negocio de actividades: crear, obtener, eliminar unitaria
 # y borrado masivo con reset de total_metros.
@@ -74,20 +73,21 @@ def _mock_execute_one(resultado):
     )
 
 
-
-
 def _mock_execute_first(fila):
     """db.execute que devuelve first() con una fila concreta."""
     return AsyncMock(
         return_value=MagicMock(first=MagicMock(return_value=fila))
     )
 
+
 def _mock_execute_seq(*resultados):
     """
     db.execute con side_effect: cada llamada devuelve el siguiente resultado.
     Cada item en resultados debe ser (tipo, valor):
-      - ("one", obj)  → scalar_one_or_none = obj
-      - ("count", n)  → scalar_one = n
+      - ("one", obj)   → scalar_one_or_none = obj
+      - ("count", n)   → scalar_one = n
+      - ("first", obj) → first = obj
+      - ("items", xs)  → scalars().all() = xs
       - ("none", None) → ejecuta sin retorno útil (DELETE, UPDATE)
     """
     side = []
@@ -97,6 +97,10 @@ def _mock_execute_seq(*resultados):
             mock.scalar_one_or_none.return_value = valor
         elif tipo == "count":
             mock.scalar_one.return_value = valor
+        elif tipo == "first":
+            mock.first.return_value = valor
+        elif tipo == "items":
+            mock.scalars.return_value.all.return_value = valor
         side.append(mock)
     return AsyncMock(side_effect=side)
 
@@ -112,7 +116,7 @@ class TestCrearActividad:
         db.execute = _mock_execute_one(None)
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.crear_actividad(db, "fantasma", _make_datos_actividad())
+            await activities_service.crear_actividad(db, 999999, _make_datos_actividad())
 
         assert exc.value.status_code == 404
         assert "usuario" in exc.value.detail.lower()
@@ -190,7 +194,7 @@ class TestObtenerActividad:
         db.execute = _mock_execute_first(None)
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.obtener_actividad(db, "fantasma", 1)
+            await activities_service.obtener_actividad(db, 999999, 1)
         assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
@@ -221,17 +225,28 @@ class TestObtenerActividad:
 
 class TestObtenerActividades:
     @pytest.mark.asyncio
+    async def test_usuario_no_encontrado_lanza_404(self):
+        db = AsyncMock()
+        db.execute = _mock_execute_seq(
+            ("one", None),
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await activities_service.obtener_actividades(db, 999999, skip=0, limit=20)
+
+        assert exc.value.status_code == 404
+        assert "usuario" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
     async def test_devuelve_items_y_metadata(self):
         actividades = [_make_actividad(id=i) for i in range(3)]
 
-        mock_result_total = MagicMock()
-        mock_result_total.scalar_one.return_value = 3
-
-        mock_result_items = MagicMock()
-        mock_result_items.scalars.return_value.all.return_value = actividades
-
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[mock_result_total, mock_result_items])
+        db.execute = _mock_execute_seq(
+            ("one", 1),
+            ("count", 3),
+            ("items", actividades),
+        )
 
         resultado = await activities_service.obtener_actividades(db, 1, skip=0, limit=2)
 
@@ -243,14 +258,12 @@ class TestObtenerActividades:
 
     @pytest.mark.asyncio
     async def test_lista_vacia_devuelve_metadata_correcta(self):
-        mock_result_total = MagicMock()
-        mock_result_total.scalar_one.return_value = 0
-
-        mock_result_items = MagicMock()
-        mock_result_items.scalars.return_value.all.return_value = []
-
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[mock_result_total, mock_result_items])
+        db.execute = _mock_execute_seq(
+            ("one", 1),
+            ("count", 0),
+            ("items", []),
+        )
 
         resultado = await activities_service.obtener_actividades(db, 1, skip=0, limit=20)
 
@@ -274,7 +287,7 @@ class TestEliminarActividad:
         db.execute = _mock_execute_first(None)
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.eliminar_actividad(db, "fantasma", 1)
+            await activities_service.eliminar_actividad(db, 999999, 1)
         assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
@@ -331,7 +344,7 @@ class TestEliminarActividades:
         db.execute = _mock_execute_one(None)
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.eliminar_actividades(db, "fantasma")
+            await activities_service.eliminar_actividades(db, 999999)
         assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
@@ -392,4 +405,4 @@ class TestEliminarActividades:
 
         resultado = await activities_service.eliminar_actividades(db, 1)
         assert "0" in resultado["mensaje"]
-
+        
