@@ -58,13 +58,15 @@ def _make_db_one(resultado) -> AsyncMock:
 
 
 def _make_db_seq(*resultados) -> AsyncMock:
-    """Cada item puede ser ('one', valor) o ('all', [lista]) o ('raw', mock)."""
+    """Cada item puede ser ('one', valor), ('count', n), ('items', [lista]) o ('raw', mock)."""
     side = []
     for tipo, valor in resultados:
         m = MagicMock()
         if tipo == "one":
             m.scalar_one_or_none.return_value = valor
-        elif tipo == "all":
+        elif tipo == "count":
+            m.scalar_one.return_value = valor
+        elif tipo in ("all", "items"):
             m.scalars.return_value.all.return_value = valor
         elif tipo == "raw":
             m = valor
@@ -328,31 +330,69 @@ class TestObtenerPerfilPublico:
 
 class TestBuscarUsuario:
     @pytest.mark.asyncio
-    async def test_termino_menor_de_3_caracteres_devuelve_lista_vacia(self):
+    async def test_termino_menor_de_3_caracteres_devuelve_metadata_vacia(self):
         db = AsyncMock()
-        resultado = await user_service.buscar_usuario(db, "ab", 1)
-        assert resultado == []
+
+        resultado = await user_service.buscar_usuario(db, "ab", 1, skip=0, limit=20)
+
+        assert resultado == {
+            "items": [],
+            "total": 0,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
         db.execute.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_termino_vacio_devuelve_lista_vacia(self):
+    async def test_termino_vacio_devuelve_metadata_vacia(self):
         db = AsyncMock()
-        resultado = await user_service.buscar_usuario(db, "", 1)
-        assert resultado == []
+
+        resultado = await user_service.buscar_usuario(db, "", 1, skip=0, limit=20)
+
+        assert resultado == {
+            "items": [],
+            "total": 0,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
 
     @pytest.mark.asyncio
-    async def test_busqueda_valida_devuelve_usuarios(self):
-        usuarios = [_make_usuario(nombre_usuario="galen"), _make_usuario(nombre_usuario="galeria")]
-        db = _make_db_seq(("all", usuarios))
+    async def test_busqueda_valida_devuelve_items_y_metadata(self):
+        usuarios = [
+            _make_usuario(nombre_usuario="galen"),
+            _make_usuario(nombre_usuario="galeria"),
+        ]
+        db = _make_db_seq(
+            ("count", 3),
+            ("items", usuarios),
+        )
 
-        resultado = await user_service.buscar_usuario(db, "gale", 1)
-        assert resultado == usuarios
+        resultado = await user_service.buscar_usuario(db, "gale", 1, skip=0, limit=2)
+
+        assert resultado["items"] == usuarios
+        assert resultado["total"] == 3
+        assert resultado["skip"] == 0
+        assert resultado["limit"] == 2
+        assert resultado["has_more"] is True
 
     @pytest.mark.asyncio
-    async def test_sin_resultados_devuelve_lista_vacia(self):
-        db = _make_db_seq(("all", []))
-        resultado = await user_service.buscar_usuario(db, "xyz_raro_xyz", 1)
-        assert resultado == []
+    async def test_sin_resultados_devuelve_metadata_vacia(self):
+        db = _make_db_seq(
+            ("count", 0),
+            ("items", []),
+        )
+
+        resultado = await user_service.buscar_usuario(db, "xyz_raro_xyz", 1, skip=0, limit=20)
+
+        assert resultado == {
+            "items": [],
+            "total": 0,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
 
 
 # ─────────────────────────────────────────────
@@ -421,3 +461,5 @@ class TestObtenerRanking:
 
         assert resultado[0]["total_puntos"] == 10
         assert resultado[0]["foto_version"] == 0
+
+

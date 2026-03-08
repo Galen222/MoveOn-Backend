@@ -350,19 +350,31 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
     return usuario
 
 
-async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual_id: int):
+async def buscar_usuario(
+    db: AsyncSession,
+    termino_busqueda: str,
+    usuario_actual_id: int,
+    skip: int,
+    limit: int,
+):
     """
     Busca usuarios cuyo nombre_usuario contenga el término.
     Filtros:
     1. Coincidencia parcial (ilike)
     2. Perfil visible (Privacidad)
     3. Excluye al usuario autenticado
-    4. Límite de 20 (Rendimiento)
+    4. Paginación configurable (skip/limit)
     """
     termino = termino_busqueda.strip()
 
     if not termino or len(termino) < 3:
-        return []
+        return {
+            "items": [],
+            "total": 0,
+            "skip": skip,
+            "limit": limit,
+            "has_more": False,
+        }
 
     termino_seguro = (
         termino
@@ -371,14 +383,24 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual
         .replace("_", "\\_")
     )
 
+    filtros = (
+        database.Usuario.perfil_visible == True,
+        database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
+        database.Usuario.id != usuario_actual_id,
+    )
+
+    total = (await db.execute(
+        select(func.count())
+        .select_from(database.Usuario)
+        .where(*filtros)
+    )).scalar_one()
+
     usuarios = (await db.execute(
         select(database.Usuario)
-        .where(
-            database.Usuario.perfil_visible == True,
-            database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
-            database.Usuario.id != usuario_actual_id
-        )
-        .limit(20)
+        .where(*filtros)
+        .order_by(func.lower(database.Usuario.nombre_usuario).asc(), database.Usuario.id.asc())
+        .offset(skip)
+        .limit(limit)
     )).scalars().all()
 
     logger.debug(
@@ -386,11 +408,21 @@ async def buscar_usuario(db: AsyncSession, termino_busqueda: str, usuario_actual
         extra={
             "usuario_id": usuario_actual_id,
             "termino": termino,
+            "skip": skip,
+            "limit": limit,
+            "total": total,
             "resultados": len(usuarios),
+            "has_more": (skip + limit) < total,
         },
     )
 
-    return usuarios
+    return {
+        "items": usuarios,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "has_more": (skip + limit) < total,
+    }
 
 
 async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
@@ -447,3 +479,5 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     )
 
     return ranking
+
+

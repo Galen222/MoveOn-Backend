@@ -22,7 +22,7 @@ from config import settings
 logger = logging.getLogger("app.files")
 
 # Pillow para verificar que el archivo es realmente una imagen
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 
 # Sentinel: en tu caso "default_avatar.png" NO existe en backend.
@@ -147,6 +147,10 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
     try:
         im = Image.open(BytesIO(raw))
         im.load()
+
+        # Aplica la orientación EXIF antes de eliminar metadatos.
+        # Así evitamos que algunas fotos queden giradas al strippear EXIF.
+        im = ImageOps.exif_transpose(im)
     except (UnidentifiedImageError, OSError):
         raise HTTPException(status_code=400, detail="Error: El archivo no es una imagen válida")
 
@@ -155,6 +159,11 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
     if extension == ".png":
         if im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGBA")
+
+        # Importante:
+        # - No pasamos pnginfo
+        # - No pasamos exif
+        # => se eliminan metadatos embebidos al re-encodear
         im.save(out, format="PNG", optimize=True)
         data = out.getvalue()
 
@@ -169,6 +178,9 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
     if im.mode in ("RGBA", "P"):
         im = im.convert("RGB")
 
+    # Importante:
+    # - No pasamos exif
+    # => no se preservan EXIF/GPS
     im.save(out, format="JPEG", optimize=True, quality=IMAGE_JPEG_QUALITY)
     data = out.getvalue()
 
@@ -344,3 +356,4 @@ def borrar_foto(foto_perfil: str, usuario_actual_id: int):
         )
         return
     
+

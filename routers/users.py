@@ -260,22 +260,25 @@ async def borrar_perfil(
     return respuesta
 
 
-@router.get("/perfil/buscar", response_model=List[schemas.BusquedaUsuario])
+@router.get("/perfil/buscar", response_model=schemas.RespuestaBusquedaUsuariosPaginada)
 @rate_limit(settings.RL_PERFIL_BUSCAR)
 async def buscar_perfil(
     request: Request,
     q: str = Query(..., min_length=3, max_length=50, description="Término de búsqueda (min 3 caracteres)"),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
 ):
     """
     Busca usuarios por nombre (coincidencia parcial).
     Solo devuelve usuarios con perfil público y excluye al usuario autenticado.
+    Devuelve resultados paginados con metadata.
     """
-    resultados = await user_service.buscar_usuario(db, q, usuario_actual_id)
+    resultados = await user_service.buscar_usuario(db, q, usuario_actual_id, skip, limit)
 
     lista_final = []
-    for usuario in resultados:
+    for usuario in resultados["items"]:
         url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)
         foto_version = int(usuario.foto_fecha_actualizacion.timestamp()) if usuario.foto_fecha_actualizacion else 0
         lista_final.append({
@@ -284,7 +287,13 @@ async def buscar_perfil(
             "foto_version": foto_version
         })
 
-    return lista_final
+    return {
+        "items": lista_final,
+        "total": resultados["total"],
+        "skip": resultados["skip"],
+        "limit": resultados["limit"],
+        "has_more": resultados["has_more"],
+    }
 
 
 @router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
@@ -314,3 +323,5 @@ async def obtener_ranking(
         })
 
     return ranking_final
+
+

@@ -54,6 +54,15 @@ def _make_rgba_bytes(width: int = 10, height: int = 10) -> bytes:
     return buf.getvalue()
 
 
+def _make_jpeg_with_exif_orientation() -> bytes:
+    img = Image.new("RGB", (10, 20), color=(200, 100, 50))
+    exif = Image.Exif()
+    exif[274] = 6  # Orientation: rotate 90 CW
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif)
+    return buf.getvalue()
+
+
 def _fake_request(base_url: str = "http://localhost:8000/") -> MagicMock:
     req = MagicMock()
     req.base_url = base_url
@@ -314,6 +323,19 @@ class TestReencodeImage:
         data = file_service._reencode_image(raw, ".png")
         assert Image.open(BytesIO(data)).format == "PNG"
 
+    def test_reencode_normaliza_orientacion_y_no_preserva_exif(self):
+        raw = _make_jpeg_with_exif_orientation()
+
+        data = file_service._reencode_image(raw, ".jpg")
+
+        im = Image.open(BytesIO(data))
+
+        # Tras exif_transpose, la imagen queda físicamente girada.
+        assert im.size == (20, 10)
+
+        # Y ya no debe depender del tag EXIF de orientación.
+        assert im.getexif().get(274) is None
+
     def test_archivo_no_imagen_lanza_400(self):
         raw = b"esto no es una imagen"
         with pytest.raises(HTTPException) as exc:
@@ -571,3 +593,4 @@ class TestGuardarNube:
         assert imagen_subida.format == "JPEG"
         assert resultado == "https://res.cloudinary.com/demo/image/upload/perfiles/foto.jpg"
         
+

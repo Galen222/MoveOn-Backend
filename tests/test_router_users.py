@@ -599,71 +599,111 @@ class TestBuscarPerfil:
         assert response.status_code == 403
         assert response.headers["x-app-session-expired"] == "1"
 
-    def test_q_valida_devuelve_resultados(self, monkeypatch):
+    def test_q_valida_devuelve_resultados_paginados(self, monkeypatch):
         from types import SimpleNamespace
         app = _app_con_overrides()
 
-        async def fake_buscar(db, termino, usuario_actual_id):
-            return [
-                SimpleNamespace(
-                    nombre_usuario="pepe",
-                    foto_perfil=None,
-                    foto_fecha_actualizacion=None,
-                )
-            ]
+        async def fake_buscar(db, termino, usuario_actual_id, skip, limit):
+            return {
+                "items": [
+                    SimpleNamespace(
+                        nombre_usuario="pepe",
+                        foto_perfil=None,
+                        foto_fecha_actualizacion=None,
+                    )
+                ],
+                "total": 1,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
         monkeypatch.setattr(file_service, "construir_url_foto", lambda foto, req: foto)
 
         response = TestClient(app).get("/perfil/buscar", params={"q": "pep"})
         assert response.status_code == 200
-        assert response.json() == [
-            {
-                "nombre_usuario": "pepe",
-                "foto_perfil": None,
-                "foto_version": 0,
-            }
-        ]
+        assert response.json() == {
+            "items": [
+                {
+                    "nombre_usuario": "pepe",
+                    "foto_perfil": None,
+                    "foto_version": 0,
+                }
+            ],
+            "total": 1,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
 
     def test_excluye_usuario_actual_pasandolo_al_servicio(self, monkeypatch):
         app = _app_con_overrides(usuario_actual_id=99)
         llamada = {}
 
-        async def fake_buscar(db, termino, usuario_actual_id):
+        async def fake_buscar(db, termino, usuario_actual_id, skip, limit):
             llamada["termino"] = termino
             llamada["usuario_actual_id"] = usuario_actual_id
-            return []
+            llamada["skip"] = skip
+            llamada["limit"] = limit
+            return {
+                "items": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
 
         TestClient(app).get("/perfil/buscar", params={"q": "miu"})
         assert llamada["termino"] == "miu"
         assert llamada["usuario_actual_id"] == 99
+        assert llamada["skip"] == 0
+        assert llamada["limit"] == 20
 
     def test_lista_vacia_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        async def fake_buscar(db, termino, usuario_actual_id):
-            return []
+        async def fake_buscar(db, termino, usuario_actual_id, skip, limit):
+            return {
+                "items": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         monkeypatch.setattr(user_service, "buscar_usuario", fake_buscar)
         response = TestClient(app).get("/perfil/buscar", params={"q": "xyz"})
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "items": [],
+            "total": 0,
+            "skip": 0,
+            "limit": 20,
+            "has_more": False,
+        }
 
     def test_foto_pasa_por_construir_url(self, monkeypatch):
         from types import SimpleNamespace
         app = _app_con_overrides()
         fotos_procesadas = []
 
-        async def fake_buscar(db, termino, usuario_actual_id):
-            return [
-                SimpleNamespace(
-                    nombre_usuario="ana",
-                    foto_perfil="ana.jpg",
-                    foto_fecha_actualizacion=None,
-                )
-            ]
+        async def fake_buscar(db, termino, usuario_actual_id, skip, limit):
+            return {
+                "items": [
+                    SimpleNamespace(
+                        nombre_usuario="ana",
+                        foto_perfil="ana.jpg",
+                        foto_fecha_actualizacion=None,
+                    )
+                ],
+                "total": 1,
+                "skip": skip,
+                "limit": limit,
+                "has_more": False,
+            }
 
         def fake_construir(foto, req):
             fotos_procesadas.append(foto)
@@ -675,7 +715,7 @@ class TestBuscarPerfil:
         response = TestClient(app).get("/perfil/buscar", params={"q": "ana"})
         assert response.status_code == 200
         assert "ana.jpg" in fotos_procesadas
-        assert response.json()[0]["foto_version"] == 0
+        assert response.json()["items"][0]["foto_version"] == 0
 
 
 # ─────────────────────────────────────────────
@@ -763,3 +803,5 @@ class TestRankingObtener:
         monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
         response = TestClient(app).get("/ranking/obtener")
         assert response.json() == []
+
+

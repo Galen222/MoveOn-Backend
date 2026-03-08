@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Callable
-
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from exceptions import error_response
@@ -37,6 +35,16 @@ class RequestSizeLimitMiddleware:
         }
         self.error_message = error_message
 
+    def _build_413_response(self):
+        return error_response(
+            status_code=413,
+            mensaje=self.error_message,
+            headers={
+                "Cache-Control": "no-store",
+                "Pragma": "no-cache",
+            },
+        )
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -59,10 +67,7 @@ class RequestSizeLimitMiddleware:
         if content_length:
             try:
                 if int(content_length) > limit:
-                    response = error_response(
-                        status_code=413,
-                        mensaje=self.error_message,
-                    )
+                    response = self._build_413_response()
                     await response(scope, receive, send)
                     return
             except ValueError:
@@ -84,10 +89,7 @@ class RequestSizeLimitMiddleware:
             total += len(chunk)
 
             if total > limit:
-                response = error_response(
-                    status_code=413,
-                    mensaje=self.error_message,
-                )
+                response = self._build_413_response()
                 await response(scope, receive, send)
                 return
 
@@ -111,3 +113,5 @@ class _ReplayReceive:
             self._index += 1
             return message
         return {"type": "http.request", "body": b"", "more_body": False}
+
+

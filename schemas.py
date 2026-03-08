@@ -391,6 +391,17 @@ class BusquedaUsuario(BaseModel):
     foto_version: int = 0
 
 
+class RespuestaBusquedaUsuariosPaginada(BaseModel):
+    """
+    Esquema para resultados paginados de la barra de búsqueda.
+    """
+    items: List[BusquedaUsuario]
+    total: int
+    skip: int
+    limit: int
+    has_more: bool
+
+
 class SolicitarPassword(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
     email: EmailStr
@@ -597,3 +608,5 @@ class ObtenerRanking(BaseModel):
 class RespuestaGenerica(BaseModel):
     estatus: str
     mensaje: str
+
+
