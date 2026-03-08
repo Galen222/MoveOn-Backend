@@ -1,6 +1,7 @@
 #
 # Tests para services/file_service.py.
-# Cubre: validar_seguridad, construir_url_foto, borrar_foto, _reencode_image.
+# Cubre: validar_seguridad, construir_url_foto, borrar_foto, _reencode_image,
+# _strip_cloudinary_version, procesar_subida, guardar_local y guardar_nube.
 #
 # No necesitamos BD ni red: todas las funciones son síncronas y operan
 # sobre contenido en memoria o sobre el sistema de archivos local.
@@ -98,7 +99,7 @@ class TestValidarTamano:
 
     def test_acepta_imagen_dentro_del_limite(self):
         archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
-        raw = file_service.validar_seguridad(archivo) # type: ignore[arg-type]
+        raw = file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
         assert isinstance(raw, bytes)
         assert raw
 
@@ -147,13 +148,13 @@ class TestValidarImagenReal:
 
     def test_acepta_jpeg_valido(self):
         archivo = FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
-        raw = file_service.validar_seguridad(archivo) # type: ignore[arg-type]
+        raw = file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
         assert isinstance(raw, bytes)
         assert raw
 
     def test_acepta_png_valido(self):
         archivo = FakeUploadFile(_make_png_bytes(), "image/png")
-        raw = file_service.validar_seguridad(archivo) # type: ignore[arg-type]
+        raw = file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
         assert isinstance(raw, bytes)
         assert raw
 
@@ -304,7 +305,7 @@ class TestReencodeImage:
 
     def test_rgba_a_jpeg_convierte_a_rgb(self):
         """JPEG no soporta alpha: RGBA debe convertirse a RGB sin error."""
-        raw = _make_jpeg_bytes()
+        raw = _make_rgba_bytes()
         data = file_service._reencode_image(raw, ".jpg")
         assert Image.open(BytesIO(data)).mode == "RGB"
 
@@ -328,6 +329,22 @@ class TestReencodeImage:
 
 
 # ─────────────────────────────────────────────
+# _strip_cloudinary_version
+# ─────────────────────────────────────────────
+
+class TestStripCloudinaryVersion:
+    def test_quita_segmento_de_version(self):
+        url = "https://res.cloudinary.com/demo/image/upload/v1712345678/perfiles/foto.jpg"
+        resultado = file_service._strip_cloudinary_version(url)
+        assert resultado == "https://res.cloudinary.com/demo/image/upload/perfiles/foto.jpg"
+
+    def test_si_no_hay_version_devuelve_igual(self):
+        url = "https://res.cloudinary.com/demo/image/upload/perfiles/foto.jpg"
+        resultado = file_service._strip_cloudinary_version(url)
+        assert resultado == url
+
+
+# ─────────────────────────────────────────────
 # procesar_subida
 # ─────────────────────────────────────────────
 
@@ -338,7 +355,7 @@ class TestProcesarSubida:
         with patch.object(file_service.settings, "STORAGE_TYPE", "cloudinary"), \
              patch.object(file_service, "guardar_nube", return_value="https://cdn.example.com/foto.jpg") as mock_nube, \
              patch.object(file_service, "guardar_local") as mock_local:
-            resultado = file_service.procesar_subida(archivo, 1, raw) # type: ignore[arg-type]
+            resultado = file_service.procesar_subida(archivo, 1, raw)  # type: ignore[arg-type]
         mock_nube.assert_called_once()
         mock_local.assert_not_called()
         assert resultado == "https://cdn.example.com/foto.jpg"
@@ -349,7 +366,7 @@ class TestProcesarSubida:
         with patch.object(file_service.settings, "STORAGE_TYPE", "local"), \
              patch.object(file_service, "guardar_local", return_value="perfil_abc.jpg") as mock_local, \
              patch.object(file_service, "guardar_nube") as mock_nube:
-            resultado = file_service.procesar_subida(archivo, 1, raw) # type: ignore[arg-type]
+            resultado = file_service.procesar_subida(archivo, 1, raw)  # type: ignore[arg-type]
         mock_local.assert_called_once()
         mock_nube.assert_not_called()
         assert resultado == "perfil_abc.jpg"
@@ -375,7 +392,7 @@ class TestGuardarLocal:
         archivo = FakeUploadFile(raw, "image/jpeg")
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
-                nombre = file_service.guardar_local(archivo, 1, raw) # type: ignore[arg-type]
+                nombre = file_service.guardar_local(archivo, 1, raw)  # type: ignore[arg-type]
         assert nombre.endswith(".jpg")
         assert nombre.startswith("perfil_")
 
@@ -384,7 +401,7 @@ class TestGuardarLocal:
         archivo = FakeUploadFile(raw, "image/png")
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
-                nombre = file_service.guardar_local(archivo, 1, raw) # type: ignore[arg-type]
+                nombre = file_service.guardar_local(archivo, 1, raw)  # type: ignore[arg-type]
         assert nombre.endswith(".png")
 
     def test_archivo_realmente_existe_en_disco(self):
@@ -392,7 +409,7 @@ class TestGuardarLocal:
         archivo = FakeUploadFile(raw, "image/jpeg")
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
-                nombre = file_service.guardar_local(archivo, 1, raw) # type: ignore[arg-type]
+                nombre = file_service.guardar_local(archivo, 1, raw)  # type: ignore[arg-type]
                 ruta = os.path.join(tmpdir, nombre)
             assert os.path.exists(ruta)
             assert os.path.getsize(ruta) > 0
@@ -405,7 +422,7 @@ class TestGuardarLocal:
         hash_esperado = hashlib.sha256(str(1).encode()).hexdigest()
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
-                nombre = file_service.guardar_local(archivo, 1, raw) # type: ignore[arg-type]
+                nombre = file_service.guardar_local(archivo, 1, raw)  # type: ignore[arg-type]
         assert hash_esperado in nombre
 
     def test_imagen_invalida_lanza_400(self):
@@ -434,18 +451,19 @@ class TestGuardarNube:
     def _raw_jpeg(self) -> bytes:
         return _make_jpeg_bytes()
 
-    def _archivo_jpeg(self) -> FakeUploadFile:
-        return FakeUploadFile(_make_jpeg_bytes(), "image/jpeg")
-
-    def test_exito_devuelve_secure_url(self):
-        with patch("cloudinary.uploader.upload", return_value={"secure_url": "https://res.cloudinary.com/foto.jpg"}):
+    def test_exito_devuelve_url_sin_version(self):
+        with patch(
+            "cloudinary.uploader.upload",
+            return_value={"secure_url": "https://res.cloudinary.com/demo/image/upload/v1712345678/perfiles/foto.jpg"},
+        ):
             raw = self._raw_jpeg()
             archivo = FakeUploadFile(raw, "image/jpeg")
-            resultado = file_service.guardar_nube(archivo, 1, raw) # type: ignore[arg-type]
-        assert resultado == "https://res.cloudinary.com/foto.jpg"
+            resultado = file_service.guardar_nube(archivo, 1, raw)  # type: ignore[arg-type]
+
+        assert resultado == "https://res.cloudinary.com/demo/image/upload/perfiles/foto.jpg"
 
     def test_cloudinary_sin_secure_url_lanza_500(self):
-        """BUG 2: si Cloudinary devuelve dict sin secure_url debe ser 500, no None en BD."""
+        """Si Cloudinary devuelve dict sin secure_url debe ser 500, no None en BD."""
         with patch("cloudinary.uploader.upload", return_value={"public_id": "perfiles/perfil_abc"}):
             with pytest.raises(HTTPException) as exc:
                 raw = self._raw_jpeg()
@@ -462,7 +480,7 @@ class TestGuardarNube:
         assert exc.value.status_code == 500
 
     def test_imagen_invalida_lanza_400_no_500(self):
-        """BUG 1: HTTPException(400) de _reencode_image NO debe convertirse en 500."""
+        """HTTPException(400) de _reencode_image NO debe convertirse en 500."""
         raw = b"basura"
         archivo = FakeUploadFile(raw, "image/jpeg")
         with pytest.raises(HTTPException) as exc:
@@ -476,9 +494,10 @@ class TestGuardarNube:
         public_id_esperado = f"perfil_{hash_esperado}"
 
         capturado = {}
+
         def fake_upload(data, **kwargs):
             capturado.update(kwargs)
-            return {"secure_url": "https://res.cloudinary.com/foto.jpg"}
+            return {"secure_url": "https://res.cloudinary.com/demo/image/upload/v1/perfiles/foto.jpg"}
 
         with patch("cloudinary.uploader.upload", side_effect=fake_upload):
             raw = self._raw_jpeg()
@@ -490,9 +509,10 @@ class TestGuardarNube:
     def test_overwrite_true_en_upload(self):
         """Cloudinary debe usar overwrite=True para que solo haya una foto por usuario."""
         capturado = {}
+
         def fake_upload(data, **kwargs):
             capturado.update(kwargs)
-            return {"secure_url": "https://res.cloudinary.com/foto.jpg"}
+            return {"secure_url": "https://res.cloudinary.com/demo/image/upload/v1/perfiles/foto.jpg"}
 
         with patch("cloudinary.uploader.upload", side_effect=fake_upload):
             raw = self._raw_jpeg()
@@ -500,3 +520,54 @@ class TestGuardarNube:
             file_service.guardar_nube(archivo, 1, raw)  # type: ignore[arg-type]
 
         assert capturado.get("overwrite") is True
+
+    def test_invalidate_true_en_upload(self):
+        """Cloudinary debe invalidar caché al sobrescribir el asset."""
+        capturado = {}
+
+        def fake_upload(data, **kwargs):
+            capturado.update(kwargs)
+            return {"secure_url": "https://res.cloudinary.com/demo/image/upload/v1/perfiles/foto.jpg"}
+
+        with patch("cloudinary.uploader.upload", side_effect=fake_upload):
+            raw = self._raw_jpeg()
+            archivo = FakeUploadFile(raw, "image/jpeg")
+            file_service.guardar_nube(archivo, 1, raw)  # type: ignore[arg-type]
+
+        assert capturado.get("invalidate") is True
+
+    def test_resource_type_image_en_upload(self):
+        capturado = {}
+
+        def fake_upload(data, **kwargs):
+            capturado.update(kwargs)
+            return {"secure_url": "https://res.cloudinary.com/demo/image/upload/v1/perfiles/foto.jpg"}
+
+        with patch("cloudinary.uploader.upload", side_effect=fake_upload):
+            raw = self._raw_jpeg()
+            archivo = FakeUploadFile(raw, "image/jpeg")
+            file_service.guardar_nube(archivo, 1, raw)  # type: ignore[arg-type]
+
+        assert capturado.get("resource_type") == "image"
+
+    def test_png_se_normaliza_a_jpg_antes_de_subir(self):
+        """Aunque el usuario suba PNG, en Cloudinary debe enviarse JPEG."""
+        raw = _make_png_bytes()
+        archivo = FakeUploadFile(raw, "image/png")
+
+        capturado = {}
+
+        def fake_upload(data, **kwargs):
+            capturado["data"] = data
+            capturado.update(kwargs)
+            return {"secure_url": "https://res.cloudinary.com/demo/image/upload/v99/perfiles/foto.jpg"}
+
+        with patch("cloudinary.uploader.upload", side_effect=fake_upload):
+            resultado = file_service.guardar_nube(archivo, 1, raw)  # type: ignore[arg-type]
+
+        datos_subidos = capturado["data"].getvalue()
+        imagen_subida = Image.open(BytesIO(datos_subidos))
+
+        assert imagen_subida.format == "JPEG"
+        assert resultado == "https://res.cloudinary.com/demo/image/upload/perfiles/foto.jpg"
+        

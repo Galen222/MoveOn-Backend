@@ -6,6 +6,7 @@ services/file_service.py
 Servicio para manejar la validación y procesamiento de archivos.
 """
 import os
+import re
 import time
 import hashlib
 from typing import Optional
@@ -72,7 +73,8 @@ MALICIOUS_SIGNATURES = [
 ]
 
 # NOTA:
-# - En producción usamos Cloudinary y guardamos secure_url en BD -> se devuelve tal cual (no depende de base_url).
+# - En producción usamos Cloudinary y guardamos una URL canónica SIN versión en BD.
+#   Así evitamos depender de una secure_url versionada nueva tras cada overwrite.
 # - request.base_url solo se usa en modo local con storage local (HTTP), donde es suficiente.
 # - Si en el futuro se despliega detrás de reverse proxy/HTTPS, considerar usar X-Forwarded-* o PUBLIC_BASE_URL.
 def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional[str]:
@@ -180,6 +182,19 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
     return data
 
 
+def _strip_cloudinary_version(url: str) -> str:
+    """
+    Elimina el segmento /v1234567890/ de una secure_url de Cloudinary.
+    Ejemplo:
+    https://res.cloudinary.com/demo/image/upload/v1712345678/perfiles/foto.jpg
+    ->
+    https://res.cloudinary.com/demo/image/upload/perfiles/foto.jpg
+
+    Con esto guardamos una URL canónica estable en BD para el mismo public_id.
+    """
+    return re.sub(r"/v\d+/", "/", url, count=1)
+
+
 def procesar_subida(
     archivo: UploadFile,
     usuario_actual_id: int,
@@ -237,12 +252,10 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
     try:
         usuario_hash = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
 
-        mapa_extensiones = {
-            "image/jpeg": ".jpg",
-            "image/jpg": ".jpg",
-            "image/png": ".png",
-        }
-        extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
+        # En Cloudinary siempre normalizamos a JPG para que el asset final
+        # tenga siempre el mismo formato, independientemente de si el usuario
+        # subió JPG o PNG.
+        extension = ".jpg"
 
         data_limpia = _reencode_image(raw, extension)
 
@@ -251,6 +264,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
             folder="perfiles",
             public_id=f"perfil_{usuario_hash}",
             overwrite=True,
+            invalidate=True,
             resource_type="image"
         )
 
@@ -260,7 +274,9 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
                 status_code=500,
                 detail="Error: Cloudinary no devolvió URL válida"
             )
-        return url
+
+        # Guardamos una URL canónica sin versión.
+        return _strip_cloudinary_version(url)
 
     except HTTPException:
         raise
