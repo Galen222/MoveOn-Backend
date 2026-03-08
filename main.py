@@ -28,6 +28,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from middlewares.security_headers import SecurityHeadersMiddleware
 from middlewares.request_context import RequestContextMiddleware
+from middlewares.request_size import RequestSizeLimitMiddleware
 from logging_config import setup_logging
 from ip_rate_limit import limiter, rate_limit
 from services.identity_rate_limit import IdentityRateLimitExceeded
@@ -97,15 +98,30 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.ENABLE_DOCS else None
 )
 
+REQUEST_SIZE_LIMITS = {
+    ("POST", "/login"): 8 * 1024,
+    ("POST", "/registro"): 16 * 1024,
+    ("POST", "/password/solicitar"): 4 * 1024,
+    ("POST", "/password/confirmar"): 8 * 1024,
+}
+
 # Configurar el limitador (usa la IP del usuario para contar)
 app.state.limiter = limiter
-
-# Middleware de contexto/request_id
-app.add_middleware(RequestContextMiddleware)
 
 # Middleware de SlowAPI (si no, el rate limit puede no comportarse correctamente)
 if settings.ENABLE_RATE_LIMIT_IP:
     app.add_middleware(SlowAPIMiddleware)
+
+# Middleware de tamaño del body para rutas JSON sensibles.
+# Se añade aquí para que las respuestas 413 sigan pasando por
+# request_id, cabeceras de seguridad y CORS.
+app.add_middleware(
+    RequestSizeLimitMiddleware,
+    route_limits=REQUEST_SIZE_LIMITS,
+)
+
+# Middleware de contexto/request_id
+app.add_middleware(RequestContextMiddleware)
 
 # Middleware de Seguridad
 if settings.ENABLE_SECURITY_HEADERS:
