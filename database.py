@@ -272,11 +272,9 @@ class Usuario(Base):
     # -------------------------
     # Imagen de perfil
     # -------------------------
-    foto_perfil: Mapped[str] = mapped_column(
+    foto_perfil: Mapped[Optional[str]] = mapped_column(
         String(500),
-        nullable=False,
-        default="default_avatar.png",
-        server_default="default_avatar.png",
+        nullable=True,
     )
     foto_fecha_actualizacion: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
@@ -388,7 +386,7 @@ class Usuario(Base):
         CheckConstraint("peso IS NULL OR (peso BETWEEN 20 AND 300)", name="ck_usuarios_peso_range"),
 
         # Imagen y acumulados
-        CheckConstraint("char_length(btrim(foto_perfil)) BETWEEN 1 AND 500", name="ck_usuarios_foto_perfil_len"),
+        CheckConstraint("foto_perfil IS NULL OR char_length(btrim(foto_perfil)) BETWEEN 1 AND 500", name="ck_usuarios_foto_perfil_len"),
         CheckConstraint("total_metros >= 0", name="ck_usuarios_total_metros_non_negative"),
 
         # Términos: si el usuario existe en tabla, deben estar aceptados
@@ -499,7 +497,9 @@ class Usuario(Base):
         return _validar_enum_str(valor, VALID_PROVINCIAS, "La provincia")
 
     @validates("foto_perfil")
-    def validar_foto_perfil(self, key: str, valor: str) -> str:
+    def validar_foto_perfil(self, key: str, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
         return _validar_texto_no_vacio(valor, "La foto de perfil", 500)
 
     @validates("foto_fecha_actualizacion", "fecha_registro", "codigo_expiracion")

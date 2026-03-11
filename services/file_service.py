@@ -24,11 +24,6 @@ logger = logging.getLogger("app.files")
 # Pillow para verificar que el archivo es realmente una imagen
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-
-# Sentinel: en tu caso "default_avatar.png" NO existe en backend.
-# Existe en Android como drawable, así que el backend debe devolver null y no intentar borrarla.
-DEFAULT_AVATAR_SENTINEL = "default_avatar.png"
-
 # Límite de seguridad (anti "decompression bomb")
 # Ajustable por env (ej: 13MP)
 MAX_IMAGE_PIXELS = int(settings.MAX_IMAGE_PIXELS)
@@ -80,13 +75,8 @@ MALICIOUS_SIGNATURES = [
 def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional[str]:
     """
     Devuelve la URL completa de la foto si existe.
-    Si es 'default_avatar.png' (sentinel local de Android), devuelve None para que la app use su drawable.
     """
     if not foto_perfil:
-        return None
-
-    # Si alguien guardó "default_avatar.png" en BD (o viene en ruta), no se sirve desde backend
-    if os.path.basename(str(foto_perfil)) == DEFAULT_AVATAR_SENTINEL:
         return None
 
     # Si la foto es de Cloudinary (empieza por http), se usa tal cual
@@ -307,13 +297,9 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
         )
 
 
-def borrar_foto(foto_perfil: str, usuario_actual_id: int):
+def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int):
     """Lógica de borrado permanente segura usando Hashing."""
     if not foto_perfil:
-        return
-
-    # Si es el sentinel (avatar local de Android), no hay nada que borrar en backend
-    if os.path.basename(foto_perfil) == DEFAULT_AVATAR_SENTINEL:
         return
 
     # Cloudinary: borrado fiable por el mismo public_id con el que subimos
@@ -336,6 +322,24 @@ def borrar_foto(foto_perfil: str, usuario_actual_id: int):
                 },
                 exc_info=True,
             )
+        return
+
+    # Local (tu lógica actual)
+    try:
+        carpeta_imagenes = settings.UPLOAD_DIR
+        ruta = os.path.join(carpeta_imagenes, os.path.basename(foto_perfil))
+        if os.path.exists(ruta):
+            os.remove(ruta)
+    except Exception:
+        logger.warning(
+            "error_borrado_archivo_local",
+            extra={
+                "usuario_id": usuario_actual_id,
+                "foto": foto_perfil,
+                "storage_type": settings.STORAGE_TYPE,
+            },
+            exc_info=True,
+        )
         return
 
     # Local (tu lógica actual)

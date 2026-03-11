@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
         if not os.path.exists(carpeta_imagenes):
             os.makedirs(carpeta_imagenes)
         # Se monta la carpeta para que sea accesible vía URL
-        # http://127.0.0.1:8000/imagenes/default_avatar.jpg
+        # http://127.0.0.1:8000/imagenes/foto.jpg
         app.mount("/imagenes", StaticFiles(directory=carpeta_imagenes), name="imagenes")
 
     logger.info(
@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.8.0",
+    version="0.8.1",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,

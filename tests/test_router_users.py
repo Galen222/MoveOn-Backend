@@ -83,7 +83,7 @@ def _usuario_fake(**kwargs) -> SimpleNamespace:
         altura=175,
         peso=70.0,
         provincia="Madrid",
-        foto_perfil="default_avatar.png",
+        foto_perfil=None,
         foto_fecha_actualizacion=None,
         perfil_visible=True,
         total_metros=5000,

@@ -197,13 +197,6 @@ class TestConstruirUrlFoto:
     def test_cadena_vacia_devuelve_none(self):
         assert file_service.construir_url_foto("", _fake_request()) is None
 
-    def test_sentinel_devuelve_none(self):
-        assert file_service.construir_url_foto("default_avatar.png", _fake_request()) is None
-
-    def test_sentinel_en_ruta_larga_devuelve_none(self):
-        ruta = "/uploads/perfil_abc/default_avatar.png"
-        assert file_service.construir_url_foto(ruta, _fake_request()) is None
-
     def test_url_cloudinary_se_devuelve_tal_cual(self):
         url = "https://res.cloudinary.com/demo/image/upload/sample.jpg"
         assert file_service.construir_url_foto(url, _fake_request()) == url
@@ -222,12 +215,9 @@ class TestConstruirUrlFoto:
         resultado = file_service.construir_url_foto(
             "perfil_abc123.jpg", _fake_request("http://localhost:8000")
         )
-        assert resultado is not None
-        sin_protocolo = resultado.replace("http://", "").replace("https://", "")
-        assert "//" not in sin_protocolo
+        assert resultado == "http://localhost:8000/imagenes/perfil_abc123.jpg"
 
-    def test_public_base_url_tiene_prioridad_sobre_request(self):
-        """Cuando PUBLIC_BASE_URL está configurado, se usa en vez de request.base_url."""
+    def test_public_base_url_tiene_prioridad(self):
         with patch.object(file_service.settings, "PUBLIC_BASE_URL", "https://api.moveon.com"):
             resultado = file_service.construir_url_foto(
                 "perfil_abc123.jpg", _fake_request("http://localhost:8000/")
@@ -261,11 +251,6 @@ class TestBorrarFoto:
     def test_cadena_vacia_no_hace_nada(self):
         file_service.borrar_foto("", 1)
 
-    def test_sentinel_no_intenta_borrar(self):
-        with patch("os.path.exists") as mock_exists:
-            file_service.borrar_foto("default_avatar.png", 1)
-        mock_exists.assert_not_called()
-
     def test_local_borra_archivo_existente(self):
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
             nombre = os.path.basename(f.name)
@@ -293,7 +278,7 @@ class TestBorrarFoto:
 
     def test_cloudinary_fallo_no_propaga_excepcion(self):
         with patch.object(file_service.settings, "STORAGE_TYPE", "cloudinary"), \
-             patch("cloudinary.uploader.destroy", side_effect=Exception("timeout")):
+             patch("cloudinary.uploader.destroy", side_effect=Exception("boom")):
             file_service.borrar_foto("https://cloudinary.com/foto.jpg", 1)
 
 

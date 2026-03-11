@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: 0044bf4d2561
+Revision ID: 877311255ecd
 Revises: 
-Create Date: 2026-03-08 13:06:29.760068
+Create Date: 2026-03-11 18:54:17.776089
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0044bf4d2561'
+revision: str = '877311255ecd'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,7 +32,7 @@ def upgrade() -> None:
     sa.Column('altura', sa.Integer(), nullable=True),
     sa.Column('peso', sa.Float(), nullable=True),
     sa.Column('provincia', sa.String(length=40), nullable=True),
-    sa.Column('foto_perfil', sa.String(length=500), server_default='default_avatar.png', nullable=False),
+    sa.Column('foto_perfil', sa.String(length=500), nullable=True),
     sa.Column('foto_fecha_actualizacion', sa.DateTime(timezone=True), nullable=True),
     sa.Column('total_metros', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
     sa.Column('fecha_registro', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
@@ -52,13 +52,13 @@ def upgrade() -> None:
     sa.CheckConstraint('(codigo_recuperacion IS NULL) = (codigo_expiracion IS NULL)', name='ck_usuarios_codigo_recuperacion_pair'),
     sa.CheckConstraint('acepta_terminos IS TRUE', name='ck_usuarios_acepta_terminos_true'),
     sa.CheckConstraint('altura IS NULL OR (altura BETWEEN 50 AND 300)', name='ck_usuarios_altura_range'),
-    sa.CheckConstraint('char_length(btrim(foto_perfil)) BETWEEN 1 AND 500', name='ck_usuarios_foto_perfil_len'),
     sa.CheckConstraint('char_length(btrim(password_encriptada)) > 0', name='ck_usuarios_password_hash_non_empty'),
     sa.CheckConstraint('char_length(btrim(version_terminos)) BETWEEN 1 AND 10', name='ck_usuarios_version_terminos_len'),
     sa.CheckConstraint('char_length(email) BETWEEN 3 AND 320', name='ck_usuarios_email_len'),
     sa.CheckConstraint('char_length(nombre_usuario) BETWEEN 5 AND 50', name='ck_usuarios_nombre_usuario_len'),
     sa.CheckConstraint('email = lower(btrim(email))', name='ck_usuarios_email_normalized_lower'),
     sa.CheckConstraint('fecha_nacimiento <= CURRENT_DATE', name='ck_usuarios_fecha_nacimiento_not_future'),
+    sa.CheckConstraint('foto_perfil IS NULL OR char_length(btrim(foto_perfil)) BETWEEN 1 AND 500', name='ck_usuarios_foto_perfil_len'),
     sa.CheckConstraint('nombre_real IS NULL OR char_length(btrim(nombre_real)) BETWEEN 3 AND 80', name='ck_usuarios_nombre_real_len'),
     sa.CheckConstraint('peso IS NULL OR (peso BETWEEN 20 AND 300)', name='ck_usuarios_peso_range'),
     sa.CheckConstraint('total_metros >= 0', name='ck_usuarios_total_metros_non_negative'),
