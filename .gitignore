@@ -11,15 +11,13 @@ Thumbs.db
 
 # --- BACKEND (PYTHON) ---
 venv/
-.venv/
-env/
-.env/
+.env
+.env.prod
 __pycache__/
 *.py[cod]
 uploads/
 .uploads/
 docs/
 .docs/
-.env
 *.pyc
 .pytest_cache
