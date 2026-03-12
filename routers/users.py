@@ -97,7 +97,7 @@ async def informacion_perfil_publico(
         "nombre_usuario": usuario_objetivo.nombre_usuario,
         "provincia": usuario_objetivo.provincia,
         "foto_perfil": file_service.construir_url_foto(usuario_objetivo.foto_perfil, request),
-        "foto_version": int(usuario_objetivo.foto_fecha_actualizacion.timestamp()) if usuario_objetivo.foto_fecha_actualizacion else 0,        
+        "foto_version": int(usuario_objetivo.foto_fecha_actualizacion.timestamp()) if usuario_objetivo.foto_fecha_actualizacion else 0,
         "total_puntos": puntos
     }
 
@@ -121,21 +121,22 @@ async def foto_perfil(
         },
     )
 
-    # 1) Validar imagen y recuperar los bytes ya leídos
-    raw = await run_in_threadpool(file_service.validar_seguridad, archivo)
-
-    # 2) Subir primero la nueva imagen (sin releer el archivo)
-    nueva_ruta_foto = await run_in_threadpool(
-        file_service.procesar_subida,
-        archivo,
-        usuario_actual_id,
-        raw,
-        None
-    )
-
     foto_antigua = None
+    nueva_ruta_foto = None
 
     try:
+        # 1) Validar imagen y recuperar los bytes ya leídos
+        raw = await run_in_threadpool(file_service.validar_seguridad, archivo)
+
+        # 2) Subir primero la nueva imagen (sin releer el archivo)
+        nueva_ruta_foto = await run_in_threadpool(
+            file_service.procesar_subida,
+            archivo,
+            usuario_actual_id,
+            raw,
+            None
+        )
+
         # 3) Bloquear la fila solo en el momento de actualizar la BD
         usuario = await user_service.obtener_perfil(
             db,
@@ -145,7 +146,6 @@ async def foto_perfil(
 
         foto_antigua = usuario.foto_perfil
         usuario.foto_perfil = nueva_ruta_foto
-        
         usuario.foto_fecha_actualizacion = datetime.now(timezone.utc)
 
         await db.commit()
@@ -216,11 +216,10 @@ async def foto_perfil(
         settings.STORAGE_TYPE != "cloudinary"
         and foto_antigua
         and not str(foto_antigua).startswith("http")
-        and (os.path.basename(str(foto_antigua)) != file_service.DEFAULT_AVATAR_SENTINEL)
     ):
         background_tasks.add_task(file_service.borrar_foto, foto_antigua, usuario_actual_id)
 
-    return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
+        return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
 
 @router.patch("/perfil/actualizar", response_model=schemas.RespuestaGenerica)
@@ -323,5 +322,3 @@ async def obtener_ranking(
         })
 
     return ranking_final
-
-

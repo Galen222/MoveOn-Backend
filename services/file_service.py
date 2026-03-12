@@ -43,7 +43,11 @@ if IMAGE_JPEG_QUALITY > 95:
 
 # Si la API está en producción carga variables de Cloudinary.
 if settings.STORAGE_TYPE == "cloudinary":
-    if not settings.CLOUDINARY_CLOUD_NAME or not settings.CLOUDINARY_API_KEY or not settings.CLOUDINARY_API_SECRET:
+    if (
+        not settings.CLOUDINARY_CLOUD_NAME
+        or not settings.CLOUDINARY_API_KEY
+        or not settings.CLOUDINARY_API_SECRET
+    ):
         raise RuntimeError(
             "STORAGE_TYPE=cloudinary pero faltan credenciales: "
             "CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET"
@@ -53,19 +57,20 @@ if settings.STORAGE_TYPE == "cloudinary":
         cloud_name=settings.CLOUDINARY_CLOUD_NAME,
         api_key=settings.CLOUDINARY_API_KEY,
         api_secret=settings.CLOUDINARY_API_SECRET,
-        secure=True
+        secure=True,
     )
 
 # Firmas de contenido malicioso conocidas.
 MALICIOUS_SIGNATURES = [
-    b'<%eval',
-    b'<%execute',
-    b'<script>',
-    b'javascript:',
-    b'vbscript:',
-    b'.exe\x00',
-    b'.dll\x00'
+    b"<%eval",
+    b"<%execute",
+    b"<script>",
+    b"javascript:",
+    b"vbscript:",
+    b".exe\x00",
+    b".dll\x00",
 ]
+
 
 # NOTA:
 # - En producción usamos Cloudinary y guardamos una URL canónica SIN versión en BD.
@@ -85,7 +90,6 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 
     # Si hay URL pública configurada, se usa siempre
     url_base = settings.PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
-
     ruta = str(foto_perfil).lstrip("/")
 
     return f"{url_base}/imagenes/{ruta}"
@@ -103,7 +107,7 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
         mb = MAX_IMAGE_BYTES / (1024 * 1024)
         raise HTTPException(
             status_code=400,
-            detail=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)"
+            detail=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)",
         )
 
     content = archivo.file.read()
@@ -161,7 +165,7 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
             mb = MAX_IMAGE_BYTES / (1024 * 1024)
             raise HTTPException(
                 status_code=400,
-                detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)"
+                detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)",
             )
         return data
 
@@ -178,7 +182,7 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
         mb = MAX_IMAGE_BYTES / (1024 * 1024)
         raise HTTPException(
             status_code=400,
-            detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)"
+            detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)",
         )
 
     return data
@@ -201,18 +205,34 @@ def procesar_subida(
     archivo: UploadFile,
     usuario_actual_id: int,
     raw: bytes,
-    foto_anterior_bd: Optional[str] = None
+    foto_anterior_bd: Optional[str] = None,
 ) -> str:
-    if settings.STORAGE_TYPE == "cloudinary":
-        return guardar_nube(archivo, usuario_actual_id, raw)
-    return guardar_local(archivo, usuario_actual_id, raw, foto_anterior_bd)
+    try:
+        if settings.STORAGE_TYPE == "cloudinary":
+            return guardar_nube(archivo, usuario_actual_id, raw)
+        return guardar_local(archivo, usuario_actual_id, raw, foto_anterior_bd)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "error_procesado_subida",
+            extra={
+                "usuario_id": usuario_actual_id,
+                "content_type": archivo.content_type,
+                "storage_type": settings.STORAGE_TYPE,
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Error: No se ha podido procesar la imagen",
+        )
 
 
 def guardar_local(
     archivo: UploadFile,
     usuario_actual_id: int,
     raw: bytes,
-    foto_anterior_bd: Optional[str] = None
+    foto_anterior_bd: Optional[str] = None,
 ) -> str:
     carpeta_imagenes = settings.UPLOAD_DIR
     nombre_seguro = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
@@ -224,14 +244,19 @@ def guardar_local(
     }
     extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 
-    data_limpia = _reencode_image(raw, extension)
-
-    nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
-    ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
-
     try:
+        data_limpia = _reencode_image(raw, extension)
+
+        nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
+        ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
+
         with open(ruta_final, "wb") as buffer:
             buffer.write(data_limpia)
+
+        return nombre_archivo
+
+    except HTTPException:
+        raise
     except Exception:
         logger.exception(
             "error_guardado_archivo_local",
@@ -239,15 +264,16 @@ def guardar_local(
                 "usuario_id": usuario_actual_id,
                 "content_type": archivo.content_type,
                 "storage_type": settings.STORAGE_TYPE,
-                "ruta_destino": ruta_final,
+                "ruta_destino": os.path.join(
+                    carpeta_imagenes,
+                    f"perfil_{nombre_seguro}_{int(time.time())}{extension}",
+                ),
             },
         )
         raise HTTPException(
             status_code=500,
-            detail="Error: No se ha podido guardar la imagen localmente"
+            detail="Error: No se ha podido guardar la imagen localmente",
         )
-
-    return nombre_archivo
 
 
 def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str:
@@ -258,7 +284,6 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
         # tenga siempre el mismo formato, independientemente de si el usuario
         # subió JPG o PNG.
         extension = ".jpg"
-
         data_limpia = _reencode_image(raw, extension)
 
         resultado = cloudinary.uploader.upload(
@@ -267,14 +292,14 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
             public_id=f"perfil_{usuario_hash}",
             overwrite=True,
             invalidate=True,
-            resource_type="image"
+            resource_type="image",
         )
 
         url = resultado.get("secure_url")
         if not url:
             raise HTTPException(
                 status_code=500,
-                detail="Error: Cloudinary no devolvió URL válida"
+                detail="Error: Cloudinary no devolvió URL válida",
             )
 
         # Guardamos una URL canónica sin versión.
@@ -293,16 +318,15 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
         )
         raise HTTPException(
             status_code=500,
-            detail="Error: No se ha podido subir la imagen a la nube"
+            detail="Error: No se ha podido subir la imagen a la nube",
         )
 
 
-def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int):
-    """Lógica de borrado permanente segura usando Hashing."""
+def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int) -> None:
+    """Lógica de borrado permanente segura usando hashing."""
     if not foto_perfil:
         return
 
-    # Cloudinary: borrado fiable por el mismo public_id con el que subimos
     if settings.STORAGE_TYPE == "cloudinary":
         try:
             usuario_hash = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
@@ -310,7 +334,7 @@ def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int):
             cloudinary.uploader.destroy(
                 public_id,
                 resource_type="image",
-                invalidate=True
+                invalidate=True,
             )
         except Exception:
             logger.warning(
@@ -324,7 +348,6 @@ def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int):
             )
         return
 
-    # Local (tu lógica actual)
     try:
         carpeta_imagenes = settings.UPLOAD_DIR
         ruta = os.path.join(carpeta_imagenes, os.path.basename(foto_perfil))
@@ -340,24 +363,3 @@ def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int):
             },
             exc_info=True,
         )
-        return
-
-    # Local (tu lógica actual)
-    try:
-        carpeta_imagenes = settings.UPLOAD_DIR
-        ruta = os.path.join(carpeta_imagenes, os.path.basename(foto_perfil))
-        if os.path.exists(ruta):
-            os.remove(ruta)
-    except Exception:
-        logger.warning(
-            "error_borrado_archivo_local",
-            extra={
-                "usuario_id": usuario_actual_id,
-                "foto": foto_perfil,
-                "storage_type": settings.STORAGE_TYPE,
-            },
-            exc_info=True,
-        )
-        return
-    
-

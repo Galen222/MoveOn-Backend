@@ -1,3 +1,4 @@
+
 # services/activities_service.py
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,9 +51,13 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
     usuario.total_metros = total_actual + int(datos.distancia)
 
     # Se guarda en BD.
-    db.add(nueva_actividad)
-    await db.commit()
-    await db.refresh(nueva_actividad)
+    try:
+        db.add(nueva_actividad)
+        await db.commit()
+        await db.refresh(nueva_actividad)
+    except Exception:
+        await db.rollback()
+        raise
     
     logger.info(
         "actividad_creada",
@@ -230,12 +235,16 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
     # Evita números negativos por errores de redondeo flotante.
     # La fila del usuario está bloqueada, así que el cálculo puede hacerse en Python
     # y mantener el atributo tipado como int.
-    total_actual = int(usuario.total_metros or 0)
-    distancia_actividad = int(actividad.distancia or 0)
-    usuario.total_metros = max(0, total_actual - distancia_actividad)
+    try:
+        total_actual = int(usuario.total_metros or 0)
+        distancia_actividad = int(actividad.distancia or 0)
+        usuario.total_metros = max(0, total_actual - distancia_actividad)
 
-    await db.delete(actividad)
-    await db.commit()
+        await db.delete(actividad)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     
     logger.info(
         "actividad_eliminada",
@@ -280,15 +289,19 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
         .where(database.Actividad.usuario_id == usuario.id)
     )).scalar_one()
 
-    # Borrado masivo de actividades
-    await db.execute(
-        sa_delete(database.Actividad).where(database.Actividad.usuario_id == usuario.id)
-    )
+    try:
+        # Borrado masivo de actividades
+        await db.execute(
+            sa_delete(database.Actividad).where(database.Actividad.usuario_id == usuario.id)
+        )
 
-    # Reset de metros (tu backend trabaja en metros enteros)
-    usuario.total_metros = 0
+        # Reset de metros
+        usuario.total_metros = 0
 
-    await db.commit()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
     logger.info(
         "borrado_total_actividades_completado",
@@ -303,4 +316,3 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
         "estatus": "success",
         "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
     }
-    

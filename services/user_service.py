@@ -1,3 +1,4 @@
+
 # services/user_service.py
 
 """
@@ -114,9 +115,7 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         await db.commit()
         await db.refresh(nuevo_usuario)
     except IntegrityError:
-        # Importante: rollback siempre
         await db.rollback()
-        # Mensaje coherente (sin depender de parsear el error SQL del driver)
         logger.warning(
             "registro_usuario_error_integridad",
             extra={
@@ -129,6 +128,9 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
             status_code=400,
             detail="Error: El nombre de usuario o el email ya están en uso"
         )
+    except Exception:
+        await db.rollback()
+        raise
 
     logger.info(
         "usuario_registrado",
@@ -192,98 +194,101 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
     payload = datos.model_dump(exclude_unset=True)
     campos_actualizados = sorted(payload.keys())
 
-    # -------------------------
-    # Campos opcionales BORRABLES (permiten null)
-    # -------------------------
-
-    if "nombre_real" in payload:
-        # Permite borrar nombre_real enviando null
-        usuario.nombre_real = payload["nombre_real"]
-
-    if "genero" in payload:
-        # Enum -> str o None
-        g = payload["genero"]
-        usuario.genero = g.value if g is not None else None
-
-    if "altura" in payload:
-        # int o None
-        usuario.altura = payload["altura"]
-
-    if "peso" in payload:
-        # float o None
-        usuario.peso = payload["peso"]
-
-    if "provincia" in payload:
-        # Enum -> str o None
-        p = payload["provincia"]
-        usuario.provincia = p.value if p is not None else None
-
-    # -------------------------
-    # Campos editables NO borrables (no aceptar null)
-    # -------------------------
-
-    if "email" in payload:
-        if payload["email"] is None:
-            raise HTTPException(status_code=400, detail="Error: El email no puede ser null")
-
-        # Email siempre en minúsculas (aunque schemas ya lo baja, aquí blindamos)
-        email = str(payload["email"]).strip().lower()
-
-        duplicado = (await db.execute(
-            select(database.Usuario).where(
-                database.Usuario.email == email,
-                database.Usuario.id != usuario.id
-            )
-        )).scalar_one_or_none()
-
-        if duplicado:
-            logger.warning(
-                "actualizacion_perfil_email_duplicado",
-                extra={
-                    "usuario": usuario.nombre_usuario,
-                    "usuario_id": usuario.id,
-                    "nuevo_email": email,
-                },
-            )
-            raise HTTPException(
-                status_code=400, detail="Error: El email ya está en uso")
-
-        usuario.email = email
-
-    if "password" in payload:
-        if payload["password"] is None:
-            raise HTTPException(status_code=400, detail="Error: La contraseña no puede ser null")
-
-        usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, payload["password"])
-
-        # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
-        ahora = datetime.now(timezone.utc)
-        await db.execute(
-            update(database.SesionRefresh)
-            .where(
-                database.SesionRefresh.usuario_id == usuario.id,
-                database.SesionRefresh.revocada_en.is_(None)
-            )
-            .values(revocada_en=ahora)
-        )
-
-    if "fecha_nacimiento" in payload:
-        if payload["fecha_nacimiento"] is None:
-            raise HTTPException(status_code=400, detail="Error: La fecha de nacimiento no puede ser null")
-        usuario.fecha_nacimiento = payload["fecha_nacimiento"]
-
-    if "perfil_visible" in payload:
-        # En tu app Android es un toggle (true/false). No debería llegar null.
-        if payload["perfil_visible"] is None:
-            raise HTTPException(status_code=400, detail="Error: perfil_visible no puede ser null")
-        usuario.perfil_visible = payload["perfil_visible"]
-
-    # Persistencia con red de seguridad por si hay concurrencia (race condition)
-    # Aunque hayamos detectado duplicados, otra request puede colarse entre medias.
     try:
+        # -------------------------
+        # Campos opcionales BORRABLES (permiten null)
+        # -------------------------
+
+        if "nombre_real" in payload:
+            # Permite borrar nombre_real enviando null
+            usuario.nombre_real = payload["nombre_real"]
+
+        if "genero" in payload:
+            # Enum -> str o None
+            g = payload["genero"]
+            usuario.genero = g.value if g is not None else None
+
+        if "altura" in payload:
+            # int o None
+            usuario.altura = payload["altura"]
+
+        if "peso" in payload:
+            # float o None
+            usuario.peso = payload["peso"]
+
+        if "provincia" in payload:
+            # Enum -> str o None
+            p = payload["provincia"]
+            usuario.provincia = p.value if p is not None else None
+
+        # -------------------------
+        # Campos editables NO borrables (no aceptar null)
+        # -------------------------
+
+        if "email" in payload:
+            if payload["email"] is None:
+                raise HTTPException(status_code=400, detail="Error: El email no puede ser null")
+
+            # Email siempre en minúsculas (aunque schemas ya lo baja, aquí blindamos)
+            email = str(payload["email"]).strip().lower()
+
+            duplicado = (await db.execute(
+                select(database.Usuario).where(
+                    database.Usuario.email == email,
+                    database.Usuario.id != usuario.id
+                )
+            )).scalar_one_or_none()
+
+            if duplicado:
+                logger.warning(
+                    "actualizacion_perfil_email_duplicado",
+                    extra={
+                        "usuario": usuario.nombre_usuario,
+                        "usuario_id": usuario.id,
+                        "nuevo_email": email,
+                    },
+                )
+                raise HTTPException(
+                    status_code=400, detail="Error: El email ya está en uso")
+
+            usuario.email = email
+
+        if "password" in payload:
+            if payload["password"] is None:
+                raise HTTPException(status_code=400, detail="Error: La contraseña no puede ser null")
+
+            usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, payload["password"])
+
+            # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
+            ahora = datetime.now(timezone.utc)
+            await db.execute(
+                update(database.SesionRefresh)
+                .where(
+                    database.SesionRefresh.usuario_id == usuario.id,
+                    database.SesionRefresh.revocada_en.is_(None)
+                )
+                .values(revocada_en=ahora)
+            )
+
+        if "fecha_nacimiento" in payload:
+            if payload["fecha_nacimiento"] is None:
+                raise HTTPException(status_code=400, detail="Error: La fecha de nacimiento no puede ser null")
+            usuario.fecha_nacimiento = payload["fecha_nacimiento"]
+
+        if "perfil_visible" in payload:
+            # En tu app Android es un toggle (true/false). No debería llegar null.
+            if payload["perfil_visible"] is None:
+                raise HTTPException(status_code=400, detail="Error: perfil_visible no puede ser null")
+            usuario.perfil_visible = payload["perfil_visible"]
+
+        # Persistencia con red de seguridad por si hay concurrencia (race condition)
+        # Aunque hayamos detectado duplicados, otra request puede colarse entre medias.
         await db.commit()
+
+    except HTTPException:
+        await db.rollback()
+        raise
     except IntegrityError:
-        # Importante: rollback siempre
         await db.rollback()
         logger.warning(
             "actualizacion_perfil_error_integridad",
@@ -298,6 +303,9 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
             status_code=400,
             detail="Error: El email ya está en uso"
         )
+    except Exception:
+        await db.rollback()
+        raise
 
     logger.info(
         "perfil_actualizado",
@@ -427,8 +435,12 @@ async def buscar_usuario(
 
 async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
     """Elimina permanentemente el registro de la base de datos."""
-    await db.delete(usuario)
-    await db.commit()
+    try:
+        await db.delete(usuario)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
     logger.info(
         "cuenta_eliminada",
@@ -479,5 +491,3 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     )
 
     return ranking
-
-

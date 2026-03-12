@@ -1,3 +1,4 @@
+
 # services/access_service.py
 
 from __future__ import annotations
@@ -90,9 +91,13 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
         reemplazada_por_jti=None
     )
     
-    await _limpiar_sesiones_refresh_usuario(db, usuario.id)
-    db.add(sesion)
-    await db.commit()
+    try:
+        await _limpiar_sesiones_refresh_usuario(db, usuario.id)
+        db.add(sesion)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
     logger.info(
         "sesion_login_creada",
@@ -142,6 +147,13 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
 
     usuario_id_token = int(usuario_id_token)
 
+    async def _commit_or_rollback():
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+
     # Bloqueo de fila para evitar race condition: 2 refresh simultáneos con el mismo token
     # podrían rotar el token dos veces si no se bloquea la sesión.
     sesion = (await db.execute(
@@ -173,7 +185,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         )
         # Token manipulado / no coincide con el registrado
         await _revocar_familia_refresh(db, sesion.familia_id)
-        await db.commit()
+        await _commit_or_rollback()
         raise HTTPException(status_code=401, detail="Error: Refresh token inválido o reutilizado")
 
     if sesion.revocada_en is not None:
@@ -187,7 +199,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         )
         # Reutilización de token rotado/revocado => revocamos toda la familia
         await _revocar_familia_refresh(db, sesion.familia_id)
-        await db.commit()
+        await _commit_or_rollback()
         raise HTTPException(status_code=401, detail="Error: Refresh token reutilizado")
 
     ahora = _ahora_utc()
@@ -201,7 +213,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
             },
         )
         sesion.revocada_en = ahora
-        await db.commit()
+        await _commit_or_rollback()
         raise HTTPException(status_code=401, detail="Error: Refresh token expirado")
 
     usuario = (await db.execute(
@@ -218,7 +230,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
             },
         )
         sesion.revocada_en = ahora
-        await db.commit()
+        await _commit_or_rollback()
         raise HTTPException(status_code=401, detail="Error: Usuario no encontrado")
 
     # Rotación: invalidar refresh actual y crear uno nuevo en la misma familia
@@ -244,7 +256,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     
     await _limpiar_sesiones_refresh_usuario(db, usuario.id)
     db.add(nueva_sesion)
-    await db.commit()
+    await _commit_or_rollback()
 
     logger.info(
         "sesion_refresh_rotada",
@@ -344,7 +356,11 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
         ahora = _ahora_utc()
         sesion.revocada_en = ahora
         sesion.ultimo_uso_en = ahora
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
         logger.info(
             "logout_correcto",
@@ -383,7 +399,11 @@ async def generar_codigo_recuperacion(db: AsyncSession, email: str, background_t
         usuario.codigo_recuperacion = _hash_codigo_recuperacion(codigo)
         usuario.codigo_expiracion = _ahora_utc() + timedelta(minutes=int(settings.RECOVERY_CODE_EXPIRE_MINUTES))
 
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
         # Envia el código por correo al usuario.
         background_tasks.add_task(email_service.enviar_codigo_recuperacion, email, codigo, int(settings.RECOVERY_CODE_EXPIRE_MINUTES))
 
@@ -436,21 +456,25 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
         )
         raise HTTPException(status_code=400, detail="Error: El código ha expirado")
 
-    usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, datos.nueva_password)
-    usuario.codigo_recuperacion = None
-    usuario.codigo_expiracion = None
+    try:
+        usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, datos.nueva_password)
+        usuario.codigo_recuperacion = None
+        usuario.codigo_expiracion = None
 
-    # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
-    ahora = _ahora_utc()
-    await db.execute(
-        update(database.SesionRefresh)
-        .where(
-            database.SesionRefresh.usuario_id == usuario.id,
-            database.SesionRefresh.revocada_en.is_(None)
+        # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
+        ahora = _ahora_utc()
+        await db.execute(
+            update(database.SesionRefresh)
+            .where(
+                database.SesionRefresh.usuario_id == usuario.id,
+                database.SesionRefresh.revocada_en.is_(None)
+            )
+            .values(revocada_en=ahora)
         )
-        .values(revocada_en=ahora)
-    )
-    await db.commit()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
     logger.info(
         "password_actualizada_correctamente",
