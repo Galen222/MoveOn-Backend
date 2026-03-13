@@ -1,4 +1,3 @@
-
 # services/user_service.py
 
 """
@@ -22,7 +21,6 @@ from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
-from services import text_moderation_service
 
 import auth
 import database
@@ -44,19 +42,12 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     # Normalizaciones básicas
     nombre_usuario = datos.nombre_usuario.strip()
     if not nombre_usuario:
-        raise HTTPException(status_code=400, detail="Error: El nombre de usuario no puede estar vacío")
+        raise HTTPException(
+            status_code=400, detail="Error: El nombre de usuario no puede estar vacío")
 
     # Guardamos email siempre en minúsculas para que la unicidad sea consistente
     email = str(datos.email).strip().lower()
     nombre_key = nombre_usuario.lower()
-
-    # Extraer el nombre real normalizado
-    nombre_real = datos.nombre_real.strip() if isinstance(datos.nombre_real, str) else None
-
-    # Moderación de texto externa
-    await text_moderation_service.validar_nombre_usuario(nombre_usuario)
-    if nombre_real:
-        await text_moderation_service.validar_nombre_real(nombre_real)
 
     # 1) Detección de duplicados en UNA sola query
     #    - nombre_usuario case-insensitive
@@ -78,7 +69,8 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
                     "email": email,
                 },
             )
-            raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El nombre de usuario ya está en uso")
 
         logger.warning(
             "registro_usuario_email_duplicado",
@@ -87,7 +79,8 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
                 "email": email,
             },
         )
-        raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+        raise HTTPException(
+            status_code=400, detail="Error: El email ya está en uso")
 
     # 2) Hash de contraseña en threadpool (bcrypt es CPU-bound y bloquea el event loop)
     password_hash = await run_in_threadpool(auth.encriptar_password, datos.password)
@@ -103,13 +96,15 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         password_encriptada=password_hash,
 
         # nombre_real: si viene str, strip; si viene None, se guarda None
-        nombre_real=nombre_real,
+        nombre_real=datos.nombre_real.strip() if isinstance(
+            datos.nombre_real, str) else None,
 
         fecha_nacimiento=datos.fecha_nacimiento,
         genero=genero_val,
         altura=datos.altura,
         peso=datos.peso,
         provincia=provincia_val,
+
         perfil_visible=datos.perfil_visible,
         acepta_terminos=datos.acepta_terminos,
         fecha_eula=datos.fecha_aceptacion_terminos,
@@ -209,13 +204,7 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
 
         if "nombre_real" in payload:
             # Permite borrar nombre_real enviando null
-            nuevo_nombre_real = payload["nombre_real"]
-
-            # Moderación de texto externa
-            if nuevo_nombre_real:
-                await text_moderation_service.validar_nombre_real(nuevo_nombre_real)
-
-            usuario.nombre_real = nuevo_nombre_real
+            usuario.nombre_real = payload["nombre_real"]
 
         if "genero" in payload:
             # Enum -> str o None
@@ -241,7 +230,8 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
 
         if "email" in payload:
             if payload["email"] is None:
-                raise HTTPException(status_code=400, detail="Error: El email no puede ser null")
+                raise HTTPException(
+                    status_code=400, detail="Error: El email no puede ser null")
 
             # Email siempre en minúsculas (aunque schemas ya lo baja, aquí blindamos)
             email = str(payload["email"]).strip().lower()
@@ -263,15 +253,14 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
                     },
                 )
                 raise HTTPException(
-                    status_code=400,
-                    detail="Error: El email ya está en uso"
-                )
+                    status_code=400, detail="Error: El email ya está en uso")
 
             usuario.email = email
 
         if "password" in payload:
             if payload["password"] is None:
-                raise HTTPException(status_code=400, detail="Error: La contraseña no puede ser null")
+                raise HTTPException(
+                    status_code=400, detail="Error: La contraseña no puede ser null")
 
             usuario.password_encriptada = await run_in_threadpool(auth.encriptar_password, payload["password"])
 
@@ -288,14 +277,28 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
 
         if "fecha_nacimiento" in payload:
             if payload["fecha_nacimiento"] is None:
-                raise HTTPException(status_code=400, detail="Error: La fecha de nacimiento no puede ser null")
+                raise HTTPException(
+                    status_code=400, detail="Error: La fecha de nacimiento no puede ser null")
             usuario.fecha_nacimiento = payload["fecha_nacimiento"]
 
         if "perfil_visible" in payload:
             # En tu app Android es un toggle (true/false). No debería llegar null.
             if payload["perfil_visible"] is None:
-                raise HTTPException(status_code=400, detail="Error: perfil_visible no puede ser null")
+                raise HTTPException(
+                    status_code=400, detail="Error: perfil_visible no puede ser null")
             usuario.perfil_visible = payload["perfil_visible"]
+
+        if "objetivo_semanal_metros" in payload:
+            if payload["objetivo_semanal_metros"] is None:
+                raise HTTPException(
+                    status_code=400, detail="Error: El objetivo semanal no puede ser null")
+            usuario.objetivo_semanal_metros = payload["objetivo_semanal_metros"]
+
+        if "objetivo_mensual_metros" in payload:
+            if payload["objetivo_mensual_metros"] is None:
+                raise HTTPException(
+                    status_code=400, detail="Error: El objetivo mensual no puede ser null")
+            usuario.objetivo_mensual_metros = payload["objetivo_mensual_metros"]
 
         # Persistencia con red de seguridad por si hay concurrencia (race condition)
         # Aunque hayamos detectado duplicados, otra request puede colarse entre medias.
@@ -409,7 +412,8 @@ async def buscar_usuario(
 
     filtros = (
         database.Usuario.perfil_visible == True,
-        database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
+        database.Usuario.nombre_usuario.ilike(
+            f"%{termino_seguro}%", escape="\\"),
         database.Usuario.id != usuario_actual_id,
     )
 
@@ -490,7 +494,7 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     ranking = []
     for nombre_usuario, foto_perfil, total_metros, foto_fecha in resultados:
         puntos = calculos.calcular_puntos_nivel(total_metros)
-        foto_version = int(foto_fecha.timestamp()) if foto_fecha else 0        
+        foto_version = int(foto_fecha.timestamp()) if foto_fecha else 0
         ranking.append({
             "nombre_usuario": nombre_usuario,
             "foto_perfil": foto_perfil,

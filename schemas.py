@@ -13,6 +13,7 @@ import re
 from utils import validators
 from domain.enums import ProvinciaEspaña, GeneroUsuario, TipoActividad
 
+
 class RespuestaHandshake(BaseModel):
     """Esquema para la respuesta del handshake inicial."""
     app_session_token: str
@@ -61,9 +62,10 @@ class Registro(BaseModel):
         if len(valor) < 5:
             raise ValueError(
                 'Error: El nombre de usuario debe tener al menos 5 caracteres')
-            
+
         if len(valor) > 50:  # ✅ añadido
-            raise ValueError("Error: El nombre de usuario no puede superar los 50 caracteres")            
+            raise ValueError(
+                "Error: El nombre de usuario no puede superar los 50 caracteres")
         # Validación formato alfanumérico sin espacios.
         if not re.match("^[a-zA-Z0-9]*$", valor):
             raise ValueError(
@@ -277,6 +279,9 @@ class RespuestaInformacionPerfil(BaseModel):
     foto_version: int = 0
     perfil_visible: bool
     total_puntos: int
+    total_calorias: int = 0
+    objetivo_semanal_metros: int = 50000
+    objetivo_mensual_metros: int = 150000
 
 
 class ActualizarPerfil(BaseModel):
@@ -290,6 +295,8 @@ class ActualizarPerfil(BaseModel):
     peso: Optional[float] = None
     provincia: Optional[ProvinciaEspaña] = None
     perfil_visible: Optional[bool] = None
+    objetivo_semanal_metros: Optional[int] = None
+    objetivo_mensual_metros: Optional[int] = None
 
     @field_validator('nombre_real')
     @classmethod
@@ -368,6 +375,32 @@ class ActualizarPerfil(BaseModel):
     def validar_perfil_visible_actualizacion_custom(cls, v, handler):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(v, handler, 'Error: El formato de perfil visible no es válido')
+
+    @field_validator('objetivo_semanal_metros')
+    @classmethod
+    def validar_objetivo_semanal(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
+        if not isinstance(v, int):
+            raise ValueError(
+                'Error: El objetivo semanal debe ser un número entero en metros')
+        if not (10 <= v <= 2_000_000):
+            raise ValueError(
+                'Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros')
+        return v
+
+    @field_validator('objetivo_mensual_metros')
+    @classmethod
+    def validar_objetivo_mensual(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
+        if not isinstance(v, int):
+            raise ValueError(
+                'Error: El objetivo mensual debe ser un número entero en metros')
+        if not (10 <= v <= 2_000_000):
+            raise ValueError(
+                'Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros')
+        return v
 
 
 class InformacionPerfilPublico(BaseModel):
@@ -608,5 +641,3 @@ class ObtenerRanking(BaseModel):
 class RespuestaGenerica(BaseModel):
     estatus: str
     mensaje: str
-
-

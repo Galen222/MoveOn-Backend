@@ -70,7 +70,10 @@ async def informacion_perfil(
         "foto_perfil": file_service.construir_url_foto(usuario.foto_perfil, request),
         "foto_version": int(usuario.foto_fecha_actualizacion.timestamp()) if usuario.foto_fecha_actualizacion else 0,
         "perfil_visible": usuario.perfil_visible,
-        "total_puntos": puntos
+        "total_puntos": puntos,
+        "total_calorias": int(usuario.total_calorias or 0),
+        "objetivo_semanal_metros": int(usuario.objetivo_semanal_metros or 50000),
+        "objetivo_mensual_metros": int(usuario.objetivo_mensual_metros or 150000),
     }
 
 
@@ -217,7 +220,8 @@ async def foto_perfil(
         and foto_antigua
         and not str(foto_antigua).startswith("http")
     ):
-        background_tasks.add_task(file_service.borrar_foto, foto_antigua, usuario_actual_id)
+        background_tasks.add_task(
+            file_service.borrar_foto, foto_antigua, usuario_actual_id)
 
         return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
@@ -254,7 +258,8 @@ async def borrar_perfil(
 
     # Solo si commit OK (eliminar_cuenta hace commit), borramos la foto.
     # En background para no bloquear el endpoint con IO (disco / cloud).
-    background_tasks.add_task(file_service.borrar_foto, foto_perfil, usuario_actual_id)
+    background_tasks.add_task(file_service.borrar_foto,
+                              foto_perfil, usuario_actual_id)
 
     return respuesta
 
@@ -263,7 +268,8 @@ async def borrar_perfil(
 @rate_limit(settings.RL_PERFIL_BUSCAR)
 async def buscar_perfil(
     request: Request,
-    q: str = Query(..., min_length=3, max_length=50, description="Término de búsqueda (min 3 caracteres)"),
+    q: str = Query(..., min_length=3, max_length=50,
+                   description="Término de búsqueda (min 3 caracteres)"),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(obtener_db),
@@ -278,8 +284,10 @@ async def buscar_perfil(
 
     lista_final = []
     for usuario in resultados["items"]:
-        url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)
-        foto_version = int(usuario.foto_fecha_actualizacion.timestamp()) if usuario.foto_fecha_actualizacion else 0
+        url_foto = file_service.construir_url_foto(
+            usuario.foto_perfil, request)
+        foto_version = int(usuario.foto_fecha_actualizacion.timestamp(
+        )) if usuario.foto_fecha_actualizacion else 0
         lista_final.append({
             "nombre_usuario": usuario.nombre_usuario,
             "foto_perfil": url_foto,
@@ -314,7 +322,8 @@ async def obtener_ranking(
     ranking_final = []
     for item in ranking:
         # Usar el servicio existente para crear la URL correcta.
-        url_foto = file_service.construir_url_foto(item["foto_perfil"], request)
+        url_foto = file_service.construir_url_foto(
+            item["foto_perfil"], request)
         ranking_final.append({
             "nombre_usuario": item["nombre_usuario"],
             "foto_perfil": url_foto,

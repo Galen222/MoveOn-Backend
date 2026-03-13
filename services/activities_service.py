@@ -1,4 +1,3 @@
-
 # services/activities_service.py
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +21,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
         .where(database.Usuario.id == usuario_actual_id)
         .with_for_update()
     )).scalar_one_or_none()
-    
+
     if not usuario:
         logger.warning(
             "crear_actividad_usuario_no_encontrado",
@@ -30,7 +29,8 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
                 "usuario_id": usuario_actual_id,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Usuario no encontrado")
 
     # Se Crea el objeto de base de datos.
     nueva_actividad = database.Actividad(
@@ -40,15 +40,20 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
         duracion=datos.duracion,
         calorias_quemadas=datos.calorias_quemadas,
         ruta_polilinea=datos.ruta_polilinea,
-        ruta_mapa_url=str(datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
+        ruta_mapa_url=str(
+            datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
         fecha_ruta=datos.fecha_ruta
     )
 
-    # Sumar los metros recorridos de la actividad a los metros totales que tiene el usuario.
+    # Sumar distancia y calorías al acumulado histórico del usuario.
     # La fila del usuario ya está bloqueada con FOR UPDATE, así que el cálculo puede hacerse
     # en Python sin caer en una race condition y manteniendo el tipo como int para Pylance.
     total_actual = int(usuario.total_metros or 0)
     usuario.total_metros = total_actual + int(datos.distancia)
+
+    total_calorias_actual = int(usuario.total_calorias or 0)
+    usuario.total_calorias = total_calorias_actual + \
+        int(datos.calorias_quemadas)
 
     # Se guarda en BD.
     try:
@@ -58,7 +63,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
     except Exception:
         await db.rollback()
         raise
-    
+
     logger.info(
         "actividad_creada",
         extra={
@@ -68,6 +73,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
             "distancia": nueva_actividad.distancia,
             "duracion": nueva_actividad.duracion,
             "nuevo_total_metros": usuario.total_metros,
+            "nuevo_total_calorias": usuario.total_calorias,
         },
     )
 
@@ -85,7 +91,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
         "fecha_ruta": nueva_actividad.fecha_ruta,
         "nuevo_total_puntos": puntos_actualizados
     }
-    
+
     return respuesta
 
 
@@ -115,7 +121,8 @@ async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_activid
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Usuario no encontrado")
 
     _, actividad = fila
 
@@ -128,7 +135,8 @@ async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_activid
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+        raise HTTPException(
+            status_code=404, detail="Error: Actividad no encontrada")
 
     return actividad
 
@@ -155,7 +163,8 @@ async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: in
                 "limit": limit,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Usuario no encontrado")
 
     total = (await db.execute(
         select(func.count())
@@ -217,7 +226,8 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Usuario no encontrado")
 
     usuario, actividad = fila
 
@@ -229,9 +239,10 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+        raise HTTPException(
+            status_code=404, detail="Error: Actividad no encontrada")
 
-    # Se resta la distancia en metros recorrida de la ruta al borrarla.
+    # Se resta la distancia y las calorías al eliminar la actividad.
     # Evita números negativos por errores de redondeo flotante.
     # La fila del usuario está bloqueada, así que el cálculo puede hacerse en Python
     # y mantener el atributo tipado como int.
@@ -240,26 +251,33 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
         distancia_actividad = int(actividad.distancia or 0)
         usuario.total_metros = max(0, total_actual - distancia_actividad)
 
+        total_calorias_actual = int(usuario.total_calorias or 0)
+        calorias_actividad = int(actividad.calorias_quemadas or 0)
+        usuario.total_calorias = max(
+            0, total_calorias_actual - calorias_actividad)
+
         await db.delete(actividad)
         await db.commit()
     except Exception:
         await db.rollback()
         raise
-    
+
     logger.info(
         "actividad_eliminada",
         extra={
             "usuario_id": usuario.id,
             "actividad_id": id_actividad,
             "distancia_restada": actividad.distancia,
+            "calorias_restadas": actividad.calorias_quemadas,
             "nuevo_total_metros": usuario.total_metros,
+            "nuevo_total_calorias": usuario.total_calorias,
         },
     )
 
     # Recalcular los puntos con el valor actualizado
     puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
     return {
-        "estatus": "success", 
+        "estatus": "success",
         "mensaje": "Actividad eliminada",
         "nuevo_total_puntos": puntos
     }
@@ -280,7 +298,8 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
                 "usuario_id": usuario_actual_id,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(
+            status_code=404, detail="Error: Usuario no encontrado")
 
     # Contar cuántas hay, para devolver el número borrado.
     num_borrados = (await db.execute(
@@ -292,11 +311,13 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
     try:
         # Borrado masivo de actividades
         await db.execute(
-            sa_delete(database.Actividad).where(database.Actividad.usuario_id == usuario.id)
+            sa_delete(database.Actividad).where(
+                database.Actividad.usuario_id == usuario.id)
         )
 
-        # Reset de metros
+        # Reset de metros y calorías
         usuario.total_metros = 0
+        usuario.total_calorias = 0
 
         await db.commit()
     except Exception:
@@ -309,6 +330,7 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
             "usuario_id": usuario.id,
             "num_borradas": int(num_borrados),
             "nuevo_total_metros": 0,
+            "nuevo_total_calorias": 0,
         },
     )
 
