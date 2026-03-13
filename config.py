@@ -151,6 +151,30 @@ class Settings(BaseSettings):
     # --- Recuperación de contraseña (OTP) ---
     RECOVERY_CODE_EXPIRE_MINUTES: int = 15
 
+    # --- Moderación de texto (OpenAI) ---
+    TEXT_MODERATION_ENABLED: bool = True
+    TEXT_MODERATION_FAIL_OPEN: bool = True
+    TEXT_MODERATION_TIMEOUT_SECONDS: float = 3.0
+
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODERATION_MODEL: str = "omni-moderation-latest"
+
+    # Umbrales por campo
+    TEXT_MODERATION_USERNAME_SCORE_THRESHOLD: float = 0.12
+    TEXT_MODERATION_REAL_NAME_SCORE_THRESHOLD: float = 0.45
+
+    # Username: palabras reservadas básicas del sistema
+    TEXT_MODERATION_RESERVED_USERNAME_TOKENS: str = (
+        "admin,administrator,administrador,"
+        "support,soporte,"
+        "moderator,moderador,"
+        "staff,official,oficial,"
+        "root,owner,"
+        "system,sistema,"
+        "help,ayuda,"
+        "info,contact,contacto"
+    )
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):

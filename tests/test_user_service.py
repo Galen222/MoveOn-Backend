@@ -94,6 +94,20 @@ def _datos_registro() -> schemas.Registro:
     )
 
 
+@pytest.fixture(autouse=True)
+def _stub_text_moderation(monkeypatch):
+    monkeypatch.setattr(
+        user_service.text_moderation_service,
+        "validar_nombre_usuario",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        user_service.text_moderation_service,
+        "validar_nombre_real",
+        AsyncMock(),
+    )
+
+
 # ─────────────────────────────────────────────
 # registrar_nuevo_usuario
 # ─────────────────────────────────────────────
@@ -152,6 +166,48 @@ class TestRegistrarNuevoUsuario:
 
         assert resultado["estatus"] == "success"
         assert resultado["nombre_usuario"] == "GalenTest"
+
+    @pytest.mark.asyncio
+    async def test_registro_valida_username_y_nombre_real(self, monkeypatch):
+        db = _make_db_one(None)
+        datos = _datos_registro().model_copy(update={"nombre_real": "María García"})
+
+        mock_username = AsyncMock()
+        mock_real = AsyncMock()
+
+        monkeypatch.setattr(
+            user_service.text_moderation_service,
+            "validar_nombre_usuario",
+            mock_username,
+        )
+        monkeypatch.setattr(
+            user_service.text_moderation_service,
+            "validar_nombre_real",
+            mock_real,
+        )
+
+        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
+            await user_service.registrar_nuevo_usuario(db, datos)
+
+        mock_username.assert_awaited_once_with("GalenTest")
+        mock_real.assert_awaited_once_with("María García")
+
+    @pytest.mark.asyncio
+    async def test_registro_sin_nombre_real_no_valida_nombre_real(self, monkeypatch):
+        db = _make_db_one(None)
+        datos = _datos_registro()
+
+        mock_real = AsyncMock()
+        monkeypatch.setattr(
+            user_service.text_moderation_service,
+            "validar_nombre_real",
+            mock_real,
+        )
+
+        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
+            await user_service.registrar_nuevo_usuario(db, datos)
+
+        mock_real.assert_not_awaited()
 
 
 # ─────────────────────────────────────────────
@@ -278,6 +334,45 @@ class TestActualizarPerfilUsuario:
 
         assert resultado["estatus"] == "success"
         db.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_actualizar_nombre_real_llama_moderacion(self, monkeypatch):
+        usuario = _make_usuario()
+        db = _make_db_one(None)
+        datos = ActualizarPerfil(nombre_real="María García")
+
+        mock_real = AsyncMock()
+        monkeypatch.setattr(
+            user_service.text_moderation_service,
+            "validar_nombre_real",
+            mock_real,
+        )
+
+        await user_service.actualizar_perfil_usuario(db, usuario, datos)
+
+        mock_real.assert_awaited_once_with("María García")
+        assert usuario.nombre_real == "María García"
+
+    @pytest.mark.asyncio
+    async def test_actualizar_nombre_real_null_no_llama_moderacion(self, monkeypatch):
+        usuario = _make_usuario()
+        usuario.nombre_real = "Nombre Anterior"
+        db = _make_db_one(None)
+
+        datos = ActualizarPerfil.model_construct(nombre_real=None)
+        datos.__pydantic_fields_set__ = {"nombre_real"}
+
+        mock_real = AsyncMock()
+        monkeypatch.setattr(
+            user_service.text_moderation_service,
+            "validar_nombre_real",
+            mock_real,
+        )
+
+        await user_service.actualizar_perfil_usuario(db, usuario, datos)
+
+        mock_real.assert_not_awaited()
+        assert usuario.nombre_real is None
 
 
 # ─────────────────────────────────────────────
@@ -461,5 +556,4 @@ class TestObtenerRanking:
 
         assert resultado[0]["total_puntos"] == 10
         assert resultado[0]["foto_version"] == 0
-
-
+        

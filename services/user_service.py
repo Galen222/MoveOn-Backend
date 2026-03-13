@@ -22,6 +22,7 @@ from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
+from services import text_moderation_service
 
 import auth
 import database
@@ -48,6 +49,14 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     # Guardamos email siempre en minúsculas para que la unicidad sea consistente
     email = str(datos.email).strip().lower()
     nombre_key = nombre_usuario.lower()
+
+    # Extraer el nombre real normalizado
+    nombre_real = datos.nombre_real.strip() if isinstance(datos.nombre_real, str) else None
+
+    # Moderación de texto externa
+    await text_moderation_service.validar_nombre_usuario(nombre_usuario)
+    if nombre_real:
+        await text_moderation_service.validar_nombre_real(nombre_real)
 
     # 1) Detección de duplicados en UNA sola query
     #    - nombre_usuario case-insensitive
@@ -94,14 +103,13 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         password_encriptada=password_hash,
 
         # nombre_real: si viene str, strip; si viene None, se guarda None
-        nombre_real=datos.nombre_real.strip() if isinstance(datos.nombre_real, str) else None,
+        nombre_real=nombre_real,
 
         fecha_nacimiento=datos.fecha_nacimiento,
         genero=genero_val,
         altura=datos.altura,
         peso=datos.peso,
         provincia=provincia_val,
-
         perfil_visible=datos.perfil_visible,
         acepta_terminos=datos.acepta_terminos,
         fecha_eula=datos.fecha_aceptacion_terminos,
@@ -201,7 +209,13 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
 
         if "nombre_real" in payload:
             # Permite borrar nombre_real enviando null
-            usuario.nombre_real = payload["nombre_real"]
+            nuevo_nombre_real = payload["nombre_real"]
+
+            # Moderación de texto externa
+            if nuevo_nombre_real:
+                await text_moderation_service.validar_nombre_real(nuevo_nombre_real)
+
+            usuario.nombre_real = nuevo_nombre_real
 
         if "genero" in payload:
             # Enum -> str o None
@@ -249,7 +263,9 @@ async def actualizar_perfil_usuario(db: AsyncSession, usuario: database.Usuario,
                     },
                 )
                 raise HTTPException(
-                    status_code=400, detail="Error: El email ya está en uso")
+                    status_code=400,
+                    detail="Error: El email ya está en uso"
+                )
 
             usuario.email = email
 
