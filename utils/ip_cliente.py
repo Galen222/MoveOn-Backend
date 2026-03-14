@@ -15,7 +15,6 @@ from starlette.types import Scope
 TrustedProxyChecker = Callable[[Request], bool]
 
 
-
 def get_socket_client_ip(request: Request) -> str:
     """
     Obtiene la IP del socket TCP asociada a la request.
@@ -29,7 +28,6 @@ def get_socket_client_ip(request: Request) -> str:
     @return La IP del socket si existe; en caso contrario, <code>"-"</code>.
     """
     return request.client.host if request.client else "-"
-
 
 
 def get_socket_client_ip_from_scope(scope: Scope) -> str:
@@ -47,8 +45,9 @@ def get_socket_client_ip_from_scope(scope: Scope) -> str:
     return client[0] if client else "-"
 
 
-
-def extract_ip_from_headers(headers: Mapping[str, str], header_order: Sequence[str]) -> Optional[str]:
+def extract_ip_from_headers(
+    headers: Mapping[str, str], header_order: Sequence[str]
+) -> Optional[str]:
     """
     Extrae una IP cliente válida desde cabeceras HTTP en orden de prioridad.
 
@@ -75,7 +74,6 @@ def extract_ip_from_headers(headers: Mapping[str, str], header_order: Sequence[s
             continue
 
     return None
-
 
 
 def get_client_ip(
@@ -110,7 +108,6 @@ def get_client_ip(
             return ip
 
     return get_socket_client_ip(request)
-
 
 
 def get_client_ip_from_scope(

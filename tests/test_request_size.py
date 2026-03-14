@@ -67,7 +67,11 @@ class TestRequestSizeLimitMiddleware:
 
     def test_registro_tiene_limite_distinto(self):
         client = TestClient(_build_app())
-        payload = {"email": "pepe@example.com", "nombre_usuario": "pepe", "bio": "x" * 150}
+        payload = {
+            "email": "pepe@example.com",
+            "nombre_usuario": "pepe",
+            "bio": "x" * 150,
+        }
 
         response = client.post("/registro", json=payload)
 
@@ -91,7 +95,11 @@ async def test_limitacion_streaming_sin_content_length_devuelve_413_y_no_store()
 
     messages = [
         {"type": "http.request", "body": b'{"identificador":"pe', "more_body": True},
-        {"type": "http.request", "body": b'pe","password":"' + (b"x" * 200) + b'"}', "more_body": False},
+        {
+            "type": "http.request",
+            "body": b'pe","password":"' + (b"x" * 200) + b'"}',
+            "more_body": False,
+        },
     ]
 
     async def receive():

@@ -182,4 +182,3 @@ class TestCheckIdentityLimitScopes:
 
         with patch.object(identity_rate_limit.settings, "ENABLE_RATE_LIMIT_ID", True):
             check_identity_limit("password_confirmar", identidad, "2/hour")
-            

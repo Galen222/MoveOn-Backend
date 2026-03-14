@@ -1,5 +1,6 @@
 # Utils/calculos.py
 
+
 def calcular_puntos_nivel(metros: int) -> int:
     """
     Centraliza la lógica de conversión de metros a puntos.

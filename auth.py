@@ -38,12 +38,14 @@ security_scheme = HTTPBearer()
 def encriptar_password(password: str) -> str:
     """Cifra una contraseña de texto plano usando bcrypt."""
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def comprobar_password(password_plana: str, password_encriptada: str) -> bool:
     """Compara una contraseña plana ingresada con el hash almacenado en la base de datos."""
-    return bcrypt.checkpw(password_plana.encode('utf-8'), password_encriptada.encode('utf-8'))
+    return bcrypt.checkpw(
+        password_plana.encode("utf-8"), password_encriptada.encode("utf-8")
+    )
 
 
 def _ahora_utc() -> datetime:
@@ -59,13 +61,15 @@ def codifica_jwt(payload: dict, secret: str, expires_delta: timedelta, typ: str)
     exp = ahora + expires_delta
 
     datos = payload.copy()
-    datos.update({
-        "exp": int(exp.timestamp()),
-        "iat": int(ahora.timestamp()),
-        "iss": JWT_ISSUER,
-        "aud": JWT_AUDIENCE,
-        "typ": typ
-    })
+    datos.update(
+        {
+            "exp": int(exp.timestamp()),
+            "iat": int(ahora.timestamp()),
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
+            "typ": typ,
+        }
+    )
 
     return jwt.encode(datos, str(secret), algorithm=ALGORITHM)
 
@@ -89,7 +93,9 @@ def decodifica_jwt(token: str, secret: str, expected_typ: str) -> dict[str, Any]
     )
 
     if payload.get("typ") != expected_typ:
-        raise HTTPException(status_code=401, detail=f"Error: Token no es de tipo {expected_typ}")
+        raise HTTPException(
+            status_code=401, detail=f"Error: Token no es de tipo {expected_typ}"
+        )
 
     return payload
 
@@ -101,7 +107,7 @@ def crear_token_aplicacion() -> str:
         payload={},  # no necesitas sub aquí, pero podrías añadir {"sub": "app"} si quieres
         secret=APP_SESSION_SECRET,
         expires_delta=timedelta(minutes=APP_SESSION_EXPIRE_MINUTES),
-        typ="app_session"
+        typ="app_session",
     )
 
 
@@ -116,7 +122,7 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
         raise HTTPException(
             status_code=403,
             detail="Error: Falta el token de sesión",
-            headers={"x-app-session-expired": "1"}
+            headers={"x-app-session-expired": "1"},
         )
 
     try:
@@ -131,7 +137,7 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
         raise HTTPException(
             status_code=403,
             detail="Error: Token inválido o expirado",
-            headers={"x-app-session-expired": "1"}
+            headers={"x-app-session-expired": "1"},
         )
     except HTTPException:
         logger.warning(
@@ -142,7 +148,7 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
         raise HTTPException(
             status_code=403,
             detail="Error: Token inválido o expirado",
-            headers={"x-app-session-expired": "1"}
+            headers={"x-app-session-expired": "1"},
         )
 
 
@@ -152,22 +158,18 @@ def crear_token_acceso(datos: dict) -> str:
         payload=datos,
         secret=ACCESS_TOKEN_SECRET,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-        typ="access"
+        typ="access",
     )
 
 
 def crear_token_refresh(usuario_id: int, jti: str, familia_id: str) -> str:
     """Genera el refresh token (largo) con rotación."""
-    payload = {
-        "sub": str(usuario_id),
-        "jti": jti,
-        "fam": familia_id
-    }
+    payload = {"sub": str(usuario_id), "jti": jti, "fam": familia_id}
     return codifica_jwt(
         payload=payload,
         secret=REFRESH_TOKEN_SECRET,
         expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
-        typ="refresh"
+        typ="refresh",
     )
 
 
@@ -180,10 +182,14 @@ def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
             "decodificacion_refresh_fallida",
             extra={},
         )
-        raise HTTPException(status_code=401, detail="Error: Refresh token inválido o expirado")
+        raise HTTPException(
+            status_code=401, detail="Error: Refresh token inválido o expirado"
+        )
 
 
-def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_scheme)) -> int:
+def obtener_usuario_actual(
+    res: HTTPAuthorizationCredentials = Depends(security_scheme),
+) -> int:
     """
     Extrae el usuario validando el token de acceso.
     Usa la dependencia de FastAPI para capturar el token del botón Authorize.
@@ -200,7 +206,9 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
                 "access_token_sin_sub_valido",
                 extra={},
             )
-            raise HTTPException(status_code=401, detail="Error: Token no contiene un usuario válido")
+            raise HTTPException(
+                status_code=401, detail="Error: Token no contiene un usuario válido"
+            )
 
         return int(sub)
     except InvalidTokenError:
@@ -208,5 +216,6 @@ def obtener_usuario_actual(res: HTTPAuthorizationCredentials = Depends(security_
             "access_token_invalido_o_expirado",
             extra={},
         )
-        raise HTTPException(status_code=401, detail="Error: Token de acceso inválido o expirado")
-    
+        raise HTTPException(
+            status_code=401, detail="Error: Token de acceso inválido o expirado"
+        )

@@ -11,7 +11,6 @@ import uuid
 from contextlib import contextmanager
 
 import middlewares.security_headers as security_headers_module
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from middlewares.request_context import RequestContextMiddleware
@@ -21,6 +20,7 @@ from middlewares.security_headers import SecurityHeadersMiddleware
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
+
 
 def _build_request_id_app() -> FastAPI:
     app = FastAPI()
@@ -93,6 +93,7 @@ def _capture_logger(caplog, logger_name: str, level: int):
 # RequestContextMiddleware
 # ─────────────────────────────────────────────
 
+
 class TestRequestIdMiddleware:
     def test_inyecta_x_request_id_si_no_llega(self):
         client = TestClient(_build_request_id_app())
@@ -150,7 +151,9 @@ class TestRequestIdMiddlewareLogging:
         assert isinstance(record.duration_ms, int)
 
     def test_loggea_request_failed_con_campos_estructurados(self, caplog):
-        client = TestClient(_build_request_id_error_app(), raise_server_exceptions=False)
+        client = TestClient(
+            _build_request_id_error_app(), raise_server_exceptions=False
+        )
 
         with _capture_logger(caplog, "app.request", logging.ERROR):
             response = client.get("/boom", headers={"X-Request-ID": "req-err"})
@@ -170,11 +173,14 @@ class TestRequestIdMiddlewareLogging:
 # SecurityHeadersMiddleware — desactivado
 # ─────────────────────────────────────────────
 
+
 class TestSecurityHeadersDesactivado:
     def test_no_añade_headers_cuando_desactivado(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, ENABLE_SECURITY_HEADERS=False)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert response.status_code == 200
@@ -187,11 +193,14 @@ class TestSecurityHeadersDesactivado:
 # SecurityHeadersMiddleware — headers base
 # ─────────────────────────────────────────────
 
+
 class TestSecurityHeadersBase:
     def test_añade_headers_y_hsts_en_https(self, monkeypatch):
         _sec_monkeypatch(monkeypatch)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert response.status_code == 200
@@ -214,7 +223,9 @@ class TestSecurityHeadersBase:
     def test_x_frame_options_configurable(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_X_FRAME_OPTIONS="SAMEORIGIN")
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
@@ -222,7 +233,9 @@ class TestSecurityHeadersBase:
     def test_referrer_policy_configurable(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_REFERRER_POLICY="strict-origin")
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert response.headers["Referrer-Policy"] == "strict-origin"
@@ -232,11 +245,14 @@ class TestSecurityHeadersBase:
 # SecurityHeadersMiddleware — HSTS variantes
 # ─────────────────────────────────────────────
 
+
 class TestSecurityHeadersHSTS:
     def test_hsts_incluye_max_age(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_SECONDS=31536000)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         hsts = client.get("/ping").headers["Strict-Transport-Security"]
 
         assert "max-age=31536000" in hsts
@@ -244,7 +260,9 @@ class TestSecurityHeadersHSTS:
     def test_hsts_include_subdomains(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS=True)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         hsts = client.get("/ping").headers["Strict-Transport-Security"]
 
         assert "includeSubDomains" in hsts
@@ -252,7 +270,9 @@ class TestSecurityHeadersHSTS:
     def test_hsts_sin_include_subdomains(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS=False)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         hsts = client.get("/ping").headers["Strict-Transport-Security"]
 
         assert "includeSubDomains" not in hsts
@@ -260,7 +280,9 @@ class TestSecurityHeadersHSTS:
     def test_hsts_con_preload(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_PRELOAD=True)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         hsts = client.get("/ping").headers["Strict-Transport-Security"]
 
         assert "preload" in hsts
@@ -268,7 +290,9 @@ class TestSecurityHeadersHSTS:
     def test_hsts_sin_preload(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_PRELOAD=False)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         hsts = client.get("/ping").headers["Strict-Transport-Security"]
 
         assert "preload" not in hsts
@@ -276,7 +300,9 @@ class TestSecurityHeadersHSTS:
     def test_hsts_no_aparece_si_seconds_es_cero(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_SECONDS=0)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert "Strict-Transport-Security" not in response.headers
@@ -286,11 +312,14 @@ class TestSecurityHeadersHSTS:
 # SecurityHeadersMiddleware — Content-Security-Policy
 # ─────────────────────────────────────────────
 
+
 class TestSecurityHeadersCSP:
     def test_csp_no_aparece_si_vacio(self, monkeypatch):
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_CONTENT_SECURITY_POLICY="")
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert "Content-Security-Policy" not in response.headers
@@ -299,8 +328,9 @@ class TestSecurityHeadersCSP:
         politica = "default-src 'self'; img-src *"
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_CONTENT_SECURITY_POLICY=politica)
 
-        client = TestClient(_build_security_headers_app(), base_url="https://testserver")
+        client = TestClient(
+            _build_security_headers_app(), base_url="https://testserver"
+        )
         response = client.get("/ping")
 
         assert response.headers["Content-Security-Policy"] == politica
-        

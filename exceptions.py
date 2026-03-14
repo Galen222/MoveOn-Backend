@@ -67,7 +67,7 @@ def _limpiar_mensaje_validacion(error: dict[str, Any]) -> str:
     )
     for prefijo in prefijos_a_limpiar:
         if msg.startswith(prefijo):
-            msg = msg[len(prefijo):]
+            msg = msg[len(prefijo) :]
             break
 
     # Conserva tu limpieza anterior por regex para casos residuales
@@ -160,4 +160,3 @@ def manejador_excepcion_no_controlada(request: Request, exc: Exception) -> JSONR
         status_code=500,
         mensaje="Ha ocurrido un error interno",
     )
-    

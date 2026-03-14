@@ -5,9 +5,17 @@ Endpoints de Gestión de Perfil de Usuario.
 Define las rutas para el registro de nuevos usuarios y la gestión
 posterior del perfil (consulta, actualización, foto y borrado).
 """
-from fastapi import APIRouter, Depends, File, UploadFile, Request, Query, BackgroundTasks, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    UploadFile,
+    Request,
+    Query,
+    BackgroundTasks,
+    HTTPException,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
-import os
 import logging
 import auth
 import schemas
@@ -26,17 +34,14 @@ logger = logging.getLogger("app.users")
 
 # Inyectamos la dependencia a nivel de Router para todos los endpoints de este archivo
 router = APIRouter(
-    tags=["Usuarios"],
-    dependencies=[Depends(auth.verificar_sesion_aplicacion)]
+    tags=["Usuarios"], dependencies=[Depends(auth.verificar_sesion_aplicacion)]
 )
 
 
 @router.post("/registro", response_model=schemas.RespuestaRegistro)
 @rate_limit(settings.RL_REGISTRO)
 async def registro(
-    request: Request,
-    datos: schemas.Registro,
-    db: AsyncSession = Depends(obtener_db)
+    request: Request, datos: schemas.Registro, db: AsyncSession = Depends(obtener_db)
 ):
     """Registro de nuevo usuario con validación de duplicados."""
     # Rate-limit adicional por identidad/email (anti-abuso distribuido)
@@ -50,7 +55,7 @@ async def registro(
 async def informacion_perfil(
     request: Request,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
     """Obtiene los datos del perfil."""
     usuario = await user_service.obtener_perfil(db, usuario_actual_id)
@@ -68,7 +73,11 @@ async def informacion_perfil(
         "peso": usuario.peso,
         "provincia": usuario.provincia,
         "foto_perfil": file_service.construir_url_foto(usuario.foto_perfil, request),
-        "foto_version": int(usuario.foto_fecha_actualizacion.timestamp()) if usuario.foto_fecha_actualizacion else 0,
+        "foto_version": (
+            int(usuario.foto_fecha_actualizacion.timestamp())
+            if usuario.foto_fecha_actualizacion
+            else 0
+        ),
         "perfil_visible": usuario.perfil_visible,
         "total_puntos": puntos,
         "total_calorias": int(usuario.total_calorias or 0),
@@ -77,13 +86,16 @@ async def informacion_perfil(
     }
 
 
-@router.get("/perfil/informacion/{nombre_usuario}", response_model=schemas.InformacionPerfilPublico)
+@router.get(
+    "/perfil/informacion/{nombre_usuario}",
+    response_model=schemas.InformacionPerfilPublico,
+)
 @rate_limit(settings.RL_PERFIL_PUBLICO)
 async def informacion_perfil_publico(
     nombre_usuario: str,
     request: Request,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
     """
     Permite ver la ficha publica reducida de otro usuario si este tiene el perfil visible.
@@ -99,9 +111,15 @@ async def informacion_perfil_publico(
     return {
         "nombre_usuario": usuario_objetivo.nombre_usuario,
         "provincia": usuario_objetivo.provincia,
-        "foto_perfil": file_service.construir_url_foto(usuario_objetivo.foto_perfil, request),
-        "foto_version": int(usuario_objetivo.foto_fecha_actualizacion.timestamp()) if usuario_objetivo.foto_fecha_actualizacion else 0,
-        "total_puntos": puntos
+        "foto_perfil": file_service.construir_url_foto(
+            usuario_objetivo.foto_perfil, request
+        ),
+        "foto_version": (
+            int(usuario_objetivo.foto_fecha_actualizacion.timestamp())
+            if usuario_objetivo.foto_fecha_actualizacion
+            else 0
+        ),
+        "total_puntos": puntos,
     }
 
 
@@ -112,7 +130,7 @@ async def foto_perfil(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
-    archivo: UploadFile = File(...)
+    archivo: UploadFile = File(...),
 ):
     logger.info(
         "actualizacion_foto_perfil_iniciada",
@@ -133,18 +151,12 @@ async def foto_perfil(
 
         # 2) Subir primero la nueva imagen (sin releer el archivo)
         nueva_ruta_foto = await run_in_threadpool(
-            file_service.procesar_subida,
-            archivo,
-            usuario_actual_id,
-            raw,
-            None
+            file_service.procesar_subida, archivo, usuario_actual_id, raw, None
         )
 
         # 3) Bloquear la fila solo en el momento de actualizar la BD
         usuario = await user_service.obtener_perfil(
-            db,
-            usuario_actual_id,
-            for_update=True
+            db, usuario_actual_id, for_update=True
         )
 
         foto_antigua = usuario.foto_perfil
@@ -181,9 +193,7 @@ async def foto_perfil(
         # Si ya habíamos subido la nueva imagen y luego falla el flujo, la limpiamos
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
             await run_in_threadpool(
-                file_service.borrar_foto,
-                nueva_ruta_foto,
-                usuario_actual_id
+                file_service.borrar_foto, nueva_ruta_foto, usuario_actual_id
             )
 
         raise
@@ -204,14 +214,12 @@ async def foto_perfil(
 
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
             await run_in_threadpool(
-                file_service.borrar_foto,
-                nueva_ruta_foto,
-                usuario_actual_id
+                file_service.borrar_foto, nueva_ruta_foto, usuario_actual_id
             )
 
         raise HTTPException(
             status_code=500,
-            detail="Error: No se ha podido actualizar la foto de perfil"
+            detail="Error: No se ha podido actualizar la foto de perfil",
         )
 
     # 4) Solo después del commit borramos la antigua
@@ -221,7 +229,8 @@ async def foto_perfil(
         and not str(foto_antigua).startswith("http")
     ):
         background_tasks.add_task(
-            file_service.borrar_foto, foto_antigua, usuario_actual_id)
+            file_service.borrar_foto, foto_antigua, usuario_actual_id
+        )
 
         return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
@@ -232,7 +241,7 @@ async def actualizar_perfil(
     request: Request,
     datos: schemas.ActualizarPerfil,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
     """Permite al usuario modificar su perfil."""
     usuario = await user_service.obtener_perfil(db, usuario_actual_id, for_update=True)
@@ -245,7 +254,7 @@ async def borrar_perfil(
     request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
     """
     Se elimina la cuenta (commit) y solo después se borra la foto
@@ -258,8 +267,7 @@ async def borrar_perfil(
 
     # Solo si commit OK (eliminar_cuenta hace commit), borramos la foto.
     # En background para no bloquear el endpoint con IO (disco / cloud).
-    background_tasks.add_task(file_service.borrar_foto,
-                              foto_perfil, usuario_actual_id)
+    background_tasks.add_task(file_service.borrar_foto, foto_perfil, usuario_actual_id)
 
     return respuesta
 
@@ -268,31 +276,41 @@ async def borrar_perfil(
 @rate_limit(settings.RL_PERFIL_BUSCAR)
 async def buscar_perfil(
     request: Request,
-    q: str = Query(..., min_length=3, max_length=50,
-                   description="Término de búsqueda (min 3 caracteres)"),
+    q: str = Query(
+        ...,
+        min_length=3,
+        max_length=50,
+        description="Término de búsqueda (min 3 caracteres)",
+    ),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
     """
     Busca usuarios por nombre (coincidencia parcial).
     Solo devuelve usuarios con perfil público y excluye al usuario autenticado.
     Devuelve resultados paginados con metadata.
     """
-    resultados = await user_service.buscar_usuario(db, q, usuario_actual_id, skip, limit)
+    resultados = await user_service.buscar_usuario(
+        db, q, usuario_actual_id, skip, limit
+    )
 
     lista_final = []
     for usuario in resultados["items"]:
-        url_foto = file_service.construir_url_foto(
-            usuario.foto_perfil, request)
-        foto_version = int(usuario.foto_fecha_actualizacion.timestamp(
-        )) if usuario.foto_fecha_actualizacion else 0
-        lista_final.append({
-            "nombre_usuario": usuario.nombre_usuario,
-            "foto_perfil": url_foto,
-            "foto_version": foto_version
-        })
+        url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)
+        foto_version = (
+            int(usuario.foto_fecha_actualizacion.timestamp())
+            if usuario.foto_fecha_actualizacion
+            else 0
+        )
+        lista_final.append(
+            {
+                "nombre_usuario": usuario.nombre_usuario,
+                "foto_perfil": url_foto,
+                "foto_version": foto_version,
+            }
+        )
 
     return {
         "items": lista_final,
@@ -309,25 +327,28 @@ async def obtener_ranking(
     request: Request,
     provincia: Optional[ProvinciaEspaña] = None,
     db: AsyncSession = Depends(obtener_db),
-    usuario_actual_id: int = Depends(auth.obtener_usuario_actual)
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
     """
     Devuelve el TOP 15 de usuarios con más puntos (KM recorridos).
     Permite filtrar por provincia de foma opcional.
     """
     # Obtener los datos
-    ranking = await user_service.obtener_ranking(db, provincia.value if provincia else None)
+    ranking = await user_service.obtener_ranking(
+        db, provincia.value if provincia else None
+    )
 
     # Procesar la URL de las fotos para que la App pueda descargarlas.
     ranking_final = []
     for item in ranking:
         # Usar el servicio existente para crear la URL correcta.
-        url_foto = file_service.construir_url_foto(
-            item["foto_perfil"], request)
-        ranking_final.append({
-            "nombre_usuario": item["nombre_usuario"],
-            "foto_perfil": url_foto,
-            "total_puntos": item["total_puntos"]
-        })
+        url_foto = file_service.construir_url_foto(item["foto_perfil"], request)
+        ranking_final.append(
+            {
+                "nombre_usuario": item["nombre_usuario"],
+                "foto_perfil": url_foto,
+                "total_puntos": item["total_puntos"],
+            }
+        )
 
     return ranking_final

@@ -3,26 +3,37 @@
 from __future__ import annotations
 
 import logging
+import re
 import unicodedata
-from typing import Any, Literal
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
-import httpx
 from fastapi import HTTPException
 
 from config import settings
 
 logger = logging.getLogger("app.text_moderation")
 
-OPENAI_MODERATION_URL = "https://api.openai.com/v1/moderations"
-
 FieldType = Literal["username", "real_name"]
 
-_RELEVANT_CATEGORY_KEYS = (
-    "sexual",
-    "harassment",
-    "harassment/threatening",
-    "hate",
-    "hate/threatening",
+_MULTISPACE_RE = re.compile(r"\s+")
+_REAL_NAME_TOKEN_SPLIT_RE = re.compile(r"[^a-z]+")
+_USERNAME_MIN_TERM_LEN = 4
+_REAL_NAME_MIN_TERM_LEN = 4
+
+_LEET_TRANSLATION = str.maketrans(
+    {
+        "0": "o",
+        "1": "i",
+        "3": "e",
+        "4": "a",
+        "5": "s",
+        "7": "t",
+        "$": "s",
+        "@": "a",
+        "!": "i",
+    }
 )
 
 _HIGH_RISK_RESERVED_TOKENS = {
@@ -49,132 +60,218 @@ def _normalizar_texto(texto: str | None) -> str:
     return " ".join(str(texto).strip().split())
 
 
-def _normalizar_username_para_reservas(texto: str) -> str:
-    texto = _normalizar_texto(texto).lower()
-
-    # Quitar acentos por si en el futuro cambias reglas del username
+def _quitar_acentos(texto: str) -> str:
     texto = unicodedata.normalize("NFKD", texto)
-    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    return "".join(ch for ch in texto if not unicodedata.combining(ch))
 
-    # Como tu username ya es alfanumérico, esto lo deja listo para comparar
+
+def _normalizar_frase(texto: str | None) -> str:
+    texto = _normalizar_texto(texto).lower()
+    texto = _quitar_acentos(texto)
+    texto = _MULTISPACE_RE.sub(" ", texto)
+    return texto.strip()
+
+
+def _normalizar_username(texto: str | None) -> str:
+    texto = _normalizar_frase(texto).translate(_LEET_TRANSLATION)
     return "".join(ch for ch in texto if ch.isalnum())
 
 
 def _parse_csv(value: str | None) -> list[str]:
     if not value:
         return []
-    return [item.strip().lower() for item in value.split(",") if item.strip()]
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def _reserved_tokens() -> list[str]:
-    return _parse_csv(settings.TEXT_MODERATION_RESERVED_USERNAME_TOKENS)
-
-
-def _username_reservado_match(texto: str) -> str | None:
-    username = _normalizar_username_para_reservas(texto)
-    if not username:
-        return None
-
-    for token in _reserved_tokens():
-        token_norm = _normalizar_username_para_reservas(token)
-        if not token_norm:
-            continue
-
-        # Exacto o claramente derivado
-        if (
-            username == token_norm
-            or username.startswith(token_norm)
-            or username.endswith(token_norm)
-        ):
-            return token_norm
-
-        # Para los tokens más sensibles, también bloqueamos si aparecen dentro
-        if token_norm in _HIGH_RISK_RESERVED_TOKENS and token_norm in username:
-            return token_norm
-
-    return None
-
-
-def _provider_disponible() -> bool:
-    return bool(
-        settings.TEXT_MODERATION_ENABLED
-        and settings.OPENAI_API_KEY
-    )
+def _moderar_activado() -> bool:
+    return bool(settings.TEXT_MODERATION_ENABLED)
 
 
 def _mensaje_bloqueo(field: FieldType) -> str:
     if field == "username":
-        return "Error: El nombre de usuario contiene lenguaje inapropiado o no permitido"
+        return (
+            "Error: El nombre de usuario contiene lenguaje inapropiado o no permitido"
+        )
     return "Error: El nombre real contiene lenguaje inapropiado o no permitido"
 
 
-def _timeout() -> httpx.Timeout:
-    total = float(settings.TEXT_MODERATION_TIMEOUT_SECONDS or 3.0)
-    connect = min(total, 3.0)
-    return httpx.Timeout(timeout=total, connect=connect)
+def _reserved_tokens() -> list[str]:
+    return [
+        _normalizar_username(token)
+        for token in _parse_csv(settings.TEXT_MODERATION_RESERVED_USERNAME_TOKENS)
+        if _normalizar_username(token)
+    ]
 
 
-def _threshold(field: FieldType) -> float:
-    if field == "username":
-        return float(settings.TEXT_MODERATION_USERNAME_SCORE_THRESHOLD)
-    return float(settings.TEXT_MODERATION_REAL_NAME_SCORE_THRESHOLD)
-
-
-def _extraer_resultado(data: dict[str, Any]) -> dict[str, Any]:
-    results = data.get("results")
-    if not isinstance(results, list) or not results:
-        raise ValueError("Respuesta inválida de OpenAI Moderation: results vacío")
-
-    result = results[0]
-    if not isinstance(result, dict):
-        raise ValueError("Respuesta inválida de OpenAI Moderation: result no es un objeto")
-
-    return result
-
-
-def _categorias_relevantes_activas(categories: dict[str, Any]) -> list[str]:
-    activas: list[str] = []
-    for key in _RELEVANT_CATEGORY_KEYS:
-        if bool(categories.get(key)):
-            activas.append(key)
-    return activas
-
-
-def _max_relevant_score(scores: dict[str, Any]) -> float:
-    valores: list[float] = []
-
-    for key in _RELEVANT_CATEGORY_KEYS:
-        value = scores.get(key)
-        if isinstance(value, (int, float)):
-            valores.append(float(value))
-
-    return max(valores) if valores else 0.0
-
-
-async def _call_openai(texto: str) -> dict[str, Any]:
-    headers = {
-        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-        "Content-Type": "application/json",
+def _ignore_phrases() -> set[str]:
+    return {
+        _normalizar_frase(token)
+        for token in _parse_csv(settings.TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS)
+        if _normalizar_frase(token)
     }
 
-    payload = {
-        "model": settings.OPENAI_MODERATION_MODEL,
-        "input": texto,
+
+def _ignore_usernames() -> set[str]:
+    return {
+        _normalizar_username(token)
+        for token in _parse_csv(settings.TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS)
+        if _normalizar_username(token)
     }
 
-    async with httpx.AsyncClient(timeout=_timeout()) as client:
-        response = await client.post(
-            OPENAI_MODERATION_URL,
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
 
-    if not isinstance(data, dict):
-        raise ValueError("Respuesta no válida de OpenAI Moderation")
+@lru_cache(maxsize=8)
+def _load_dictionary_cached(
+    dictionary_dir: str,
+    languages_csv: str,
+    ignore_csv: str,
+) -> dict[str, frozenset[str]]:
+    base_dir = Path(dictionary_dir)
+    if not base_dir.exists():
+        raise FileNotFoundError(f"No existe el directorio de diccionarios: {base_dir}")
 
-    return data
+    languages = [
+        lang.strip().lower() for lang in languages_csv.split(",") if lang.strip()
+    ]
+    if not languages:
+        raise FileNotFoundError("No hay idiomas configurados para moderación")
+
+    ignored_phrases = {
+        _normalizar_frase(token)
+        for token in _parse_csv(ignore_csv)
+        if _normalizar_frase(token)
+    }
+    ignored_usernames = {
+        _normalizar_username(token)
+        for token in _parse_csv(ignore_csv)
+        if _normalizar_username(token)
+    }
+
+    single_terms: set[str] = set()
+    phrase_terms: set[str] = set()
+    username_terms: set[str] = set()
+
+    for lang in languages:
+        file_path = base_dir / f"{lang}.txt"
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"No existe el diccionario para '{lang}': {file_path}"
+            )
+
+        contenido = file_path.read_text(encoding="utf-8", errors="ignore")
+
+        for raw_line in contenido.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            term = _normalizar_frase(line)
+            if not term or term in ignored_phrases:
+                continue
+
+            # Para nombre real:
+            # - tokens de una sola palabra: match exacto por palabra
+            # - frases: match exacto del nombre completo normalizado
+            if " " in term:
+                phrase_terms.add(term)
+            elif len(term) >= _REAL_NAME_MIN_TERM_LEN:
+                single_terms.add(term)
+
+            # Para username:
+            # normalizamos quitando todo lo que no sea alfanumérico
+            username_term = _normalizar_username(line)
+            if (
+                username_term
+                and len(username_term) >= _USERNAME_MIN_TERM_LEN
+                and username_term not in ignored_usernames
+            ):
+                username_terms.add(username_term)
+
+    return {
+        "single_terms": frozenset(single_terms),
+        "phrase_terms": frozenset(phrase_terms),
+        "username_terms": frozenset(username_terms),
+    }
+
+
+def _load_dictionary() -> dict[str, frozenset[str]]:
+    return _load_dictionary_cached(
+        settings.TEXT_MODERATION_DICTIONARY_DIR,
+        settings.TEXT_MODERATION_DICTIONARY_LANGS,
+        settings.TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS,
+    )
+
+
+def _match_reserved_username(texto: str) -> str | None:
+    username = _normalizar_username(texto)
+    if not username:
+        return None
+
+    for token in _reserved_tokens():
+        if not token:
+            continue
+
+        if username == token:
+            return token
+
+        if username.startswith(token) or username.endswith(token):
+            return token
+
+        if token in _HIGH_RISK_RESERVED_TOKENS and token in username:
+            return token
+
+    return None
+
+
+def _match_username_dictionary(texto: str) -> str | None:
+    username = _normalizar_username(texto)
+    if not username:
+        return None
+
+    username_terms = _load_dictionary()["username_terms"]
+
+    for term in username_terms:
+        if username == term:
+            return term
+
+        start = username.find(term)
+        while start != -1:
+            end = start + len(term)
+            left = username[:start]
+            right = username[end:]
+
+            # Política conservadora:
+            # bloquea si la palabrota está sola o rodeada solo de dígitos.
+            # Ej: puta69, 69puta, 69puta420
+            if (not left or left.isdigit()) and (not right or right.isdigit()):
+                return term
+
+            start = username.find(term, start + 1)
+
+    return None
+
+
+def _tokenizar_nombre_real(texto: str) -> list[str]:
+    normalizado = _normalizar_frase(texto)
+    return [token for token in _REAL_NAME_TOKEN_SPLIT_RE.split(normalizado) if token]
+
+
+def _match_real_name_dictionary(texto: str) -> str | None:
+    normalizado = _normalizar_frase(texto)
+    if not normalizado:
+        return None
+
+    dictionary = _load_dictionary()
+
+    # Si todo el nombre es una frase ofensiva completa
+    if normalizado in dictionary["phrase_terms"]:
+        return normalizado
+
+    # Si alguna palabra exacta del nombre coincide con una palabra ofensiva
+    for token in _tokenizar_nombre_real(normalizado):
+        if token in dictionary["single_terms"]:
+            return token
+
+    return None
 
 
 async def _validar(texto: str, *, field: FieldType) -> None:
@@ -182,71 +279,62 @@ async def _validar(texto: str, *, field: FieldType) -> None:
     if not texto:
         return
 
-    # 1) Username reservado: bloqueo local, sin depender de red
-    if field == "username":
-        reserved_match = _username_reservado_match(texto)
-        if reserved_match:
-            logger.warning(
-                "text_moderation_reserved_username_blocked",
-                extra={
-                    "provider": "local_reserved_dictionary",
-                    "field": field,
-                    "text_len": len(texto),
-                    "reserved_match": reserved_match,
-                },
-            )
-            raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
-
-    # 2) Si OpenAI no está configurado, no seguimos
-    if not _provider_disponible():
+    if not _moderar_activado():
         return
 
     try:
-        data = await _call_openai(texto)
-        result = _extraer_resultado(data)
+        if field == "username":
+            reserved_match = _match_reserved_username(texto)
+            if reserved_match:
+                logger.warning(
+                    "text_moderation_reserved_username_blocked",
+                    extra={
+                        "provider": "local_reserved_dictionary",
+                        "field": field,
+                        "text_len": len(texto),
+                        "match": reserved_match,
+                    },
+                )
+                raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
 
-        flagged = bool(result.get("flagged"))
-        categories = result.get("categories") or {}
-        scores = result.get("category_scores") or {}
+            profanity_match = _match_username_dictionary(texto)
+            if profanity_match:
+                logger.warning(
+                    "text_moderation_blocked",
+                    extra={
+                        "provider": "ldnoobwv2_local",
+                        "field": field,
+                        "text_len": len(texto),
+                        "match": profanity_match,
+                    },
+                )
+                raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
 
-        if not isinstance(categories, dict):
-            categories = {}
-        if not isinstance(scores, dict):
-            scores = {}
+            return
 
-        categorias_activas = _categorias_relevantes_activas(categories)
-        max_score = _max_relevant_score(scores)
-        threshold = _threshold(field)
-
-        # Política:
-        # - si OpenAI lo marca como flagged -> bloquear
-        # - si no lo marca, pero alguna categoría relevante supera el umbral -> bloquear
-        if flagged or max_score >= threshold:
+        profanity_match = _match_real_name_dictionary(texto)
+        if profanity_match:
             logger.warning(
                 "text_moderation_blocked",
                 extra={
-                    "provider": "openai",
+                    "provider": "ldnoobwv2_local",
                     "field": field,
-                    "model": settings.OPENAI_MODERATION_MODEL,
                     "text_len": len(texto),
-                    "flagged": flagged,
-                    "max_relevant_score": max_score,
-                    "threshold": threshold,
-                    "active_categories": categorias_activas,
+                    "match": profanity_match,
                 },
             )
             raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
 
     except HTTPException:
         raise
-    except (httpx.HTTPError, ValueError) as exc:
+    except FileNotFoundError as exc:
         logger.error(
-            "text_moderation_provider_error",
+            "text_moderation_dictionary_error",
             extra={
-                "provider": "openai",
+                "provider": "ldnoobwv2_local",
                 "field": field,
-                "model": settings.OPENAI_MODERATION_MODEL,
-                "text_len": len(texto),
+                "dictionary_dir": settings.TEXT_MODERATION_DICTIONARY_DIR,
+                "languages": settings.TEXT_MODERATION_DICTIONARY_LANGS,
                 "fail_open": settings.TEXT_MODERATION_FAIL_OPEN,
                 "error": str(exc),
             },
@@ -267,4 +355,3 @@ async def validar_nombre_usuario(texto: str) -> None:
 
 async def validar_nombre_real(texto: str) -> None:
     await _validar(texto, field="real_name")
-    

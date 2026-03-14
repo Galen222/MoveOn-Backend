@@ -11,11 +11,10 @@
 #   que el router rechaza requests sin token o con token inválido.
 
 import io
-from datetime import date, datetime, timezone
+from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -24,7 +23,11 @@ from PIL import Image
 
 import auth
 from database import obtener_db
-from exceptions import error_response, manejador_http_exception, manejador_validacion_personalizado
+from exceptions import (
+    error_response,
+    manejador_http_exception,
+    manejador_validacion_personalizado,
+)
 from routers.users import router as users_router
 from services import file_service, user_service
 from services.identity_rate_limit import IdentityRateLimitExceeded
@@ -34,15 +37,20 @@ from services.identity_rate_limit import IdentityRateLimitExceeded
 # Helpers
 # ─────────────────────────────────────────────
 
+
 def _build_app() -> FastAPI:
     app = FastAPI()
     app.include_router(users_router)
-    app.add_exception_handler(RequestValidationError, manejador_validacion_personalizado)
+    app.add_exception_handler(
+        RequestValidationError, manejador_validacion_personalizado
+    )
 
     async def http_exc_handler(req: Request, exc: Exception) -> JSONResponse:
         if isinstance(exc, HTTPException):
             return manejador_http_exception(req, exc)
-        return JSONResponse(status_code=500, content={"estatus": "error", "mensaje": "Error interno"})
+        return JSONResponse(
+            status_code=500, content={"estatus": "error", "mensaje": "Error interno"}
+        )
 
     app.add_exception_handler(HTTPException, http_exc_handler)
 
@@ -87,6 +95,9 @@ def _usuario_fake(**kwargs) -> SimpleNamespace:
         foto_fecha_actualizacion=None,
         perfil_visible=True,
         total_metros=5000,
+        total_calorias=0,
+        objetivo_semanal_metros=50000,
+        objetivo_mensual_metros=150000,
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -108,6 +119,7 @@ def _payload_registro() -> dict:
 # POST /registro — app session
 # ─────────────────────────────────────────────
 
+
 class TestRegistroAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
@@ -119,6 +131,7 @@ class TestRegistroAppSession:
 # ─────────────────────────────────────────────
 # POST /registro — validación de esquema
 # ─────────────────────────────────────────────
+
 
 class TestRegistroValidacion:
     def test_body_vacio_devuelve_422(self):
@@ -171,12 +184,17 @@ class TestRegistroValidacion:
 # POST /registro — lógica de negocio
 # ─────────────────────────────────────────────
 
+
 class TestRegistroLogica:
     def test_registro_exitoso_devuelve_201_o_200(self, monkeypatch):
         app = _app_con_overrides()
 
         async def fake_registrar(db, datos):
-            return {"estatus": "success", "mensaje": "Usuario registrado correctamente", "nombre_usuario": "nuevousuario"}
+            return {
+                "estatus": "success",
+                "mensaje": "Usuario registrado correctamente",
+                "nombre_usuario": "nuevousuario",
+            }
 
         monkeypatch.setattr(user_service, "registrar_nuevo_usuario", fake_registrar)
         client = TestClient(app)
@@ -191,7 +209,9 @@ class TestRegistroLogica:
         app = _app_con_overrides()
 
         async def fake_registrar(db, datos):
-            raise HTTPException(status_code=400, detail="Error: El nombre de usuario ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El nombre de usuario ya está en uso"
+            )
 
         monkeypatch.setattr(user_service, "registrar_nuevo_usuario", fake_registrar)
         client = TestClient(app)
@@ -204,7 +224,9 @@ class TestRegistroLogica:
         app = _app_con_overrides()
 
         async def fake_registrar(db, datos):
-            raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El email ya está en uso"
+            )
 
         monkeypatch.setattr(user_service, "registrar_nuevo_usuario", fake_registrar)
         client = TestClient(app)
@@ -216,7 +238,9 @@ class TestRegistroLogica:
         app = _app_con_overrides()
         monkeypatch.setattr(
             "routers.users.check_identity_limit",
-            lambda scope, identity, limit: (_ for _ in ()).throw(IdentityRateLimitExceeded())
+            lambda scope, identity, limit: (_ for _ in ()).throw(
+                IdentityRateLimitExceeded()
+            ),
         )
         client = TestClient(app)
         response = client.post("/registro", json=_payload_registro())
@@ -226,6 +250,7 @@ class TestRegistroLogica:
 # ─────────────────────────────────────────────
 # GET /perfil/informacion
 # ─────────────────────────────────────────────
+
 
 class TestInformacionPerfil:
     def test_sin_token_acceso_devuelve_401(self):
@@ -279,8 +304,9 @@ class TestInformacionPerfil:
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         monkeypatch.setattr(
-            file_service, "construir_url_foto",
-            lambda foto, req: "http://localhost/imagenes/foto.jpg"
+            file_service,
+            "construir_url_foto",
+            lambda foto, req: "http://localhost/imagenes/foto.jpg",
         )
 
         response = TestClient(app).get("/perfil/informacion")
@@ -290,7 +316,9 @@ class TestInformacionPerfil:
         app = _app_con_overrides()
 
         async def fake_obtener(db, usuario_actual_id, for_update=False):
-            raise HTTPException(status_code=404, detail="Error: Perfil de usuario no encontrado")
+            raise HTTPException(
+                status_code=404, detail="Error: Perfil de usuario no encontrado"
+            )
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         response = TestClient(app).get("/perfil/informacion")
@@ -300,6 +328,7 @@ class TestInformacionPerfil:
 # ─────────────────────────────────────────────
 # GET /perfil/informacion/{nombre_usuario}
 # ─────────────────────────────────────────────
+
 
 class TestInformacionPerfilPublico:
     def test_perfil_publico_devuelve_campos_reducidos(self, monkeypatch):
@@ -361,6 +390,7 @@ class TestInformacionPerfilPublico:
 # POST /perfil/foto
 # ─────────────────────────────────────────────
 
+
 class TestFotoPerfil:
     def _post_foto(self, client, jpeg_bytes=None):
         data = jpeg_bytes or _make_jpeg_bytes()
@@ -373,7 +403,9 @@ class TestFotoPerfil:
         app = _app_con_overrides()
 
         def fake_validar(archivo):
-            raise HTTPException(status_code=400, detail="Error: Solo imágenes JPG o PNG")
+            raise HTTPException(
+                status_code=400, detail="Error: Solo imágenes JPG o PNG"
+            )
 
         monkeypatch.setattr(file_service, "validar_seguridad", fake_validar)
         response = self._post_foto(TestClient(app), b"basura")
@@ -382,8 +414,12 @@ class TestFotoPerfil:
     def test_usuario_no_encontrado_devuelve_404(self, monkeypatch):
         app = _app_con_overrides()
 
-        monkeypatch.setattr(file_service, "validar_seguridad", lambda a: _make_jpeg_bytes())
-        monkeypatch.setattr(file_service, "procesar_subida", lambda a, u, raw, f=None: "temp.jpg")
+        monkeypatch.setattr(
+            file_service, "validar_seguridad", lambda a: _make_jpeg_bytes()
+        )
+        monkeypatch.setattr(
+            file_service, "procesar_subida", lambda a, u, raw, f=None: "temp.jpg"
+        )
 
         async def fake_obtener(db, usuario_actual_id, for_update=False):
             raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
@@ -395,8 +431,12 @@ class TestFotoPerfil:
     def test_subida_exitosa_devuelve_200(self, monkeypatch):
         app = _app_con_overrides()
 
-        monkeypatch.setattr(file_service, "validar_seguridad", lambda a: _make_jpeg_bytes())
-        monkeypatch.setattr(file_service, "procesar_subida", lambda a, u, raw, f=None: "nueva_foto.jpg")
+        monkeypatch.setattr(
+            file_service, "validar_seguridad", lambda a: _make_jpeg_bytes()
+        )
+        monkeypatch.setattr(
+            file_service, "procesar_subida", lambda a, u, raw, f=None: "nueva_foto.jpg"
+        )
 
         db_mock = MagicMock()
         db_mock.commit = MagicMock(return_value=None)
@@ -437,6 +477,7 @@ class TestFotoPerfil:
 # PATCH /perfil/actualizar
 # ─────────────────────────────────────────────
 
+
 class TestActualizarPerfil:
     def test_body_vacio_actualiza_nada_y_devuelve_200(self, monkeypatch):
         """PATCH con body vacío es válido: no toca ningún campo."""
@@ -446,7 +487,10 @@ class TestActualizarPerfil:
             return _usuario_fake()
 
         async def fake_actualizar(db, usuario, datos):
-            return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
+            return {
+                "estatus": "success",
+                "mensaje": "Perfil de usuario actualizado correctamente",
+            }
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         monkeypatch.setattr(user_service, "actualizar_perfil_usuario", fake_actualizar)
@@ -456,12 +500,16 @@ class TestActualizarPerfil:
 
     def test_email_invalido_devuelve_422(self):
         app = _app_con_overrides()
-        response = TestClient(app).patch("/perfil/actualizar", json={"email": "no-es-email"})
+        response = TestClient(app).patch(
+            "/perfil/actualizar", json={"email": "no-es-email"}
+        )
         assert response.status_code == 422
 
     def test_password_debil_devuelve_422(self):
         app = _app_con_overrides()
-        response = TestClient(app).patch("/perfil/actualizar", json={"password": "debil"})
+        response = TestClient(app).patch(
+            "/perfil/actualizar", json={"password": "debil"}
+        )
         assert response.status_code == 422
 
     def test_actualizacion_exitosa_devuelve_200(self, monkeypatch):
@@ -471,12 +519,17 @@ class TestActualizarPerfil:
             return _usuario_fake()
 
         async def fake_actualizar(db, usuario, datos):
-            return {"estatus": "success", "mensaje": "Perfil de usuario actualizado correctamente"}
+            return {
+                "estatus": "success",
+                "mensaje": "Perfil de usuario actualizado correctamente",
+            }
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         monkeypatch.setattr(user_service, "actualizar_perfil_usuario", fake_actualizar)
 
-        response = TestClient(app).patch("/perfil/actualizar", json={"provincia": "Madrid"})
+        response = TestClient(app).patch(
+            "/perfil/actualizar", json={"provincia": "Madrid"}
+        )
         assert response.status_code == 200
         assert response.json()["estatus"] == "success"
 
@@ -487,7 +540,9 @@ class TestActualizarPerfil:
             return _usuario_fake()
 
         async def fake_actualizar(db, usuario, datos):
-            raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+            raise HTTPException(
+                status_code=400, detail="Error: El email ya está en uso"
+            )
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         monkeypatch.setattr(user_service, "actualizar_perfil_usuario", fake_actualizar)
@@ -511,6 +566,7 @@ class TestActualizarPerfil:
 # ─────────────────────────────────────────────
 # DELETE /perfil/borrar
 # ─────────────────────────────────────────────
+
 
 class TestBorrarPerfil:
     def test_borrar_exitoso_devuelve_200(self, monkeypatch):
@@ -562,10 +618,10 @@ class TestBorrarPerfil:
         assert "foto_a_borrar.jpg" in fotos_borradas
 
 
-
 # ─────────────────────────────────────────────
 # GET /perfil/buscar
 # ─────────────────────────────────────────────
+
 
 class TestBuscarPerfil:
     def test_q_demasiado_corto_devuelve_422(self):
@@ -601,6 +657,7 @@ class TestBuscarPerfil:
 
     def test_q_valida_devuelve_resultados_paginados(self, monkeypatch):
         from types import SimpleNamespace
+
         app = _app_con_overrides()
 
         async def fake_buscar(db, termino, usuario_actual_id, skip, limit):
@@ -687,6 +744,7 @@ class TestBuscarPerfil:
 
     def test_foto_pasa_por_construir_url(self, monkeypatch):
         from types import SimpleNamespace
+
         app = _app_con_overrides()
         fotos_procesadas = []
 
@@ -722,11 +780,16 @@ class TestBuscarPerfil:
 # GET /ranking/obtener
 # ─────────────────────────────────────────────
 
+
 class TestRankingObtener:
     def _ranking_fake(self):
         return [
             {"nombre_usuario": "pepe", "foto_perfil": None, "total_puntos": 10},
-            {"nombre_usuario": "ana", "foto_perfil": "https://cdn.example.com/ana.jpg", "total_puntos": 8},
+            {
+                "nombre_usuario": "ana",
+                "foto_perfil": "https://cdn.example.com/ana.jpg",
+                "total_puntos": 8,
+            },
         ]
 
     def test_ranking_sin_filtro_devuelve_lista(self, monkeypatch):
@@ -773,7 +836,9 @@ class TestRankingObtener:
 
     def test_ranking_provincia_invalida_devuelve_422(self):
         app = _app_con_overrides()
-        response = TestClient(app).get("/ranking/obtener", params={"provincia": "Narnia"})
+        response = TestClient(app).get(
+            "/ranking/obtener", params={"provincia": "Narnia"}
+        )
         assert response.status_code == 422
 
     def test_foto_ranking_pasa_por_construir_url(self, monkeypatch):
@@ -782,7 +847,9 @@ class TestRankingObtener:
         fotos_procesadas = []
 
         async def fake_ranking(db, provincia=None):
-            return [{"nombre_usuario": "pepe", "foto_perfil": "foto.jpg", "total_puntos": 5}]
+            return [
+                {"nombre_usuario": "pepe", "foto_perfil": "foto.jpg", "total_puntos": 5}
+            ]
 
         def fake_construir(foto, req):
             fotos_procesadas.append(foto)
@@ -803,5 +870,3 @@ class TestRankingObtener:
         monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
         response = TestClient(app).get("/ranking/obtener")
         assert response.json() == []
-
-

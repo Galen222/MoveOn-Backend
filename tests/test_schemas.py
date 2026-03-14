@@ -8,16 +8,20 @@ import pytest
 from datetime import date, datetime, timedelta, timezone
 from pydantic import ValidationError
 
-import schemas
 from schemas import (
-    ActualizarPerfil, ConfirmarPassword, GeneroUsuario,
-    GuardarActividad, Login, Registro, TipoActividad,
+    ActualizarPerfil,
+    ConfirmarPassword,
+    GuardarActividad,
+    Login,
+    Registro,
+    TipoActividad,
 )
 
 
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
+
 
 def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -48,6 +52,7 @@ def _datos_actividad_validos() -> dict:
 # ─────────────────────────────────────────────
 # Registro
 # ─────────────────────────────────────────────
+
 
 class TestRegistro:
     def test_datos_validos_pasan(self):
@@ -90,15 +95,19 @@ class TestRegistro:
             Registro(**datos)
 
     def test_fecha_aceptacion_terminos_futura_falla(self):
-        datos = {**_datos_registro_validos(),
-                 "fecha_aceptacion_terminos": _ahora_utc() + timedelta(hours=1)}
+        datos = {
+            **_datos_registro_validos(),
+            "fecha_aceptacion_terminos": _ahora_utc() + timedelta(hours=1),
+        }
         with pytest.raises(ValidationError):
             Registro(**datos)
 
     def test_fecha_aceptacion_terminos_con_5_min_margen_pasa(self):
         """El validador permite hasta 5 minutos de margen futuro."""
-        datos = {**_datos_registro_validos(),
-                 "fecha_aceptacion_terminos": _ahora_utc() + timedelta(minutes=4)}
+        datos = {
+            **_datos_registro_validos(),
+            "fecha_aceptacion_terminos": _ahora_utc() + timedelta(minutes=4),
+        }
         r = Registro(**datos)
         assert r is not None
 
@@ -151,14 +160,15 @@ class TestRegistro:
 # Login
 # ─────────────────────────────────────────────
 
+
 class TestLogin:
     def test_datos_validos_pasan(self):
-        l = Login(identificador="pepe", password="Password123!")
-        assert l.identificador == "pepe"
+        login = Login(identificador="pepe", password="Password123!")
+        assert login.identificador == "pepe"
 
     def test_identificador_con_espacios_se_limpia(self):
-        l = Login(identificador="  pepe  ", password="Password123!")
-        assert l.identificador == "pepe"
+        login = Login(identificador="  pepe  ", password="Password123!")
+        assert login.identificador == "pepe"
 
     def test_identificador_vacio_falla(self):
         with pytest.raises(ValidationError):
@@ -176,6 +186,7 @@ class TestLogin:
 # ─────────────────────────────────────────────
 # ConfirmarPassword
 # ─────────────────────────────────────────────
+
 
 class TestConfirmarPassword:
     def _valido(self) -> dict:
@@ -228,6 +239,7 @@ class TestConfirmarPassword:
 # GuardarActividad
 # ─────────────────────────────────────────────
 
+
 class TestGuardarActividad:
     def test_datos_validos_pasan(self):
         a = GuardarActividad(**_datos_actividad_validos())
@@ -265,8 +277,10 @@ class TestGuardarActividad:
             GuardarActividad(**datos)
 
     def test_ruta_mapa_url_valida_pasa(self):
-        datos = {**_datos_actividad_validos(),
-                 "ruta_mapa_url": "https://maps.example.com/ruta?id=123"}
+        datos = {
+            **_datos_actividad_validos(),
+            "ruta_mapa_url": "https://maps.example.com/ruta?id=123",
+        }
         a = GuardarActividad(**datos)
         assert a.ruta_mapa_url is not None
 
@@ -296,6 +310,7 @@ class TestGuardarActividad:
 # ─────────────────────────────────────────────
 # ActualizarPerfil
 # ─────────────────────────────────────────────
+
 
 class TestActualizarPerfil:
     def test_objeto_vacio_es_valido(self):
@@ -344,4 +359,3 @@ class TestActualizarPerfil:
         assert "nombre_real" in payload
         assert payload["nombre_real"] is None
         assert "altura" not in payload
-        

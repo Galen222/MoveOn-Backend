@@ -11,16 +11,20 @@ from utils import calculos
 logger = logging.getLogger("app.activities")
 
 
-async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schemas.GuardarActividad):
+async def crear_actividad(
+    db: AsyncSession, usuario_actual_id: int, datos: schemas.GuardarActividad
+):
     """
     Busca al usuario y registra una nueva actividad deportiva.
     """
     # Se busca el usuario por su ID (viene del token)
-    usuario = (await db.execute(
-        select(database.Usuario)
-        .where(database.Usuario.id == usuario_actual_id)
-        .with_for_update()
-    )).scalar_one_or_none()
+    usuario = (
+        await db.execute(
+            select(database.Usuario)
+            .where(database.Usuario.id == usuario_actual_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
 
     if not usuario:
         logger.warning(
@@ -29,8 +33,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
                 "usuario_id": usuario_actual_id,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Se Crea el objeto de base de datos.
     nueva_actividad = database.Actividad(
@@ -40,9 +43,8 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
         duracion=datos.duracion,
         calorias_quemadas=datos.calorias_quemadas,
         ruta_polilinea=datos.ruta_polilinea,
-        ruta_mapa_url=str(
-            datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
-        fecha_ruta=datos.fecha_ruta
+        ruta_mapa_url=str(datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
+        fecha_ruta=datos.fecha_ruta,
     )
 
     # Sumar distancia y calorías al acumulado histórico del usuario.
@@ -52,8 +54,7 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
     usuario.total_metros = total_actual + int(datos.distancia)
 
     total_calorias_actual = int(usuario.total_calorias or 0)
-    usuario.total_calorias = total_calorias_actual + \
-        int(datos.calorias_quemadas)
+    usuario.total_calorias = total_calorias_actual + int(datos.calorias_quemadas)
 
     # Se guarda en BD.
     try:
@@ -89,29 +90,33 @@ async def crear_actividad(db: AsyncSession, usuario_actual_id: int, datos: schem
         "ruta_polilinea": nueva_actividad.ruta_polilinea,
         "ruta_mapa_url": nueva_actividad.ruta_mapa_url,
         "fecha_ruta": nueva_actividad.fecha_ruta,
-        "nuevo_total_puntos": puntos_actualizados
+        "nuevo_total_puntos": puntos_actualizados,
     }
 
     return respuesta
 
 
-async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_actividad: int):
+async def obtener_actividad(
+    db: AsyncSession, usuario_actual_id: int, id_actividad: int
+):
     # Burcar usuario
     # Reducimos queries duplicadas: en vez de consultar primero el usuario y luego la actividad,
     # se hace una sola query con OUTER JOIN para seguir distinguiendo entre usuario inexistente
     # y actividad inexistente o que no pertenece a este usuario.
-    fila = (await db.execute(
-        select(database.Usuario.id, database.Actividad)
-        .select_from(database.Usuario)
-        .outerjoin(
-            database.Actividad,
-            and_(
-                database.Actividad.id == id_actividad,
-                database.Actividad.usuario_id == database.Usuario.id
+    fila = (
+        await db.execute(
+            select(database.Usuario.id, database.Actividad)
+            .select_from(database.Usuario)
+            .outerjoin(
+                database.Actividad,
+                and_(
+                    database.Actividad.id == id_actividad,
+                    database.Actividad.usuario_id == database.Usuario.id,
+                ),
             )
+            .where(database.Usuario.id == usuario_actual_id)
         )
-        .where(database.Usuario.id == usuario_actual_id)
-    )).first()
+    ).first()
 
     if not fila:
         logger.warning(
@@ -121,8 +126,7 @@ async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_activid
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     _, actividad = fila
 
@@ -135,13 +139,14 @@ async def obtener_actividad(db: AsyncSession, usuario_actual_id: int, id_activid
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Actividad no encontrada")
+        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     return actividad
 
 
-async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: int, limit: int):
+async def obtener_actividades(
+    db: AsyncSession, usuario_actual_id: int, skip: int, limit: int
+):
     """
     Obtiene la lista paginada de actividades del usuario autenticado
     junto con metadata de paginación.
@@ -149,10 +154,11 @@ async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: in
     # Validar que el usuario exista, igual que en el resto de operaciones
     # de actividades, para no devolver una lista vacía si el token apunta
     # a un usuario ya inexistente.
-    usuario_existe = (await db.execute(
-        select(database.Usuario.id)
-        .where(database.Usuario.id == usuario_actual_id)
-    )).scalar_one_or_none()
+    usuario_existe = (
+        await db.execute(
+            select(database.Usuario.id).where(database.Usuario.id == usuario_actual_id)
+        )
+    ).scalar_one_or_none()
 
     if not usuario_existe:
         logger.warning(
@@ -163,22 +169,31 @@ async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: in
                 "limit": limit,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
-    total = (await db.execute(
-        select(func.count())
-        .select_from(database.Actividad)
-        .where(database.Actividad.usuario_id == usuario_actual_id)
-    )).scalar_one()
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(database.Actividad)
+            .where(database.Actividad.usuario_id == usuario_actual_id)
+        )
+    ).scalar_one()
 
-    items = (await db.execute(
-        select(database.Actividad)
-        .where(database.Actividad.usuario_id == usuario_actual_id)
-        .order_by(database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc())
-        .offset(skip)
-        .limit(limit)
-    )).scalars().all()
+    items = (
+        (
+            await db.execute(
+                select(database.Actividad)
+                .where(database.Actividad.usuario_id == usuario_actual_id)
+                .order_by(
+                    database.Actividad.fecha_ruta.desc(), database.Actividad.id.desc()
+                )
+                .offset(skip)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     logger.debug(
         "lista_actividades_obtenida",
@@ -201,22 +216,26 @@ async def obtener_actividades(db: AsyncSession, usuario_actual_id: int, skip: in
     }
 
 
-async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_actividad: int):
+async def eliminar_actividad(
+    db: AsyncSession, usuario_actual_id: int, id_actividad: int
+):
     # Se sigue bloqueando el usuario porque se modifica total_metros,
     # pero usuario + actividad se recuperan en una sola query.
-    fila = (await db.execute(
-        select(database.Usuario, database.Actividad)
-        .select_from(database.Usuario)
-        .outerjoin(
-            database.Actividad,
-            and_(
-                database.Actividad.id == id_actividad,
-                database.Actividad.usuario_id == database.Usuario.id
+    fila = (
+        await db.execute(
+            select(database.Usuario, database.Actividad)
+            .select_from(database.Usuario)
+            .outerjoin(
+                database.Actividad,
+                and_(
+                    database.Actividad.id == id_actividad,
+                    database.Actividad.usuario_id == database.Usuario.id,
+                ),
             )
+            .where(database.Usuario.id == usuario_actual_id)
+            .with_for_update(of=database.Usuario)
         )
-        .where(database.Usuario.id == usuario_actual_id)
-        .with_for_update(of=database.Usuario)
-    )).first()
+    ).first()
 
     if not fila:
         logger.warning(
@@ -226,8 +245,7 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     usuario, actividad = fila
 
@@ -239,8 +257,7 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Actividad no encontrada")
+        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
 
     # Se resta la distancia y las calorías al eliminar la actividad.
     # Evita números negativos por errores de redondeo flotante.
@@ -253,8 +270,7 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
 
         total_calorias_actual = int(usuario.total_calorias or 0)
         calorias_actividad = int(actividad.calorias_quemadas or 0)
-        usuario.total_calorias = max(
-            0, total_calorias_actual - calorias_actividad)
+        usuario.total_calorias = max(0, total_calorias_actual - calorias_actividad)
 
         await db.delete(actividad)
         await db.commit()
@@ -279,17 +295,19 @@ async def eliminar_actividad(db: AsyncSession, usuario_actual_id: int, id_activi
     return {
         "estatus": "success",
         "mensaje": "Actividad eliminada",
-        "nuevo_total_puntos": puntos
+        "nuevo_total_puntos": puntos,
     }
 
 
 async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
     # Buscar usuario (bloqueo para evitar race conditions con crear_actividad/eliminar_actividad)
-    usuario = (await db.execute(
-        select(database.Usuario)
-        .where(database.Usuario.id == usuario_actual_id)
-        .with_for_update()
-    )).scalar_one_or_none()
+    usuario = (
+        await db.execute(
+            select(database.Usuario)
+            .where(database.Usuario.id == usuario_actual_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
 
     if not usuario:
         logger.warning(
@@ -298,21 +316,23 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
                 "usuario_id": usuario_actual_id,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Usuario no encontrado")
+        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
 
     # Contar cuántas hay, para devolver el número borrado.
-    num_borrados = (await db.execute(
-        select(func.count())
-        .select_from(database.Actividad)
-        .where(database.Actividad.usuario_id == usuario.id)
-    )).scalar_one()
+    num_borrados = (
+        await db.execute(
+            select(func.count())
+            .select_from(database.Actividad)
+            .where(database.Actividad.usuario_id == usuario.id)
+        )
+    ).scalar_one()
 
     try:
         # Borrado masivo de actividades
         await db.execute(
             sa_delete(database.Actividad).where(
-                database.Actividad.usuario_id == usuario.id)
+                database.Actividad.usuario_id == usuario.id
+            )
         )
 
         # Reset de metros y calorías
@@ -336,5 +356,5 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
 
     return {
         "estatus": "success",
-        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades."
+        "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades.",
     }

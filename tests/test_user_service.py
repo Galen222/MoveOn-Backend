@@ -12,13 +12,14 @@ from sqlalchemy.exc import IntegrityError
 
 import database
 import schemas
-from schemas import ActualizarPerfil, GeneroUsuario, ProvinciaEspaña
+from schemas import ActualizarPerfil
 from services import user_service
 
 
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
+
 
 def _make_usuario(
     id: int = 1,
@@ -41,14 +42,16 @@ def _make_usuario(
     u.altura = None
     u.peso = None
     u.foto_perfil = None
+    u.objetivo_semanal_metros = None
+    u.objetivo_mensual_metros = None
     return u
 
 
 def _make_db_one(resultado) -> AsyncMock:
     db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(
-        scalar_one_or_none=MagicMock(return_value=resultado)
-    ))
+    db.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=resultado))
+    )
     db.commit = AsyncMock()
     db.add = MagicMock()
     db.rollback = AsyncMock()
@@ -83,6 +86,7 @@ def _make_db_seq(*resultados) -> AsyncMock:
 
 def _datos_registro() -> schemas.Registro:
     from datetime import timedelta
+
     return schemas.Registro(
         nombre_usuario="GalenTest",
         email="galen@test.com",
@@ -112,6 +116,7 @@ def _stub_text_moderation(monkeypatch):
 # registrar_nuevo_usuario
 # ─────────────────────────────────────────────
 
+
 class TestRegistrarNuevoUsuario:
     @pytest.mark.asyncio
     async def test_nombre_de_usuario_duplicado_lanza_400(self):
@@ -139,7 +144,11 @@ class TestRegistrarNuevoUsuario:
     async def test_usuario_nuevo_hace_add_y_commit(self):
         db = _make_db_one(None)  # sin duplicados
 
-        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
+        with patch(
+            "services.user_service.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value="hash",
+        ):
             await user_service.registrar_nuevo_usuario(db, _datos_registro())
 
         db.add.assert_called_once()
@@ -148,9 +157,15 @@ class TestRegistrarNuevoUsuario:
     @pytest.mark.asyncio
     async def test_integrity_error_hace_rollback_y_lanza_400(self):
         db = _make_db_one(None)
-        db.commit = AsyncMock(side_effect=IntegrityError(None, None, Exception("constraint")))
+        db.commit = AsyncMock(
+            side_effect=IntegrityError(None, None, Exception("constraint"))
+        )
 
-        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
+        with patch(
+            "services.user_service.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value="hash",
+        ):
             with pytest.raises(HTTPException) as exc:
                 await user_service.registrar_nuevo_usuario(db, _datos_registro())
 
@@ -161,8 +176,14 @@ class TestRegistrarNuevoUsuario:
     async def test_respuesta_incluye_nombre_usuario_y_estatus(self):
         db = _make_db_one(None)
 
-        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
-            resultado = await user_service.registrar_nuevo_usuario(db, _datos_registro())
+        with patch(
+            "services.user_service.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value="hash",
+        ):
+            resultado = await user_service.registrar_nuevo_usuario(
+                db, _datos_registro()
+            )
 
         assert resultado["estatus"] == "success"
         assert resultado["nombre_usuario"] == "GalenTest"
@@ -186,7 +207,11 @@ class TestRegistrarNuevoUsuario:
             mock_real,
         )
 
-        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
+        with patch(
+            "services.user_service.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value="hash",
+        ):
             await user_service.registrar_nuevo_usuario(db, datos)
 
         mock_username.assert_awaited_once_with("GalenTest")
@@ -204,7 +229,11 @@ class TestRegistrarNuevoUsuario:
             mock_real,
         )
 
-        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="hash"):
+        with patch(
+            "services.user_service.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value="hash",
+        ):
             await user_service.registrar_nuevo_usuario(db, datos)
 
         mock_real.assert_not_awaited()
@@ -213,6 +242,7 @@ class TestRegistrarNuevoUsuario:
 # ─────────────────────────────────────────────
 # obtener_perfil
 # ─────────────────────────────────────────────
+
 
 class TestObtenerPerfil:
     @pytest.mark.asyncio
@@ -237,6 +267,7 @@ class TestObtenerPerfil:
 # ─────────────────────────────────────────────
 # actualizar_perfil_usuario
 # ─────────────────────────────────────────────
+
 
 class TestActualizarPerfilUsuario:
     @pytest.mark.asyncio
@@ -297,10 +328,13 @@ class TestActualizarPerfilUsuario:
         db = _make_db_one(None)
         datos = ActualizarPerfil(password="NuevoPass1!")
 
-        with patch("services.user_service.run_in_threadpool", new_callable=AsyncMock, return_value="nuevo_hash"):
+        with patch(
+            "services.user_service.run_in_threadpool",
+            new_callable=AsyncMock,
+            return_value="nuevo_hash",
+        ):
             await user_service.actualizar_perfil_usuario(db, usuario, datos)
 
-        # Debe haber ejecutado UPDATE en SesionRefresh y luego commit
         assert db.execute.called
         db.commit.assert_called_once()
 
@@ -308,13 +342,14 @@ class TestActualizarPerfilUsuario:
     async def test_integrity_error_hace_rollback_y_lanza_400(self):
         usuario = _make_usuario()
         db = _make_db_one(None)
-        db.commit = AsyncMock(side_effect=IntegrityError(None, None, Exception("constraint")))
+        db.commit = AsyncMock(
+            side_effect=IntegrityError(None, None, Exception("constraint"))
+        )
         datos = ActualizarPerfil(email="libre@test.com")
 
-        # el execute de comprobación duplicado devuelve None (no hay duplicado)
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
         db.rollback = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -328,7 +363,7 @@ class TestActualizarPerfilUsuario:
         usuario = _make_usuario()
         db = AsyncMock()
         db.commit = AsyncMock()
-        datos = ActualizarPerfil()  # sin campos
+        datos = ActualizarPerfil()
 
         resultado = await user_service.actualizar_perfil_usuario(db, usuario, datos)
 
@@ -374,10 +409,35 @@ class TestActualizarPerfilUsuario:
         mock_real.assert_not_awaited()
         assert usuario.nombre_real is None
 
+    @pytest.mark.asyncio
+    async def test_actualizar_objetivo_semanal_metros(self):
+        usuario = _make_usuario()
+        db = _make_db_one(None)
+        datos = ActualizarPerfil(objetivo_semanal_metros=35000)
+
+        resultado = await user_service.actualizar_perfil_usuario(db, usuario, datos)
+
+        assert resultado["estatus"] == "success"
+        assert usuario.objetivo_semanal_metros == 35000
+        db.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_actualizar_objetivo_mensual_metros(self):
+        usuario = _make_usuario()
+        db = _make_db_one(None)
+        datos = ActualizarPerfil(objetivo_mensual_metros=120000)
+
+        resultado = await user_service.actualizar_perfil_usuario(db, usuario, datos)
+
+        assert resultado["estatus"] == "success"
+        assert usuario.objetivo_mensual_metros == 120000
+        db.commit.assert_called_once()
+
 
 # ─────────────────────────────────────────────
 # obtener_perfil_publico
 # ─────────────────────────────────────────────
+
 
 class TestObtenerPerfilPublico:
     @pytest.mark.asyncio
@@ -411,7 +471,6 @@ class TestObtenerPerfilPublico:
 
     @pytest.mark.asyncio
     async def test_busqueda_es_case_insensitive(self):
-        """Buscar "PEPE" debe encontrar al usuario guardado como "pepe"."""
         usuario = _make_usuario(nombre_usuario="pepe", perfil_visible=True)
         db = _make_db_one(usuario)
 
@@ -422,6 +481,7 @@ class TestObtenerPerfilPublico:
 # ─────────────────────────────────────────────
 # buscar_usuario
 # ─────────────────────────────────────────────
+
 
 class TestBuscarUsuario:
     @pytest.mark.asyncio
@@ -479,7 +539,9 @@ class TestBuscarUsuario:
             ("items", []),
         )
 
-        resultado = await user_service.buscar_usuario(db, "xyz_raro_xyz", 1, skip=0, limit=20)
+        resultado = await user_service.buscar_usuario(
+            db, "xyz_raro_xyz", 1, skip=0, limit=20
+        )
 
         assert resultado == {
             "items": [],
@@ -493,6 +555,7 @@ class TestBuscarUsuario:
 # ─────────────────────────────────────────────
 # eliminar_cuenta
 # ─────────────────────────────────────────────
+
 
 class TestEliminarCuenta:
     @pytest.mark.asyncio
@@ -513,6 +576,7 @@ class TestEliminarCuenta:
 # obtener_ranking
 # ─────────────────────────────────────────────
 
+
 class TestObtenerRanking:
     @pytest.mark.asyncio
     async def test_ranking_sin_filtro_devuelve_lista(self):
@@ -532,7 +596,6 @@ class TestObtenerRanking:
 
     @pytest.mark.asyncio
     async def test_ranking_con_provincia_filtra_correctamente(self):
-        """El filtro por provincia se pasa como string al servicio."""
         mock_result = MagicMock()
         mock_result.all.return_value = []
         db = AsyncMock()
@@ -545,7 +608,6 @@ class TestObtenerRanking:
 
     @pytest.mark.asyncio
     async def test_puntos_calculados_correctamente(self):
-        """1 KM = 1 punto → 10.000 metros = 10 puntos."""
         fila = ("runner", None, 10_000, None)
         mock_result = MagicMock()
         mock_result.all.return_value = [fila]
@@ -556,4 +618,3 @@ class TestObtenerRanking:
 
         assert resultado[0]["total_puntos"] == 10
         assert resultado[0]["foto_version"] == 0
-        

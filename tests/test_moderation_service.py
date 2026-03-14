@@ -1,277 +1,242 @@
-# tests/test_text_moderation_service.py
+# tests/test_moderation_service.py
 
-import httpx
+from __future__ import annotations
+
 import pytest
-from unittest.mock import AsyncMock
-
 from fastapi import HTTPException
 
 from services import text_moderation_service as svc
 
 
+def _write_dicts(
+    tmp_path,
+    *,
+    en_words: list[str] | None = None,
+    es_words: list[str] | None = None,
+) -> None:
+    (tmp_path / "en.txt").write_text(
+        "\n".join(en_words or []),
+        encoding="utf-8",
+    )
+    (tmp_path / "es.txt").write_text(
+        "\n".join(es_words or []),
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_cache():
+    svc._load_dictionary_cached.cache_clear()
+    yield
+    svc._load_dictionary_cached.cache_clear()
+
+
+@pytest.fixture
+def _base_settings(monkeypatch, tmp_path):
+    monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
+    monkeypatch.setattr(svc.settings, "TEXT_MODERATION_FAIL_OPEN", False, raising=False)
+    monkeypatch.setattr(
+        svc.settings,
+        "TEXT_MODERATION_DICTIONARY_DIR",
+        str(tmp_path),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        svc.settings,
+        "TEXT_MODERATION_DICTIONARY_LANGS",
+        "es,en",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        svc.settings,
+        "TEXT_MODERATION_RESERVED_USERNAME_TOKENS",
+        "admin,administrator,administrador,support,soporte,moderator,moderador",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        svc.settings,
+        "TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS",
+        "blog,contact,conversation,file,files,filter,footer,footer navigation,github,"
+        "insights,issues,navigation,open,pricing,privacy,projects,pull requests,"
+        "security,skip to content,terms,training",
+        raising=False,
+    )
+    return tmp_path
+
+
 class TestValidarNombreUsuario:
     @pytest.mark.asyncio
-    async def test_username_reservado_bloquea_sin_llamar_openai(self, monkeypatch):
-        mock_call = AsyncMock()
-
-        monkeypatch.setattr(svc, "_call_openai", mock_call)
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
-        monkeypatch.setattr(
-            svc.settings,
-            "TEXT_MODERATION_RESERVED_USERNAME_TOKENS",
-            "admin,soporte,moderador",
-            raising=False,
+    async def test_username_reservado_bloquea(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch"],
+            es_words=["puta"],
         )
 
         with pytest.raises(HTTPException) as exc:
             await svc.validar_nombre_usuario("admin123")
 
         assert exc.value.status_code == 400
-        mock_call.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_openai_flagged_bloquea_username(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
-        monkeypatch.setattr(
-            svc.settings,
-            "TEXT_MODERATION_RESERVED_USERNAME_TOKENS",
-            "",
-            raising=False,
-        )
-
-        monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(
-                return_value={
-                    "id": "modr_x",
-                    "model": "omni-moderation-latest",
-                    "results": [
-                        {
-                            "flagged": True,
-                            "categories": {
-                                "sexual": False,
-                                "harassment": True,
-                                "harassment/threatening": False,
-                                "hate": False,
-                                "hate/threatening": False,
-                            },
-                            "category_scores": {
-                                "sexual": 0.01,
-                                "harassment": 0.91,
-                                "harassment/threatening": 0.04,
-                                "hate": 0.01,
-                                "hate/threatening": 0.01,
-                            },
-                        }
-                    ],
-                }
-            ),
-        )
-
-        with pytest.raises(HTTPException) as exc:
-            await svc.validar_nombre_usuario("insulto123")
-
-        assert exc.value.status_code == 400
         assert "nombre de usuario" in exc.value.detail.lower()
 
     @pytest.mark.asyncio
-    async def test_openai_score_supera_umbral_y_bloquea_username(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
-        monkeypatch.setattr(
-            svc.settings,
-            "TEXT_MODERATION_RESERVED_USERNAME_TOKENS",
-            "",
-            raising=False,
-        )
-        monkeypatch.setattr(
-            svc.settings,
-            "TEXT_MODERATION_USERNAME_SCORE_THRESHOLD",
-            0.12,
-            raising=False,
+    async def test_username_ingles_bloquea(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch", "whore"],
+            es_words=["puta"],
         )
 
-        monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(
-                return_value={
-                    "results": [
-                        {
-                            "flagged": False,
-                            "categories": {
-                                "sexual": True,
-                                "harassment": False,
-                                "harassment/threatening": False,
-                                "hate": False,
-                                "hate/threatening": False,
-                            },
-                            "category_scores": {
-                                "sexual": 0.24,
-                                "harassment": 0.02,
-                                "harassment/threatening": 0.01,
-                                "hate": 0.01,
-                                "hate/threatening": 0.01,
-                            },
-                        }
-                    ]
-                }
-            ),
-        )
+        with pytest.raises(HTTPException) as exc:
+            await svc.validar_nombre_usuario("bitch99")
 
-        with pytest.raises(HTTPException):
-            await svc.validar_nombre_usuario("palabrota123")
+        assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_username_limpio_pasa(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
+    async def test_username_espanol_con_leetspeak_bloquea(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch"],
+            es_words=["polla", "puta"],
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.validar_nombre_usuario("p0lla69")
+
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_username_limpio_pasa(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch"],
+            es_words=["puta", "polla"],
+        )
+
+        await svc.validar_nombre_usuario("GalenRunner2026")
+
+
+class TestValidarNombreReal:
+    @pytest.mark.asyncio
+    async def test_nombre_real_con_palabra_espanola_bloquea(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch"],
+            es_words=["puta", "gilipollas"],
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.validar_nombre_real("María Puta García")
+
+        assert exc.value.status_code == 400
+        assert "nombre real" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_nombre_real_con_palabra_inglesa_bloquea(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch", "whore"],
+            es_words=["puta"],
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.validar_nombre_real("Mary Bitch Johnson")
+
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_nombre_real_limpio_pasa(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["bitch"],
+            es_words=["puta"],
+        )
+
+        await svc.validar_nombre_real("María García")
+
+    @pytest.mark.asyncio
+    async def test_frase_exacta_bloquea_nombre_real(self, _base_settings):
+        _write_dicts(
+            _base_settings,
+            en_words=["son of a bitch"],
+            es_words=["hijo de puta"],
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.validar_nombre_real("hijo de puta")
+
+        assert exc.value.status_code == 400
+
+
+class TestErroresDeDiccionario:
+    @pytest.mark.asyncio
+    async def test_missing_dictionary_fail_open_deja_pasar(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False
+        )
+        monkeypatch.setattr(
+            svc.settings, "TEXT_MODERATION_FAIL_OPEN", True, raising=False
+        )
+        monkeypatch.setattr(
+            svc.settings,
+            "TEXT_MODERATION_DICTIONARY_DIR",
+            str(tmp_path / "no-existe"),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            svc.settings,
+            "TEXT_MODERATION_DICTIONARY_LANGS",
+            "es,en",
+            raising=False,
+        )
         monkeypatch.setattr(
             svc.settings,
             "TEXT_MODERATION_RESERVED_USERNAME_TOKENS",
             "admin,soporte",
             raising=False,
         )
-
-        monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(
-                return_value={
-                    "results": [
-                        {
-                            "flagged": False,
-                            "categories": {
-                                "sexual": False,
-                                "harassment": False,
-                                "harassment/threatening": False,
-                                "hate": False,
-                                "hate/threatening": False,
-                            },
-                            "category_scores": {
-                                "sexual": 0.01,
-                                "harassment": 0.01,
-                                "harassment/threatening": 0.01,
-                                "hate": 0.01,
-                                "hate/threatening": 0.01,
-                            },
-                        }
-                    ]
-                }
-            ),
-        )
-
-        await svc.validar_nombre_usuario("GalenRunner")
-
-
-class TestValidarNombreReal:
-    @pytest.mark.asyncio
-    async def test_flagged_bloquea_nombre_real(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
-
-        monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(
-                return_value={
-                    "results": [
-                        {
-                            "flagged": True,
-                            "categories": {
-                                "sexual": False,
-                                "harassment": True,
-                                "harassment/threatening": False,
-                                "hate": False,
-                                "hate/threatening": False,
-                            },
-                            "category_scores": {
-                                "sexual": 0.02,
-                                "harassment": 0.88,
-                                "harassment/threatening": 0.03,
-                                "hate": 0.01,
-                                "hate/threatening": 0.01,
-                            },
-                        }
-                    ]
-                }
-            ),
-        )
-
-        with pytest.raises(HTTPException) as exc:
-            await svc.validar_nombre_real("Nombre ofensivo")
-
-        assert exc.value.status_code == 400
-        assert "nombre real" in exc.value.detail.lower()
-
-    @pytest.mark.asyncio
-    async def test_score_bajo_permite_nombre_real(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
         monkeypatch.setattr(
             svc.settings,
-            "TEXT_MODERATION_REAL_NAME_SCORE_THRESHOLD",
-            0.45,
+            "TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS",
+            "",
             raising=False,
         )
 
-        monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(
-                return_value={
-                    "results": [
-                        {
-                            "flagged": False,
-                            "categories": {
-                                "sexual": False,
-                                "harassment": False,
-                                "harassment/threatening": False,
-                                "hate": False,
-                                "hate/threatening": False,
-                            },
-                            "category_scores": {
-                                "sexual": 0.03,
-                                "harassment": 0.08,
-                                "harassment/threatening": 0.01,
-                                "hate": 0.01,
-                                "hate/threatening": 0.01,
-                            },
-                        }
-                    ]
-                }
-            ),
-        )
-
         await svc.validar_nombre_real("María García")
 
     @pytest.mark.asyncio
-    async def test_fail_open_si_openai_falla(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_FAIL_OPEN", True, raising=False)
-
+    async def test_missing_dictionary_fail_closed_devuelve_503(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(side_effect=httpx.ReadTimeout("timeout")),
+            svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False
         )
-
-        await svc.validar_nombre_real("María García")
-
-    @pytest.mark.asyncio
-    async def test_fail_closed_devuelve_503_si_openai_falla(self, monkeypatch):
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
-        monkeypatch.setattr(svc.settings, "OPENAI_API_KEY", "test-key", raising=False)
-        monkeypatch.setattr(svc.settings, "TEXT_MODERATION_FAIL_OPEN", False, raising=False)
-
         monkeypatch.setattr(
-            svc,
-            "_call_openai",
-            AsyncMock(side_effect=httpx.ConnectError("boom")),
+            svc.settings, "TEXT_MODERATION_FAIL_OPEN", False, raising=False
+        )
+        monkeypatch.setattr(
+            svc.settings,
+            "TEXT_MODERATION_DICTIONARY_DIR",
+            str(tmp_path / "no-existe"),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            svc.settings,
+            "TEXT_MODERATION_DICTIONARY_LANGS",
+            "es,en",
+            raising=False,
+        )
+        monkeypatch.setattr(
+            svc.settings,
+            "TEXT_MODERATION_RESERVED_USERNAME_TOKENS",
+            "admin,soporte",
+            raising=False,
+        )
+        monkeypatch.setattr(
+            svc.settings,
+            "TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS",
+            "",
+            raising=False,
         )
 
         with pytest.raises(HTTPException) as exc:
@@ -279,4 +244,3 @@ class TestValidarNombreReal:
 
         assert exc.value.status_code == 503
         assert "no se pudo validar" in exc.value.detail.lower()
-        

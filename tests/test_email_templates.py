@@ -52,4 +52,3 @@ class TestRecuperacionPasswordTemplate:
         assert "111111" in html_a
         assert "222222" in html_b
         assert "222222" not in html_a
-        

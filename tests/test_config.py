@@ -22,6 +22,7 @@ from config import Settings
 # Helper: entorno mínimo válido
 # ─────────────────────────────────────────────
 
+
 def _env(**overrides) -> dict:
     """Devuelve un dict con todos los campos requeridos válidos (solo strings)."""
     base = {
@@ -31,11 +32,11 @@ def _env(**overrides) -> dict:
         "DB_PORT": "5432",
         "DB_NAME": "test",
         "APP_ID": "test-app-id",
-        "APP_SESSION_SECRET":   "secret-app-session-unique-00001-pad",
-        "ACCESS_TOKEN_SECRET":  "secret-access-token-unique-00002-pad",
+        "APP_SESSION_SECRET": "secret-app-session-unique-00001-pad",
+        "ACCESS_TOKEN_SECRET": "secret-access-token-unique-00002-pad",
         "REFRESH_TOKEN_SECRET": "secret-refresh-token-unique-00003-pad",
-        "REFRESH_HASH_SECRET":  "secret-refresh-hash-unique-000004-pad",
-        "CODE_HASH_SECRET":     "secret-code-hash-unique-0000005-pad",
+        "REFRESH_HASH_SECRET": "secret-refresh-hash-unique-000004-pad",
+        "CODE_HASH_SECRET": "secret-code-hash-unique-0000005-pad",
         "EMAIL_HOST": "smtp.test.com",
         "EMAIL_USER": "noreply@test.com",
         "EMAIL_PASS": "test-pass",
@@ -49,7 +50,7 @@ def _build_settings(**overrides) -> Settings:
     """Construye un Settings válido con env_file desactivado."""
     env = _env(**overrides)
     with patch.dict(os.environ, env, clear=False):
-        return Settings(_env_file=None, **env) # type: ignore
+        return Settings(_env_file=None, **env)  # type: ignore
 
 
 def _fake_info(field_name: str) -> ValidationInfo:
@@ -62,6 +63,7 @@ def _fake_info(field_name: str) -> ValidationInfo:
 # ─────────────────────────────────────────────
 # parse_cors_origins (validator directo)
 # ─────────────────────────────────────────────
+
 
 class TestParseCorsOrigins:
     def test_string_csv_se_parsea_a_lista(self):
@@ -89,7 +91,9 @@ class TestParseCorsOrigins:
             Settings.parse_cors_origins(12345)
 
     def test_lista_con_espacios_se_limpia(self):
-        resultado = Settings.parse_cors_origins(["  https://a.com  ", " https://b.com "])
+        resultado = Settings.parse_cors_origins(
+            ["  https://a.com  ", " https://b.com "]
+        )
         assert resultado == ["https://a.com", "https://b.com"]
 
     def test_string_un_solo_origen(self):
@@ -100,6 +104,7 @@ class TestParseCorsOrigins:
 # ─────────────────────────────────────────────
 # validar_public_base_url (validator directo)
 # ─────────────────────────────────────────────
+
 
 class TestValidarPublicBaseUrl:
     def test_vacio_devuelve_string_vacio(self):
@@ -144,10 +149,13 @@ class TestValidarPublicBaseUrl:
 # validar_secretos_fuertes (validator directo + integración)
 # ─────────────────────────────────────────────
 
+
 class TestValidarSecretosFuertes:
     def test_secreto_de_32_chars_se_acepta(self):
         secreto = "abcdefghijklmnopqrstuvwxyz123456"  # 32 chars, >8 únicos
-        resultado = Settings.validar_secretos_fuertes(secreto, _fake_info("APP_SESSION_SECRET"))
+        resultado = Settings.validar_secretos_fuertes(
+            secreto, _fake_info("APP_SESSION_SECRET")
+        )
         assert resultado == secreto
 
     def test_secreto_corto_lanza_error(self):
@@ -157,7 +165,9 @@ class TestValidarSecretosFuertes:
     def test_secreto_con_poca_entropia_lanza_error(self):
         """Un secreto de 32 chars pero con <8 chars únicos es rechazado."""
         with pytest.raises(ValueError, match="entropía"):
-            Settings.validar_secretos_fuertes("a" * 32, _fake_info("APP_SESSION_SECRET"))
+            Settings.validar_secretos_fuertes(
+                "a" * 32, _fake_info("APP_SESSION_SECRET")
+            )
 
     def test_secreto_7_chars_unicos_lanza_error(self):
         secreto = "abcdefg" * 5  # 35 chars, 7 únicos
@@ -166,13 +176,17 @@ class TestValidarSecretosFuertes:
 
     def test_secreto_8_chars_unicos_se_acepta(self):
         secreto = "abcdefgh" * 4  # 32 chars, 8 únicos
-        resultado = Settings.validar_secretos_fuertes(secreto, _fake_info("APP_SESSION_SECRET"))
+        resultado = Settings.validar_secretos_fuertes(
+            secreto, _fake_info("APP_SESSION_SECRET")
+        )
         assert resultado == secreto
 
     def test_valor_trivial_changeme_lanza_error(self):
         """'changeme' falla por longitud (<32), no por lista negra."""
         with pytest.raises(ValueError, match="32 caracteres"):
-            Settings.validar_secretos_fuertes("changeme", _fake_info("APP_SESSION_SECRET"))
+            Settings.validar_secretos_fuertes(
+                "changeme", _fake_info("APP_SESSION_SECRET")
+            )
 
     def test_tipo_no_string_lanza_error(self):
         with pytest.raises(ValueError, match="string"):
@@ -200,6 +214,7 @@ class TestValidarSecretosFuertes:
 # ─────────────────────────────────────────────
 # validar_secretos_distintos (requiere Settings completo)
 # ─────────────────────────────────────────────
+
 
 class TestValidarSecretosDistintos:
     def test_secretos_identicos_lanza_error(self):
@@ -232,4 +247,3 @@ class TestValidarSecretosDistintos:
             s.CODE_HASH_SECRET,
         ]
         assert len(set(secretos)) == 5
-        

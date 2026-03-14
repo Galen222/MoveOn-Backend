@@ -10,7 +10,6 @@
 #   _hash_refresh_token, _hash_codigo_recuperacion.
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,6 +24,7 @@ from services import access_service
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
+
 
 def _ahora() -> datetime:
     return datetime.now(timezone.utc)
@@ -61,14 +61,15 @@ def _make_usuario(nombre_usuario: str = "pepe", usuario_id: int = 1) -> MagicMoc
 # buscar_por_identificador
 # ─────────────────────────────────────────────
 
+
 class TestBuscarPorIdentificador:
     @pytest.mark.asyncio
     async def test_identificador_existente_devuelve_usuario(self):
         usuario = _make_usuario("pepe")
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=usuario)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=usuario))
+        )
 
         resultado = await access_service.buscar_por_identificador(db, "pepe")
 
@@ -78,9 +79,9 @@ class TestBuscarPorIdentificador:
     @pytest.mark.asyncio
     async def test_identificador_inexistente_devuelve_none(self):
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
         resultado = await access_service.buscar_por_identificador(db, "nadie")
 
@@ -91,11 +92,13 @@ class TestBuscarPorIdentificador:
         """La búsqueda por email debe funcionar independientemente de mayúsculas."""
         usuario = _make_usuario("pepe")
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=usuario)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=usuario))
+        )
 
-        resultado = await access_service.buscar_por_identificador(db, "PEPE@EXAMPLE.COM")
+        resultado = await access_service.buscar_por_identificador(
+            db, "PEPE@EXAMPLE.COM"
+        )
 
         assert resultado is usuario
 
@@ -103,9 +106,9 @@ class TestBuscarPorIdentificador:
     async def test_busqueda_llama_a_execute(self):
         """Verifica que el servicio consulta la BD (no devuelve hardcoded)."""
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
         await access_service.buscar_por_identificador(db, "cualquiera")
 
@@ -116,6 +119,7 @@ class TestBuscarPorIdentificador:
 # crear_sesion_login
 # ─────────────────────────────────────────────
 
+
 class TestCrearSesionLogin:
     @pytest.mark.asyncio
     async def test_guarda_hash_y_llama_limpiar(self):
@@ -124,7 +128,10 @@ class TestCrearSesionLogin:
         db.commit = AsyncMock()
         db.add = MagicMock()
 
-        with patch("services.access_service._limpiar_sesiones_refresh_usuario", new_callable=AsyncMock) as mock_limpiar:
+        with patch(
+            "services.access_service._limpiar_sesiones_refresh_usuario",
+            new_callable=AsyncMock,
+        ) as mock_limpiar:
             resultado = await access_service.crear_sesion_login(db, usuario)
 
         assert resultado["estatus"] == "success"
@@ -135,7 +142,9 @@ class TestCrearSesionLogin:
         db.add.assert_called_once()
         sesion_guardada = db.add.call_args.args[0]
         assert sesion_guardada.usuario_id == 99
-        assert sesion_guardada.token_hash == access_service._hash_refresh_token(resultado["refresh_token"])
+        assert sesion_guardada.token_hash == access_service._hash_refresh_token(
+            resultado["refresh_token"]
+        )
         mock_limpiar.assert_awaited_once_with(db, 99)
         db.commit.assert_called_once()
 
@@ -143,6 +152,7 @@ class TestCrearSesionLogin:
 # ─────────────────────────────────────────────
 # refrescar_sesion — casos de error
 # ─────────────────────────────────────────────
+
 
 class TestRefrescarSesionErrores:
     @pytest.mark.asyncio
@@ -161,9 +171,9 @@ class TestRefrescarSesionErrores:
         rt = auth.crear_token_refresh(1, jti, familia)
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
         with pytest.raises(HTTPException) as exc:
             await access_service.refrescar_sesion(db, rt)
@@ -175,15 +185,16 @@ class TestRefrescarSesionErrores:
         jti, familia = "jti-rotado-001", "familia-001"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
             revocada_en=_ahora() - timedelta(minutes=5),
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=sesion)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sesion))
+        )
         db.commit = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -198,18 +209,21 @@ class TestRefrescarSesionErrores:
         jti, familia = "jti-reuse-101", "familia-reuse-101"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
             revocada_en=_ahora() - timedelta(minutes=1),
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=sesion)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sesion))
+        )
         db.commit = AsyncMock()
 
-        with patch("services.access_service._revocar_familia_refresh", new_callable=AsyncMock) as mock_rev:
+        with patch(
+            "services.access_service._revocar_familia_refresh", new_callable=AsyncMock
+        ) as mock_rev:
             with pytest.raises(HTTPException):
                 await access_service.refrescar_sesion(db, rt)
 
@@ -220,15 +234,18 @@ class TestRefrescarSesionErrores:
         jti, familia = "jti-manipulado-002", "familia-002"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash="a" * 64,  # hash falso → jamás coincide
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
-            MagicMock(),
-        ])
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
+                MagicMock(),
+            ]
+        )
         db.commit = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -242,15 +259,16 @@ class TestRefrescarSesionErrores:
         jti, familia = "jti-expirado-004", "familia-004"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
             expira_en=_ahora() - timedelta(days=1),
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=sesion)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sesion))
+        )
 
         with pytest.raises(HTTPException) as exc:
             await access_service.refrescar_sesion(db, rt)
@@ -263,15 +281,18 @@ class TestRefrescarSesionErrores:
         jti, familia = "jti-user-miss-102", "fam-user-miss-102"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
-        ])
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+            ]
+        )
         db.commit = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -287,23 +308,27 @@ class TestRefrescarSesionErrores:
 # refrescar_sesion — flujo feliz
 # ─────────────────────────────────────────────
 
+
 class TestRefrescarSesionExito:
     @pytest.mark.asyncio
     async def test_rotacion_exitosa_devuelve_nuevos_tokens(self):
         jti, familia = "jti-valido-005", "familia-005"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
         )
         usuario = _make_usuario("pepe")
 
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
-            MagicMock(),
-        ])
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(),
+            ]
+        )
         db.commit = AsyncMock()
         db.add = MagicMock()
 
@@ -320,17 +345,20 @@ class TestRefrescarSesionExito:
         jti, familia = "jti-valido-006", "familia-006"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
         )
         usuario = _make_usuario("pepe")
 
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
-            MagicMock(),
-        ])
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=sesion)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(),
+            ]
+        )
         db.commit = AsyncMock()
         db.add = MagicMock()
 
@@ -344,20 +372,22 @@ class TestRefrescarSesionExito:
 # cerrar_sesion (logout)
 # ─────────────────────────────────────────────
 
+
 class TestCerrarSesion:
     @pytest.mark.asyncio
     async def test_logout_normal_revoca_sesion(self):
         jti, familia = "jti-logout-001", "familia-logout-001"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=sesion)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sesion))
+        )
         db.commit = AsyncMock()
 
         resultado = await access_service.cerrar_sesion(db, rt)
@@ -371,15 +401,16 @@ class TestCerrarSesion:
         jti, familia = "jti-logout-002", "familia-logout-002"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash=access_service._hash_refresh_token(rt),
             revocada_en=_ahora() - timedelta(hours=1),
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=sesion)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sesion))
+        )
         db.commit = AsyncMock()
 
         resultado = await access_service.cerrar_sesion(db, rt)
@@ -400,9 +431,9 @@ class TestCerrarSesion:
         rt = auth.crear_token_refresh(1, "jti-logout-003", "fam-003")
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
         resultado = await access_service.cerrar_sesion(db, rt)
         assert resultado["estatus"] == "success"
@@ -412,14 +443,15 @@ class TestCerrarSesion:
         jti, familia = "jti-logout-004", "fam-004"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
-            jti=jti, familia_id=familia,
+            jti=jti,
+            familia_id=familia,
             token_hash="b" * 64,  # hash distinto al del token
         )
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=sesion)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sesion))
+        )
         db.commit = AsyncMock()
 
         resultado = await access_service.cerrar_sesion(db, rt)
@@ -433,6 +465,7 @@ class TestCerrarSesion:
 # generar_codigo_recuperacion
 # ─────────────────────────────────────────────
 
+
 class TestGenerarCodigoRecuperacion:
     @pytest.mark.asyncio
     async def test_email_existente_guarda_hash_y_programa_envio(self):
@@ -441,20 +474,24 @@ class TestGenerarCodigoRecuperacion:
         usuario.codigo_expiracion = None
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=usuario)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=usuario))
+        )
         db.commit = AsyncMock()
 
         background_tasks = BackgroundTasks()
 
         with patch("services.access_service.secrets.randbelow", return_value=0):
             resultado = await access_service.generar_codigo_recuperacion(
-                db, "USER@Test.com", background_tasks,
+                db,
+                "USER@Test.com",
+                background_tasks,
             )
 
         assert resultado["estatus"] == "success"
-        assert usuario.codigo_recuperacion == access_service._hash_codigo_recuperacion("100000")
+        assert usuario.codigo_recuperacion == access_service._hash_codigo_recuperacion(
+            "100000"
+        )
         assert usuario.codigo_expiracion is not None
         db.commit.assert_called_once()
         assert len(background_tasks.tasks) == 1
@@ -465,15 +502,17 @@ class TestGenerarCodigoRecuperacion:
     @pytest.mark.asyncio
     async def test_email_inexistente_no_hace_commit_ni_programa_envio(self):
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
         db.commit = AsyncMock()
 
         background_tasks = BackgroundTasks()
 
         resultado = await access_service.generar_codigo_recuperacion(
-            db, "nadie@test.com", background_tasks,
+            db,
+            "nadie@test.com",
+            background_tasks,
         )
 
         assert resultado["estatus"] == "success"
@@ -484,15 +523,17 @@ class TestGenerarCodigoRecuperacion:
     async def test_respuesta_identica_email_exista_o_no(self):
         """No debe filtrarse si el email está registrado o no."""
         db_existe = AsyncMock()
-        db_existe.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=MagicMock())
-        ))
+        db_existe.execute = AsyncMock(
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(return_value=MagicMock())
+            )
+        )
         db_existe.commit = AsyncMock()
 
         db_no_existe = AsyncMock()
-        db_no_existe.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db_no_existe.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
         with patch("services.access_service.secrets.randbelow", return_value=0):
             r1 = await access_service.generar_codigo_recuperacion(
@@ -509,6 +550,7 @@ class TestGenerarCodigoRecuperacion:
 # resetear_password
 # ─────────────────────────────────────────────
 
+
 class TestResetearPassword:
     @pytest.mark.asyncio
     async def test_codigo_correcto_actualiza_password_y_revoca_refresh_tokens(self):
@@ -519,10 +561,12 @@ class TestResetearPassword:
         usuario.password_encriptada = "hash-antiguo"
 
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[
-            MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
-            MagicMock(),
-        ])
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(),
+            ]
+        )
         db.commit = AsyncMock()
 
         datos = schemas.ConfirmarPassword(
@@ -534,7 +578,10 @@ class TestResetearPassword:
         async def fake_run_in_threadpool(fn, *args, **kwargs):
             return "hash-nuevo"
 
-        with patch("services.access_service.run_in_threadpool", side_effect=fake_run_in_threadpool):
+        with patch(
+            "services.access_service.run_in_threadpool",
+            side_effect=fake_run_in_threadpool,
+        ):
             resultado = await access_service.resetear_password(db, datos)
 
         assert resultado["estatus"] == "success"
@@ -552,9 +599,9 @@ class TestResetearPassword:
         usuario.codigo_recuperacion = access_service._hash_codigo_recuperacion("123456")
 
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=usuario)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=usuario))
+        )
         db.commit = AsyncMock()
 
         datos = schemas.ConfirmarPassword(
@@ -573,9 +620,9 @@ class TestResetearPassword:
     @pytest.mark.asyncio
     async def test_codigo_o_email_invalidos_lanza_400(self):
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
         datos = schemas.ConfirmarPassword(
             email="user@test.com",
@@ -594,9 +641,13 @@ class TestResetearPassword:
         """Código incorrecto: el servicio filtra por email+hash en una sola query,
         así que un código equivocado devuelve None → mismo 400 que email inválido."""
         db = AsyncMock()
-        db.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)  # hash no coincide → no encontrado
-        ))
+        db.execute = AsyncMock(
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(
+                    return_value=None
+                )  # hash no coincide → no encontrado
+            )
+        )
         db.commit = AsyncMock()
 
         datos = schemas.ConfirmarPassword(
@@ -617,26 +668,37 @@ class TestResetearPassword:
 # Funciones de hash
 # ─────────────────────────────────────────────
 
+
 class TestFuncionesHash:
     def test_hash_refresh_determinista(self):
         rt = auth.crear_token_refresh(1, "jti-h1", "fam-h1")
-        assert access_service._hash_refresh_token(rt) == access_service._hash_refresh_token(rt)
+        assert access_service._hash_refresh_token(
+            rt
+        ) == access_service._hash_refresh_token(rt)
 
     def test_hash_refresh_distinto_por_token(self):
         rt1 = auth.crear_token_refresh(1, "jti-1", "fam")
         rt2 = auth.crear_token_refresh(1, "jti-2", "fam")
-        assert access_service._hash_refresh_token(rt1) != access_service._hash_refresh_token(rt2)
+        assert access_service._hash_refresh_token(
+            rt1
+        ) != access_service._hash_refresh_token(rt2)
 
     def test_hash_refresh_longitud_64(self):
         rt = auth.crear_token_refresh(1, "jti-len", "fam-len")
         assert len(access_service._hash_refresh_token(rt)) == 64
 
     def test_hash_codigo_recuperacion_determinista(self):
-        assert access_service._hash_codigo_recuperacion("123456") == access_service._hash_codigo_recuperacion("123456")
+        assert access_service._hash_codigo_recuperacion(
+            "123456"
+        ) == access_service._hash_codigo_recuperacion("123456")
 
     def test_hash_codigo_diferente_por_codigo(self):
-        assert access_service._hash_codigo_recuperacion("123456") != access_service._hash_codigo_recuperacion("654321")
+        assert access_service._hash_codigo_recuperacion(
+            "123456"
+        ) != access_service._hash_codigo_recuperacion("654321")
 
     def test_hash_refresh_y_codigo_usan_secretos_distintos(self):
         texto = "mismo-texto"
-        assert access_service._hash_refresh_token(texto) != access_service._hash_codigo_recuperacion(texto)
+        assert access_service._hash_refresh_token(
+            texto
+        ) != access_service._hash_codigo_recuperacion(texto)

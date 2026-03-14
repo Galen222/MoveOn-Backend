@@ -113,5 +113,3 @@ class _ReplayReceive:
             self._index += 1
             return message
         return {"type": "http.request", "body": b"", "more_body": False}
-
-

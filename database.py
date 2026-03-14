@@ -88,8 +88,10 @@ AsyncSessionLocal = async_sessionmaker(
 # Base declarativa
 # =========================================================
 
+
 class Base(DeclarativeBase):
     """Clase base para todos los modelos ORM."""
+
     pass
 
 
@@ -124,7 +126,11 @@ def _normalizar_datetime_utc(v: Optional[datetime]) -> Optional[datetime]:
     """
     if v is None:
         return None
-    return v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
+    return (
+        v.replace(tzinfo=timezone.utc)
+        if v.tzinfo is None
+        else v.astimezone(timezone.utc)
+    )
 
 
 def _sql_quote(value: str) -> str:
@@ -137,7 +143,9 @@ def _sql_in_values(values: set[str]) -> str:
     return ", ".join(_sql_quote(v) for v in sorted(values))
 
 
-def _build_enum_check_sql(column_name: str, values: set[str], allow_null: bool = True) -> str:
+def _build_enum_check_sql(
+    column_name: str, values: set[str], allow_null: bool = True
+) -> str:
     """
     Genera el SQL para un constraint tipo:
       columna IN ('A', 'B', ...)
@@ -204,12 +212,15 @@ def _validar_texto_no_vacio(valor: str, nombre_campo: str, max_len: int) -> str:
         raise ValueError(f"Error: {nombre_campo} no puede estar vacío")
     if len(valor) > max_len:
         raise ValueError(
-            f"Error: {nombre_campo} no puede superar los {max_len} caracteres")
+            f"Error: {nombre_campo} no puede superar los {max_len} caracteres"
+        )
 
     return valor
 
 
-def _validar_url_http_opcional(valor: Optional[str], nombre_campo: str, max_len: int = 2048) -> Optional[str]:
+def _validar_url_http_opcional(
+    valor: Optional[str], nombre_campo: str, max_len: int = 2048
+) -> Optional[str]:
     """
     Valida una URL http/https opcional.
 
@@ -227,13 +238,13 @@ def _validar_url_http_opcional(valor: Optional[str], nombre_campo: str, max_len:
 
     if len(valor) > max_len:
         raise ValueError(
-            f"Error: {nombre_campo} no puede superar los {max_len} caracteres")
+            f"Error: {nombre_campo} no puede superar los {max_len} caracteres"
+        )
 
     try:
         parsed = _HTTP_URL_ADAPTER.validate_python(valor)
     except PydanticValidationError:
-        raise ValueError(
-            f"Error: {nombre_campo} no es una URL http/https válida")
+        raise ValueError(f"Error: {nombre_campo} no es una URL http/https válida")
 
     return str(parsed)
 
@@ -241,6 +252,7 @@ def _validar_url_http_opcional(valor: Optional[str], nombre_campo: str, max_len:
 # =========================================================
 # Modelo Usuario
 # =========================================================
+
 
 class Usuario(Base):
     """
@@ -260,14 +272,12 @@ class Usuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre_usuario: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
-    password_encriptada: Mapped[str] = mapped_column(
-        String(255), nullable=False)
+    password_encriptada: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # -------------------------
     # Datos de perfil
     # -------------------------
-    nombre_real: Mapped[Optional[str]] = mapped_column(
-        String(80), nullable=True)
+    nombre_real: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
     genero: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     altura: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -367,90 +377,100 @@ class Usuario(Base):
 
     __table_args__ = (
         # Unicidad case-insensitive
-        Index("uq_usuarios_nombre_usuario_lower",
-              func.lower(nombre_usuario), unique=True),
+        Index(
+            "uq_usuarios_nombre_usuario_lower", func.lower(nombre_usuario), unique=True
+        ),
         Index("uq_usuarios_email_lower", func.lower(email), unique=True),
-
         # Longitud y formato del username
-        CheckConstraint("char_length(nombre_usuario) BETWEEN 5 AND 50",
-                        name="ck_usuarios_nombre_usuario_len"),
         CheckConstraint(
-            "nombre_usuario ~ '^[A-Za-z0-9]+$'", name="ck_usuarios_nombre_usuario_alnum"),
-
+            "char_length(nombre_usuario) BETWEEN 5 AND 50",
+            name="ck_usuarios_nombre_usuario_len",
+        ),
+        CheckConstraint(
+            "nombre_usuario ~ '^[A-Za-z0-9]+$'", name="ck_usuarios_nombre_usuario_alnum"
+        ),
         # Email: saneado básico a nivel SQL
         # Nota: la validación fuerte real sigue en Python con email_validator.
-        CheckConstraint("char_length(email) BETWEEN 3 AND 320",
-                        name="ck_usuarios_email_len"),
-        CheckConstraint("email = lower(btrim(email))",
-                        name="ck_usuarios_email_normalized_lower"),
-        CheckConstraint("email !~ '[[:space:]]'",
-                        name="ck_usuarios_email_no_spaces"),
+        CheckConstraint(
+            "char_length(email) BETWEEN 3 AND 320", name="ck_usuarios_email_len"
+        ),
+        CheckConstraint(
+            "email = lower(btrim(email))", name="ck_usuarios_email_normalized_lower"
+        ),
+        CheckConstraint("email !~ '[[:space:]]'", name="ck_usuarios_email_no_spaces"),
         CheckConstraint(
             r"email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'",
             name="ck_usuarios_email_basic_format",
         ),
-
         # password hash no vacío
-        CheckConstraint("char_length(btrim(password_encriptada)) > 0",
-                        name="ck_usuarios_password_hash_non_empty"),
-
+        CheckConstraint(
+            "char_length(btrim(password_encriptada)) > 0",
+            name="ck_usuarios_password_hash_non_empty",
+        ),
         # nombre real, si viene, no puede ser vacío ni exceder 80
         CheckConstraint(
             "nombre_real IS NULL OR char_length(btrim(nombre_real)) BETWEEN 3 AND 80",
             name="ck_usuarios_nombre_real_len",
         ),
-
         # Edad mínima y evitar fechas futuras
-        CheckConstraint("fecha_nacimiento <= CURRENT_DATE",
-                        name="ck_usuarios_fecha_nacimiento_not_future"),
+        CheckConstraint(
+            "fecha_nacimiento <= CURRENT_DATE",
+            name="ck_usuarios_fecha_nacimiento_not_future",
+        ),
         CheckConstraint(
             "fecha_nacimiento <= (CURRENT_DATE - INTERVAL '18 years')",
             name="ck_usuarios_fecha_nacimiento_adult",
         ),
-
         # Enums persistidos como String
         CheckConstraint(
             _build_enum_check_sql("genero", VALID_GENEROS, allow_null=True),
             name="ck_usuarios_genero_values",
         ),
         CheckConstraint(
-            _build_enum_check_sql(
-                "provincia", VALID_PROVINCIAS, allow_null=True),
+            _build_enum_check_sql("provincia", VALID_PROVINCIAS, allow_null=True),
             name="ck_usuarios_provincia_values",
         ),
-
         # Rangos físicos razonables
-        CheckConstraint("altura IS NULL OR (altura BETWEEN 50 AND 300)",
-                        name="ck_usuarios_altura_range"),
-        CheckConstraint("peso IS NULL OR (peso BETWEEN 20 AND 300)",
-                        name="ck_usuarios_peso_range"),
-
+        CheckConstraint(
+            "altura IS NULL OR (altura BETWEEN 50 AND 300)",
+            name="ck_usuarios_altura_range",
+        ),
+        CheckConstraint(
+            "peso IS NULL OR (peso BETWEEN 20 AND 300)", name="ck_usuarios_peso_range"
+        ),
         # Imagen y acumulados
-        CheckConstraint("foto_perfil IS NULL OR char_length(btrim(foto_perfil)) BETWEEN 1 AND 500",
-                        name="ck_usuarios_foto_perfil_len"),
-        CheckConstraint("total_metros >= 0",
-                        name="ck_usuarios_total_metros_non_negative"),
-        CheckConstraint("total_calorias >= 0",
-                        name="ck_usuarios_total_calorias_non_negative"),
-
+        CheckConstraint(
+            "foto_perfil IS NULL OR char_length(btrim(foto_perfil)) BETWEEN 1 AND 500",
+            name="ck_usuarios_foto_perfil_len",
+        ),
+        CheckConstraint(
+            "total_metros >= 0", name="ck_usuarios_total_metros_non_negative"
+        ),
+        CheckConstraint(
+            "total_calorias >= 0", name="ck_usuarios_total_calorias_non_negative"
+        ),
         # Objetivos: rangos razonables de negocio (10 m mínimo, 2 000 km máximo)
-        CheckConstraint("objetivo_semanal_metros BETWEEN 10 AND 2000000",
-                        name="ck_usuarios_objetivo_semanal_range"),
-        CheckConstraint("objetivo_mensual_metros BETWEEN 10 AND 2000000",
-                        name="ck_usuarios_objetivo_mensual_range"),
-
+        CheckConstraint(
+            "objetivo_semanal_metros BETWEEN 10 AND 2000000",
+            name="ck_usuarios_objetivo_semanal_range",
+        ),
+        CheckConstraint(
+            "objetivo_mensual_metros BETWEEN 10 AND 2000000",
+            name="ck_usuarios_objetivo_mensual_range",
+        ),
         # Términos: si el usuario existe en tabla, deben estar aceptados
-        CheckConstraint("acepta_terminos IS TRUE",
-                        name="ck_usuarios_acepta_terminos_true"),
-        CheckConstraint("char_length(btrim(version_terminos)) BETWEEN 1 AND 10",
-                        name="ck_usuarios_version_terminos_len"),
-
+        CheckConstraint(
+            "acepta_terminos IS TRUE", name="ck_usuarios_acepta_terminos_true"
+        ),
+        CheckConstraint(
+            "char_length(btrim(version_terminos)) BETWEEN 1 AND 10",
+            name="ck_usuarios_version_terminos_len",
+        ),
         # Código de recuperación: hash hex de 64 chars
         CheckConstraint(
             "codigo_recuperacion IS NULL OR codigo_recuperacion ~* '^[0-9a-f]{64}$'",
             name="ck_usuarios_codigo_recuperacion_hex64",
         ),
-
         # Coherencia: o están ambos NULL o están ambos rellenos
         CheckConstraint(
             "(codigo_recuperacion IS NULL) = (codigo_expiracion IS NULL)",
@@ -482,13 +502,16 @@ class Usuario(Base):
 
         if len(valor) < 5:
             raise ValueError(
-                "Error: El nombre de usuario debe tener al menos 5 caracteres")
+                "Error: El nombre de usuario debe tener al menos 5 caracteres"
+            )
         if len(valor) > 50:
             raise ValueError(
-                "Error: El nombre de usuario no puede superar los 50 caracteres")
+                "Error: El nombre de usuario no puede superar los 50 caracteres"
+            )
         if not _USERNAME_RE.fullmatch(valor):
             raise ValueError(
-                "Error: El nombre de usuario solo puede contener letras y números")
+                "Error: El nombre de usuario solo puede contener letras y números"
+            )
 
         return valor
 
@@ -505,8 +528,7 @@ class Usuario(Base):
             email_info = validate_email(valor, check_deliverability=False)
             return email_info.normalized.lower()
         except EmailNotValidError:
-            raise ValueError(
-                "Error: El formato del correo electrónico no es válido")
+            raise ValueError("Error: El formato del correo electrónico no es válido")
 
     @validates("password_encriptada")
     def validar_password_encriptada(self, key: str, valor: str) -> str:
@@ -525,8 +547,7 @@ class Usuario(Base):
     @validates("fecha_nacimiento")
     def validar_fecha_nacimiento(self, key: str, valor: date) -> date:
         if not isinstance(valor, date):
-            raise ValueError(
-                "Error: La fecha de nacimiento debe ser una fecha válida")
+            raise ValueError("Error: La fecha de nacimiento debe ser una fecha válida")
         return validators.validar_fecha_nacimiento_logica(valor)
 
     @validates("genero")
@@ -539,7 +560,8 @@ class Usuario(Base):
             return None
         if not isinstance(valor, int):
             raise ValueError(
-                "Error: La altura debe ser un número entero en centímetros")
+                "Error: La altura debe ser un número entero en centímetros"
+            )
         return validators.validar_altura_logica(valor)
 
     @validates("peso")
@@ -561,14 +583,17 @@ class Usuario(Base):
         return _validar_texto_no_vacio(valor, "La foto de perfil", 500)
 
     @validates("foto_fecha_actualizacion", "fecha_registro", "codigo_expiracion")
-    def validar_fechas_auxiliares(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
+    def validar_fechas_auxiliares(
+        self, key: str, valor: Optional[datetime]
+    ) -> Optional[datetime]:
         return _normalizar_datetime_utc(valor)
 
     @validates("fecha_eula")
     def validar_fecha_eula(self, key: str, valor: datetime) -> datetime:
         if not isinstance(valor, datetime):
             raise ValueError(
-                "Error: La fecha de aceptación debe ser una fecha-hora válida")
+                "Error: La fecha de aceptación debe ser una fecha-hora válida"
+            )
 
         valor_utc = _normalizar_datetime_utc(valor)
         assert valor_utc is not None
@@ -576,16 +601,14 @@ class Usuario(Base):
         # Misma lógica de schemas.py: margen pequeño para evitar falsos positivos por reloj.
         ahora = _ahora_utc()
         if valor_utc > ahora + timedelta(minutes=5):
-            raise ValueError(
-                "Error: La fecha de aceptación no puede ser futura")
+            raise ValueError("Error: La fecha de aceptación no puede ser futura")
 
         return valor_utc
 
     @validates("total_metros")
     def validar_total_metros(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError(
-                "Error: El total de metros debe ser un número entero")
+            raise ValueError("Error: El total de metros debe ser un número entero")
         if valor < 0:
             raise ValueError("Error: El total de metros no puede ser negativo")
         return valor
@@ -593,31 +616,29 @@ class Usuario(Base):
     @validates("total_calorias")
     def validar_total_calorias(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError(
-                "Error: El total de calorías debe ser un número entero")
+            raise ValueError("Error: El total de calorías debe ser un número entero")
         if valor < 0:
-            raise ValueError(
-                "Error: El total de calorías no puede ser negativo")
+            raise ValueError("Error: El total de calorías no puede ser negativo")
         return valor
 
     @validates("objetivo_semanal_metros")
     def validar_objetivo_semanal(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError(
-                "Error: El objetivo semanal debe ser un número entero")
+            raise ValueError("Error: El objetivo semanal debe ser un número entero")
         if not (10 <= valor <= 2_000_000):
             raise ValueError(
-                "Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros")
+                "Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros"
+            )
         return valor
 
     @validates("objetivo_mensual_metros")
     def validar_objetivo_mensual(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError(
-                "Error: El objetivo mensual debe ser un número entero")
+            raise ValueError("Error: El objetivo mensual debe ser un número entero")
         if not (10 <= valor <= 2_000_000):
             raise ValueError(
-                "Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros")
+                "Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros"
+            )
         return valor
 
     @validates("acepta_terminos")
@@ -625,8 +646,7 @@ class Usuario(Base):
         if not isinstance(valor, bool):
             raise ValueError("Error: acepta_terminos debe ser booleano")
         if valor is not True:
-            raise ValueError(
-                "Error: Debes aceptar los términos para crear un usuario")
+            raise ValueError("Error: Debes aceptar los términos para crear un usuario")
         return valor
 
     @validates("perfil_visible")
@@ -642,22 +662,25 @@ class Usuario(Base):
 
         valor = valor.strip()
         if not valor:
-            raise ValueError(
-                "Error: La versión de los términos es obligatoria")
+            raise ValueError("Error: La versión de los términos es obligatoria")
         if len(valor) > 10:
             raise ValueError(
-                "Error: La versión de los términos no puede superar los 10 caracteres")
+                "Error: La versión de los términos no puede superar los 10 caracteres"
+            )
 
         return valor
 
     @validates("codigo_recuperacion")
-    def validar_codigo_recuperacion(self, key: str, valor: Optional[str]) -> Optional[str]:
+    def validar_codigo_recuperacion(
+        self, key: str, valor: Optional[str]
+    ) -> Optional[str]:
         return _validar_hex64_opcional(valor, "codigo_recuperacion")
 
 
 # =========================================================
 # Modelo Actividad
 # =========================================================
+
 
 class Actividad(Base):
     """
@@ -686,8 +709,7 @@ class Actividad(Base):
     ruta_polilinea: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # La URL sí tiene un límite real en el schema: 2048
-    ruta_mapa_url: Mapped[Optional[str]] = mapped_column(
-        String(2048), nullable=True)
+    ruta_mapa_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
 
     fecha_ruta: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -700,19 +722,21 @@ class Actividad(Base):
     __table_args__ = (
         # Enum compartido
         CheckConstraint(
-            _build_enum_check_sql(
-                "tipo", VALID_TIPOS_ACTIVIDAD, allow_null=False),
+            _build_enum_check_sql("tipo", VALID_TIPOS_ACTIVIDAD, allow_null=False),
             name="ck_actividades_tipo_values",
         ),
-
         # Reglas de negocio de actividad
-        CheckConstraint("distancia > 0 AND distancia <= 300000",
-                        name="ck_actividades_distancia_range"),
-        CheckConstraint("duracion > 0 AND duracion <= 86400",
-                        name="ck_actividades_duracion_range"),
-        CheckConstraint("calorias_quemadas > 0 AND calorias_quemadas <= 10000",
-                        name="ck_actividades_calorias_range"),
-
+        CheckConstraint(
+            "distancia > 0 AND distancia <= 300000",
+            name="ck_actividades_distancia_range",
+        ),
+        CheckConstraint(
+            "duracion > 0 AND duracion <= 86400", name="ck_actividades_duracion_range"
+        ),
+        CheckConstraint(
+            "calorias_quemadas > 0 AND calorias_quemadas <= 10000",
+            name="ck_actividades_calorias_range",
+        ),
         # Ruta opcional
         CheckConstraint(
             "ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5",
@@ -726,10 +750,8 @@ class Actividad(Base):
             r"ruta_mapa_url IS NULL OR ruta_mapa_url ~* '^https?://'",
             name="ck_actividades_ruta_mapa_url_http",
         ),
-
         # Índice útil para recuperar actividades por usuario y fecha
-        Index("ix_actividades_usuario_fecha",
-              "usuario_id", "fecha_ruta", "id"),
+        Index("ix_actividades_usuario_fecha", "usuario_id", "fecha_ruta", "id"),
     )
 
     @validates("usuario_id")
@@ -743,7 +765,8 @@ class Actividad(Base):
     @validates("tipo")
     def validar_tipo(self, key: str, valor: Optional[Any]) -> str:
         resultado = _validar_enum_str(
-            valor, VALID_TIPOS_ACTIVIDAD, "El tipo de actividad")
+            valor, VALID_TIPOS_ACTIVIDAD, "El tipo de actividad"
+        )
         if resultado is None:
             raise ValueError("Error: El tipo de actividad es obligatorio")
         return resultado
@@ -783,14 +806,14 @@ class Actividad(Base):
     @validates("fecha_ruta")
     def validar_fecha_ruta(self, key: str, valor: datetime) -> datetime:
         if not isinstance(valor, datetime):
-            raise ValueError(
-                "Error: fecha_ruta debe ser una fecha-hora válida")
+            raise ValueError("Error: fecha_ruta debe ser una fecha-hora válida")
         return validators.validar_fecha_ruta_logica(valor)
 
 
 # =========================================================
 # Modelo SesionRefresh
 # =========================================================
+
 
 class SesionRefresh(Base):
     """
@@ -812,9 +835,9 @@ class SesionRefresh(Base):
     # jti y familia_id se dejan como string genérico por compatibilidad.
     # Hoy se generan con uuid.uuid4().hex, pero el modelo no fuerza ese formato exacto.
     jti: Mapped[str] = mapped_column(
-        String(64), nullable=False, unique=True, index=True)
-    familia_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True)
+        String(64), nullable=False, unique=True, index=True
+    )
+    familia_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     # hash HMAC-SHA256 del refresh token
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -845,10 +868,14 @@ class SesionRefresh(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("char_length(btrim(jti)) BETWEEN 1 AND 64",
-                        name="ck_sesiones_refresh_jti_non_empty"),
-        CheckConstraint("char_length(btrim(familia_id)) BETWEEN 1 AND 64",
-                        name="ck_sesiones_refresh_familia_non_empty"),
+        CheckConstraint(
+            "char_length(btrim(jti)) BETWEEN 1 AND 64",
+            name="ck_sesiones_refresh_jti_non_empty",
+        ),
+        CheckConstraint(
+            "char_length(btrim(familia_id)) BETWEEN 1 AND 64",
+            name="ck_sesiones_refresh_familia_non_empty",
+        ),
         CheckConstraint(
             "token_hash ~* '^[0-9a-f]{64}$'",
             name="ck_sesiones_refresh_token_hash_hex64",
@@ -857,8 +884,9 @@ class SesionRefresh(Base):
             "reemplazada_por_jti IS NULL OR char_length(btrim(reemplazada_por_jti)) BETWEEN 1 AND 64",
             name="ck_sesiones_refresh_reemplazada_por_jti_len",
         ),
-        CheckConstraint("expira_en >= creada_en",
-                        name="ck_sesiones_refresh_expira_ge_creada"),
+        CheckConstraint(
+            "expira_en >= creada_en", name="ck_sesiones_refresh_expira_ge_creada"
+        ),
         CheckConstraint(
             "ultimo_uso_en IS NULL OR ultimo_uso_en >= creada_en",
             name="ck_sesiones_refresh_ultimo_uso_ge_creada",
@@ -903,6 +931,7 @@ class SesionRefresh(Base):
 # =========================================================
 # Inicialización y dependencias
 # =========================================================
+
 
 async def init_db() -> None:
     """

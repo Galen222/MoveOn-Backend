@@ -1,4 +1,13 @@
 from __future__ import annotations
+from pathlib import Path
+import sys
+import asyncio
+from datetime import date, datetime, timedelta, timezone
+
+import schemas
+import database
+from domain.enums import ProvinciaEspaña, GeneroUsuario
+from services import user_service
 
 """
 Seeder de 20 usuarios fake para MoveOn V30.
@@ -17,23 +26,11 @@ Uso:
     python scripts/seed_fake_users.py
 """
 
-from pathlib import Path
-import sys
-
 # Permite importar módulos del proyecto al ejecutar el script con:
 # python scripts/<nombre_script>.py
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-import asyncio
-from datetime import date, datetime, timedelta, timezone
-
-import schemas
-import database
-from domain.enums import ProvinciaEspaña, GeneroUsuario
-from services import user_service
-
 
 PASSWORD_FIJA = "Prueba123"
 VERSION_TERMINOS = "1.0"
@@ -75,7 +72,9 @@ async def crear_usuarios() -> None:
     omitidos = 0
 
     async with database.AsyncSessionLocal() as db:
-        for indice, (nombre_usuario, nombre_real, provincia, genero) in enumerate(DATOS_USUARIOS, start=1):
+        for indice, (nombre_usuario, nombre_real, provincia, genero) in enumerate(
+            DATOS_USUARIOS, start=1
+        ):
             email = f"usuario{indice}@prueba.com"
 
             datos = schemas.Registro(

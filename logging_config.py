@@ -7,6 +7,7 @@ from typing import Any
 
 try:
     import colorama
+
     colorama.just_fix_windows_console()
 except Exception:
     pass
@@ -70,7 +71,7 @@ def _level_prefix(levelname: str) -> str:
         return plain
 
     word = levelname
-    suffix_and_padding = plain[len(word):]
+    suffix_and_padding = plain[len(word) :]
     return f"{color}{word}{RESET}{suffix_and_padding}"
 
 
@@ -194,4 +195,3 @@ def setup_logging() -> None:
     app_logger.setLevel(log_level)
     app_logger.propagate = False
     app_logger.addHandler(handler)
-    

@@ -23,11 +23,14 @@ from services import activities_service
 # Helpers
 # ─────────────────────────────────────────────
 
+
 def _ahora() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _make_usuario(nombre: str = "pepe", id: int = 1, total_metros: int = 0) -> MagicMock:
+def _make_usuario(
+    nombre: str = "pepe", id: int = 1, total_metros: int = 0
+) -> MagicMock:
     u = MagicMock()
     u.id = id
     u.nombre_usuario = nombre
@@ -75,9 +78,7 @@ def _mock_execute_one(resultado):
 
 def _mock_execute_first(fila):
     """db.execute que devuelve first() con una fila concreta."""
-    return AsyncMock(
-        return_value=MagicMock(first=MagicMock(return_value=fila))
-    )
+    return AsyncMock(return_value=MagicMock(first=MagicMock(return_value=fila)))
 
 
 def _mock_execute_seq(*resultados):
@@ -109,6 +110,7 @@ def _mock_execute_seq(*resultados):
 # crear_actividad
 # ─────────────────────────────────────────────
 
+
 class TestCrearActividad:
     @pytest.mark.asyncio
     async def test_usuario_no_encontrado_lanza_404(self):
@@ -116,7 +118,9 @@ class TestCrearActividad:
         db.execute = _mock_execute_one(None)
 
         with pytest.raises(HTTPException) as exc:
-            await activities_service.crear_actividad(db, 999999, _make_datos_actividad())
+            await activities_service.crear_actividad(
+                db, 999999, _make_datos_actividad()
+            )
 
         assert exc.value.status_code == 404
         assert "usuario" in exc.value.detail.lower()
@@ -130,7 +134,10 @@ class TestCrearActividad:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=15):
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel",
+            return_value=15,
+        ):
             await activities_service.crear_actividad(db, 1, _make_datos_actividad())
 
         db.add.assert_called_once()
@@ -145,10 +152,22 @@ class TestCrearActividad:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=10):
-            resultado = await activities_service.crear_actividad(db, 1, _make_datos_actividad())
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel",
+            return_value=10,
+        ):
+            resultado = await activities_service.crear_actividad(
+                db, 1, _make_datos_actividad()
+            )
 
-        campos = {"tipo", "distancia", "duracion", "calorias_quemadas", "fecha_ruta", "nuevo_total_puntos"}
+        campos = {
+            "tipo",
+            "distancia",
+            "duracion",
+            "calorias_quemadas",
+            "fecha_ruta",
+            "nuevo_total_puntos",
+        }
         for campo in campos:
             assert campo in resultado, f"Campo '{campo}' ausente en respuesta"
 
@@ -161,8 +180,13 @@ class TestCrearActividad:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=42) as mock_calc:
-            resultado = await activities_service.crear_actividad(db, 1, _make_datos_actividad())
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel",
+            return_value=42,
+        ) as mock_calc:
+            resultado = await activities_service.crear_actividad(
+                db, 1, _make_datos_actividad()
+            )
 
         assert resultado["nuevo_total_puntos"] == 42
         mock_calc.assert_called_once()
@@ -177,7 +201,9 @@ class TestCrearActividad:
         db.refresh = AsyncMock()
 
         datos = _make_datos_actividad(distancia=12_500)
-        with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=0):
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel", return_value=0
+        ):
             resultado = await activities_service.crear_actividad(db, 1, datos)
 
         assert resultado["distancia"] == 12_500
@@ -186,6 +212,7 @@ class TestCrearActividad:
 # ─────────────────────────────────────────────
 # obtener_actividad
 # ─────────────────────────────────────────────
+
 
 class TestObtenerActividad:
     @pytest.mark.asyncio
@@ -222,6 +249,7 @@ class TestObtenerActividad:
 # ─────────────────────────────────────────────
 # obtener_actividades
 # ─────────────────────────────────────────────
+
 
 class TestObtenerActividades:
     @pytest.mark.asyncio
@@ -265,7 +293,9 @@ class TestObtenerActividades:
             ("items", []),
         )
 
-        resultado = await activities_service.obtener_actividades(db, 1, skip=0, limit=20)
+        resultado = await activities_service.obtener_actividades(
+            db, 1, skip=0, limit=20
+        )
 
         assert resultado == {
             "items": [],
@@ -279,6 +309,7 @@ class TestObtenerActividades:
 # ─────────────────────────────────────────────
 # eliminar_actividad
 # ─────────────────────────────────────────────
+
 
 class TestEliminarActividad:
     @pytest.mark.asyncio
@@ -310,7 +341,9 @@ class TestEliminarActividad:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=5):
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel", return_value=5
+        ):
             await activities_service.eliminar_actividad(db, 1, 1)
 
         db.delete.assert_called_once_with(actividad)
@@ -326,7 +359,9 @@ class TestEliminarActividad:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        with patch("services.activities_service.calculos.calcular_puntos_nivel", return_value=5):
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel", return_value=5
+        ):
             resultado = await activities_service.eliminar_actividad(db, 1, 1)
 
         assert resultado["estatus"] == "success"
@@ -336,6 +371,7 @@ class TestEliminarActividad:
 # ─────────────────────────────────────────────
 # eliminar_actividades (borrado masivo)
 # ─────────────────────────────────────────────
+
 
 class TestEliminarActividades:
     @pytest.mark.asyncio
@@ -352,9 +388,9 @@ class TestEliminarActividades:
         usuario = _make_usuario(total_metros=50_000)
         db = AsyncMock()
         db.execute = _mock_execute_seq(
-            ("one", usuario),    # SELECT usuario
-            ("count", 3),        # SELECT count(*)
-            ("none", None),      # DELETE actividades
+            ("one", usuario),  # SELECT usuario
+            ("count", 3),  # SELECT count(*)
+            ("none", None),  # DELETE actividades
         )
         db.commit = AsyncMock()
 
@@ -382,7 +418,7 @@ class TestEliminarActividades:
         db = AsyncMock()
         db.execute = _mock_execute_seq(
             ("one", usuario),
-            ("count", 7),    # siete actividades
+            ("count", 7),  # siete actividades
             ("none", None),
         )
         db.commit = AsyncMock()
@@ -405,4 +441,3 @@ class TestEliminarActividades:
 
         resultado = await activities_service.eliminar_actividades(db, 1)
         assert "0" in resultado["mensaje"]
-        

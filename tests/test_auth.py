@@ -15,6 +15,7 @@ import auth
 # Tipos de token (typ claim)
 # ─────────────────────────────────────────────
 
+
 class TestTiposDeToken:
     def test_access_token_tiene_typ_access(self):
         token = auth.crear_token_acceso({"sub": "123"})
@@ -54,6 +55,7 @@ class TestTiposDeToken:
 # ─────────────────────────────────────────────
 # Hardening: issuer, audience, secreto, manipulación
 # ─────────────────────────────────────────────
+
 
 class TestHardeningJWT:
     def test_audience_incorrecta_falla(self, monkeypatch):
@@ -129,6 +131,7 @@ class TestHardeningJWT:
 # obtener_usuario_actual
 # ─────────────────────────────────────────────
 
+
 class TestObtenerUsuarioActual:
     def test_token_valido_devuelve_usuario_id(self):
         token = auth.crear_token_acceso({"sub": "123"})
@@ -137,7 +140,9 @@ class TestObtenerUsuarioActual:
         assert auth.obtener_usuario_actual(creds) == 123
 
     def test_rechaza_token_sin_sub(self):
-        token = auth.codifica_jwt({}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access")
+        token = auth.codifica_jwt(
+            {}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
+        )
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
         with pytest.raises(HTTPException) as exc:
@@ -167,7 +172,9 @@ class TestObtenerUsuarioActual:
         assert exc.value.status_code == 401
 
     def test_token_completamente_invalido_rechazado(self):
-        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token.basura.fake")
+        creds = HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="token.basura.fake"
+        )
 
         with pytest.raises(HTTPException) as exc:
             auth.obtener_usuario_actual(creds)

@@ -58,7 +58,9 @@ class RequestContextMiddleware:
                 response_headers.append((b"x-request-id", request_id.encode("latin-1")))
                 message = {**message, "headers": response_headers}
 
-            if message["type"] == "http.response.body" and not message.get("more_body", False):
+            if message["type"] == "http.response.body" and not message.get(
+                "more_body", False
+            ):
                 duration_ms = round((time.perf_counter() - start) * 1000)
 
                 logger.info(

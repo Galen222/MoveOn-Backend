@@ -91,7 +91,7 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
-    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
 REQUEST_SIZE_LIMITS = {
@@ -123,6 +123,7 @@ app.add_middleware(RequestContextMiddleware)
 if settings.ENABLE_SECURITY_HEADERS:
     app.add_middleware(SecurityHeadersMiddleware)
 
+
 # Handler de rate limit IP
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
@@ -144,16 +145,15 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return error_response(
         status_code=429,
         mensaje="Demasiadas peticiones. Inténtalo más tarde.",
-        headers=headers
+        headers=headers,
     )
+
 
 # Handler de rate limit por identidad
 @app.exception_handler(IdentityRateLimitExceeded)
 async def identity_rate_limit_handler(request: Request, exc: IdentityRateLimitExceeded):
-    return error_response(
-        status_code=429,
-        mensaje=exc.mensaje
-    )
+    return error_response(status_code=429, mensaje=exc.mensaje)
+
 
 # Configuración de CORS para permitir peticiones externas.
 if settings.ENABLE_CORS:
@@ -170,13 +170,20 @@ if settings.ENABLE_CORS:
 # con el mismo formato que los personalizados.
 app.add_exception_handler(RequestValidationError, manejador_validacion_personalizado)
 
-async def http_exception_handler_wrapper(request: Request, exc: Exception) -> JSONResponse:
+
+async def http_exception_handler_wrapper(
+    request: Request, exc: Exception
+) -> JSONResponse:
     if isinstance(exc, HTTPException):
         return manejador_http_exception(request, exc)
     return manejador_excepcion_no_controlada(request, exc)
 
-async def generic_exception_handler_wrapper(request: Request, exc: Exception) -> JSONResponse:
+
+async def generic_exception_handler_wrapper(
+    request: Request, exc: Exception
+) -> JSONResponse:
     return manejador_excepcion_no_controlada(request, exc)
+
 
 app.add_exception_handler(HTTPException, http_exception_handler_wrapper)
 app.add_exception_handler(Exception, generic_exception_handler_wrapper)
@@ -186,11 +193,13 @@ app.include_router(access.router)
 app.include_router(users.router)
 app.include_router(activities.router)
 
+
 # Endpoint raiz.
 @app.get("/")
 @rate_limit(settings.RL_ROOT)
 async def home(request: Request):
     return {"estado": "en linea", "aplicacion": "MoveOn API"}
+
 
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
@@ -218,6 +227,7 @@ async def readyz(db: AsyncSession = Depends(database.obtener_db)):
             status_code=503,
             content={"status": "not_ready", "database": "error"},
         )
+
 
 # Endpoint icono.
 @app.get("/favicon.ico", include_in_schema=False)

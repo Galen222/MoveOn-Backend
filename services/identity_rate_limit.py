@@ -107,4 +107,3 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
             },
         )
         raise IdentityRateLimitExceeded()
-    

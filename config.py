@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # Logging
     LOG_LEVEL: str = "INFO"
-    LOG_FORMAT: str = "json"    
+    LOG_FORMAT: str = "json"
 
     # Seguridad App
     APP_ID: str
@@ -56,9 +56,9 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
 
     # Tamaño imagenes de perfil
-    MAX_IMAGE_PIXELS: int = 13_000_000      # 13MP por defecto
+    MAX_IMAGE_PIXELS: int = 13_000_000  # 13MP por defecto
     MAX_IMAGE_BYTES: int = 2 * 1024 * 1024  # 2MB por defecto
-    IMAGE_JPEG_QUALITY: int = 85            # calidad del re-encode JPEG
+    IMAGE_JPEG_QUALITY: int = 85  # calidad del re-encode JPEG
 
     # Email
     EMAIL_HOST: str
@@ -91,8 +91,8 @@ class Settings(BaseSettings):
         "fc00::/7"
     )
     TRUST_PROXY_WAN: bool = False
-    TRUST_PROXY_WAN_IPS: str = ""      # ej: "203.0.113.10,198.51.100.22"
-    TRUST_PROXY_WAN_CIDRS: str = ""    # ej: "203.0.113.0/24,198.51.100.22/32"
+    TRUST_PROXY_WAN_IPS: str = ""  # ej: "203.0.113.10,198.51.100.22"
+    TRUST_PROXY_WAN_CIDRS: str = ""  # ej: "203.0.113.0/24,198.51.100.22/32"
     TRUST_PROXY_HEADER_ORDER: str = "x-forwarded-for,x-real-ip"
 
     # Security headers
@@ -107,8 +107,8 @@ class Settings(BaseSettings):
     SEC_HEADERS_CONTENT_SECURITY_POLICY: str = ""  # opcional (en APIs suele ir vacío)
 
     # Rate Limit
-    ENABLE_RATE_LIMIT_IP: bool = True      # SlowAPI (por IP)
-    ENABLE_RATE_LIMIT_ID: bool = True      # In-memory (por email/usuario)
+    ENABLE_RATE_LIMIT_IP: bool = True  # SlowAPI (por IP)
+    ENABLE_RATE_LIMIT_ID: bool = True  # In-memory (por email/usuario)
 
     # IP Públicos / Auth
     RL_HANDSHAKE: str = "60/minute"
@@ -151,19 +151,21 @@ class Settings(BaseSettings):
     # --- Recuperación de contraseña (OTP) ---
     RECOVERY_CODE_EXPIRE_MINUTES: int = 15
 
-    # --- Moderación de texto (OpenAI) ---
+    # --- Moderación de texto (LDNOOBWV2 local) ---
     TEXT_MODERATION_ENABLED: bool = True
-    TEXT_MODERATION_FAIL_OPEN: bool = True
-    TEXT_MODERATION_TIMEOUT_SECONDS: float = 3.0
 
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODERATION_MODEL: str = "omni-moderation-latest"
+    # Si faltan los archivos del diccionario:
+    # - True  => deja continuar
+    # - False => devuelve 503
+    TEXT_MODERATION_FAIL_OPEN: bool = False
 
-    # Umbrales por campo
-    TEXT_MODERATION_USERNAME_SCORE_THRESHOLD: float = 0.12
-    TEXT_MODERATION_REAL_NAME_SCORE_THRESHOLD: float = 0.45
+    # Directorio local donde guardarás en.txt y es.txt
+    TEXT_MODERATION_DICTIONARY_DIR: str = "data/profanity/ldnoobwv2"
 
-    # Username: palabras reservadas básicas del sistema
+    # Idiomas a cargar
+    TEXT_MODERATION_DICTIONARY_LANGS: str = "es,en"
+
+    # Usernames reservados del sistema
     TEXT_MODERATION_RESERVED_USERNAME_TOKENS: str = (
         "admin,administrator,administrador,"
         "support,soporte,"
@@ -173,6 +175,14 @@ class Settings(BaseSettings):
         "system,sistema,"
         "help,ayuda,"
         "info,contact,contacto"
+    )
+
+    # Términos/ruido que conviene ignorar porque pueden aparecer en listas
+    # contaminadas o ser demasiado genéricos para bloquear usuarios reales.
+    TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS: str = (
+        "blog,contact,conversation,file,files,filter,footer,footer navigation,"
+        "github,insights,issues,navigation,open,pricing,privacy,projects,"
+        "pull requests,security,skip to content,terms,training"
     )
 
     @field_validator("CORS_ORIGINS", mode="before")
@@ -187,7 +197,9 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return [str(o).strip() for o in v if str(o).strip()]
 
-        raise ValueError("CORS_ORIGINS debe ser una lista o un string separado por comas")
+        raise ValueError(
+            "CORS_ORIGINS debe ser una lista o un string separado por comas"
+        )
 
     @field_validator("PUBLIC_BASE_URL", mode="before")
     @classmethod
@@ -267,7 +279,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,  # Distingue entre mayusculas y minusculas.
-        extra="ignore"  # Si hay variables extra en el .env, no da error.
+        extra="ignore",  # Si hay variables extra en el .env, no da error.
     )
 
 

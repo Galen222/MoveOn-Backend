@@ -10,7 +10,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
@@ -28,6 +27,7 @@ from exceptions import (
 # Helper
 # ─────────────────────────────────────────────
 
+
 def _fake_request():
     req = MagicMock()
     req.method = "GET"
@@ -42,6 +42,7 @@ def _body(resp) -> dict:
 # ─────────────────────────────────────────────
 # error_response
 # ─────────────────────────────────────────────
+
 
 class TestErrorResponse:
     def test_formato_basico_sin_detail(self):
@@ -81,6 +82,7 @@ class TestErrorResponse:
 # manejador_http_exception
 # ─────────────────────────────────────────────
 
+
 class TestManejadorHttpException:
     def test_string_detail_se_convierte_a_mensaje(self):
         exc = HTTPException(status_code=404, detail="Error: recurso no encontrado")
@@ -116,7 +118,7 @@ class TestManejadorHttpException:
         exc = HTTPException(
             status_code=403,
             detail="token expirado",
-            headers={"x-app-session-expired": "1"}
+            headers={"x-app-session-expired": "1"},
         )
         resp = manejador_http_exception(_fake_request(), exc)
         assert resp.headers.get("x-app-session-expired") == "1"
@@ -131,9 +133,12 @@ class TestManejadorHttpException:
 # manejador_excepcion_no_controlada
 # ─────────────────────────────────────────────
 
+
 class TestManejadorExcepcionNoControlada:
     def test_devuelve_500_con_mensaje_generico(self):
-        resp = manejador_excepcion_no_controlada(_fake_request(), ValueError("algo interno"))
+        resp = manejador_excepcion_no_controlada(
+            _fake_request(), ValueError("algo interno")
+        )
         body = _body(resp)
 
         assert resp.status_code == 500
@@ -150,8 +155,12 @@ class TestManejadorExcepcionNoControlada:
     def test_loggea_error_global_con_campos_estructurados(self):
         fake_logger = MagicMock()
 
-        with patch("exceptions.logging.getLogger", return_value=fake_logger) as mock_get_logger:
-            resp = manejador_excepcion_no_controlada(_fake_request(), RuntimeError("boom"))
+        with patch(
+            "exceptions.logging.getLogger", return_value=fake_logger
+        ) as mock_get_logger:
+            resp = manejador_excepcion_no_controlada(
+                _fake_request(), RuntimeError("boom")
+            )
 
         assert resp.status_code == 500
         mock_get_logger.assert_called_once_with("app.error")
@@ -169,6 +178,7 @@ class TestManejadorExcepcionNoControlada:
 # manejador_validacion_personalizado
 # ─────────────────────────────────────────────
 
+
 class TestManejadorValidacionPersonalizado:
     """
     Usa TestClient con una app real para disparar RequestValidationError
@@ -177,7 +187,9 @@ class TestManejadorValidacionPersonalizado:
 
     def _build_app(self):
         app = FastAPI()
-        app.add_exception_handler(RequestValidationError, manejador_validacion_personalizado)
+        app.add_exception_handler(
+            RequestValidationError, manejador_validacion_personalizado
+        )
 
         class Payload(BaseModel):
             edad: int
@@ -191,7 +203,9 @@ class TestManejadorValidacionPersonalizado:
 
     def test_error_pydantic_devuelve_422_con_estatus_error(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={"edad": "no-es-int", "email": "ok@test.com"})
+        response = client.post(
+            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
+        )
 
         assert response.status_code == 422
         body = response.json()
@@ -199,13 +213,17 @@ class TestManejadorValidacionPersonalizado:
 
     def test_mensaje_es_solicitud_invalida(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={"edad": "no-es-int", "email": "ok@test.com"})
+        response = client.post(
+            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
+        )
 
         assert response.json()["mensaje"] == "Solicitud inválida"
 
     def test_detail_contiene_columna_y_mensaje(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={"edad": "no-es-int", "email": "ok@test.com"})
+        response = client.post(
+            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
+        )
 
         body = response.json()
         assert "detail" in body
@@ -219,7 +237,9 @@ class TestManejadorValidacionPersonalizado:
 
     def test_columna_identifica_el_campo_correcto(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={"edad": "no-es-int", "email": "ok@test.com"})
+        response = client.post(
+            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
+        )
 
         columnas = [e["columna"] for e in response.json()["detail"]]
         assert "edad" in columnas
@@ -230,7 +250,9 @@ class TestManejadorValidacionPersonalizado:
         El manejador debe limpiarlos.
         """
         client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={"edad": "no-es-int", "email": "ok@test.com"})
+        response = client.post(
+            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
+        )
 
         for error in response.json()["detail"]:
             msg = error["mensaje"]
@@ -240,7 +262,9 @@ class TestManejadorValidacionPersonalizado:
     def test_mensaje_empieza_con_mayuscula(self):
         """El manejador capitaliza el primer carácter del mensaje."""
         client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={"edad": "no-es-int", "email": "ok@test.com"})
+        response = client.post(
+            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
+        )
 
         for error in response.json()["detail"]:
             msg = error["mensaje"]
@@ -257,4 +281,3 @@ class TestManejadorValidacionPersonalizado:
         columnas = {e["columna"] for e in errores}
         assert "edad" in columnas
         assert "email" in columnas
-        

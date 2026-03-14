@@ -1,5 +1,6 @@
 # services/email_templates.py
 
+
 def recuperacion_password_template(codigo: str, minutos: int) -> str:
     """Genera la plantilla HTML para el código de recuperación de MoveOn."""
     return f"""
@@ -83,4 +84,3 @@ def recuperacion_password_template(codigo: str, minutos: int) -> str:
     </body>
     </html>
     """
-    

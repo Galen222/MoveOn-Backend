@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import asyncio
+from sqlalchemy import delete, select, func
+
+import database
 
 # Permite importar módulos del proyecto al ejecutar el script con:
 # python scripts/cleanup_fake_data.py
@@ -33,10 +36,6 @@ Notas:
 - Si algún usuario no existe, simplemente no lo borra.
 """
 
-from sqlalchemy import delete, select, func
-
-import database
-
 # =========================================================
 # Configuración del borrado
 # =========================================================
@@ -47,6 +46,7 @@ USERNAMES_FAKE = [f"usuario{i}" for i in range(1, 21)]
 # =========================================================
 # Lógica principal
 # =========================================================
+
 
 async def cleanup_fake_data() -> None:
     """

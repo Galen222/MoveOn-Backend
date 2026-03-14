@@ -114,7 +114,9 @@ def _construir_mensaje(
     return msg
 
 
-async def enviar_codigo_recuperacion(email_destino: str, codigo: str, minutos: int) -> bool:
+async def enviar_codigo_recuperacion(
+    email_destino: str, codigo: str, minutos: int
+) -> bool:
     """Construye y envía el correo de forma asíncrona con retry en errores transitorios."""
 
     smtp_server = settings.EMAIL_HOST

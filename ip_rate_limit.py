@@ -7,7 +7,6 @@ from typing import Optional
 
 from fastapi import Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from starlette.types import Scope
 
 from config import settings
@@ -48,14 +47,19 @@ def _compile_ips(ips_csv: str) -> set[str]:
     return out
 
 
-LAN_NETS = _compile_networks(settings.TRUST_PROXY_LAN_CIDRS if settings.TRUST_PROXY_LAN else "")
-WAN_NETS = _compile_networks(settings.TRUST_PROXY_WAN_CIDRS if settings.TRUST_PROXY_WAN else "")
+LAN_NETS = _compile_networks(
+    settings.TRUST_PROXY_LAN_CIDRS if settings.TRUST_PROXY_LAN else ""
+)
+WAN_NETS = _compile_networks(
+    settings.TRUST_PROXY_WAN_CIDRS if settings.TRUST_PROXY_WAN else ""
+)
 WAN_IPS = _compile_ips(settings.TRUST_PROXY_WAN_IPS if settings.TRUST_PROXY_WAN else "")
 
-HEADER_ORDER = [h.strip().lower() for h in _parse_csv(settings.TRUST_PROXY_HEADER_ORDER)]
+HEADER_ORDER = [
+    h.strip().lower() for h in _parse_csv(settings.TRUST_PROXY_HEADER_ORDER)
+]
 if not HEADER_ORDER:
     HEADER_ORDER = ["x-forwarded-for", "x-real-ip"]
-
 
 
 def conn_from_trusted_proxy(request: Request) -> bool:
@@ -89,7 +93,6 @@ def conn_from_trusted_proxy(request: Request) -> bool:
     return False
 
 
-
 def _extract_ip_from_headers(request: Request) -> Optional[str]:
     """
     Extrae IP cliente desde headers en orden de prioridad.
@@ -97,7 +100,6 @@ def _extract_ip_from_headers(request: Request) -> Optional[str]:
       -> nos quedamos con el primer valor.
     """
     return _extract_ip_from_headers_common(request.headers, HEADER_ORDER)
-
 
 
 def get_client_ip(request: Request) -> str:
@@ -111,7 +113,6 @@ def get_client_ip(request: Request) -> str:
         is_trusted_proxy=conn_from_trusted_proxy,
         header_order=HEADER_ORDER,
     )
-
 
 
 def get_client_ip_from_scope(scope: Scope) -> str:
@@ -128,7 +129,6 @@ def get_client_ip_from_scope(scope: Scope) -> str:
 
 # Limiter global por IP.
 limiter = Limiter(key_func=get_client_ip)
-
 
 
 def rate_limit(limit_value: str):

@@ -12,7 +12,6 @@ from ipaddress import ip_network
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 import ip_rate_limit
 
@@ -21,11 +20,13 @@ import ip_rate_limit
 # Helper
 # ─────────────────────────────────────────────
 
+
 class FakeRequest:
     """
     Simulacro mínimo de Starlette Request para ip_rate_limit.
     Solo necesita .client.host y .headers (dict con .get).
     """
+
     def __init__(self, host: str, headers: dict | None = None):
         self.client = SimpleNamespace(host=host)
         self.headers = headers or {}
@@ -35,49 +36,60 @@ class FakeRequest:
 # conn_from_trusted_proxy
 # ─────────────────────────────────────────────
 
+
 class TestConnFromTrustedProxy:
     def test_sin_proxy_configurado_retorna_false(self):
         request = FakeRequest("1.2.3.4")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", False), \
-             patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", False):
+        with patch.object(
+            ip_rate_limit.settings, "TRUST_PROXY_LAN", False
+        ), patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", False):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is False  # type: ignore[arg-type]
 
     def test_ip_en_red_lan_confiable_retorna_true(self):
         request = FakeRequest("192.168.1.50")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), \
-             patch("ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]), \
-             patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", False):
+        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), patch(
+            "ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]
+        ), patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", False):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is True  # type: ignore[arg-type]
 
     def test_ip_fuera_de_red_lan_retorna_false(self):
         request = FakeRequest("10.0.0.1")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), \
-             patch("ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]), \
-             patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", False):
+        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), patch(
+            "ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]
+        ), patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", False):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is False  # type: ignore[arg-type]
 
     def test_ip_wan_exacta_en_whitelist_retorna_true(self):
         request = FakeRequest("203.0.113.10")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", False), \
-             patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", True), \
-             patch("ip_rate_limit.WAN_IPS", {"203.0.113.10"}), \
-             patch("ip_rate_limit.WAN_NETS", []):
+        with patch.object(
+            ip_rate_limit.settings, "TRUST_PROXY_LAN", False
+        ), patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", True), patch(
+            "ip_rate_limit.WAN_IPS", {"203.0.113.10"}
+        ), patch(
+            "ip_rate_limit.WAN_NETS", []
+        ):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is True  # type: ignore[arg-type]
 
     def test_ip_wan_en_cidr_retorna_true(self):
         request = FakeRequest("198.51.100.5")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", False), \
-             patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", True), \
-             patch("ip_rate_limit.WAN_IPS", set()), \
-             patch("ip_rate_limit.WAN_NETS", [ip_network("198.51.100.0/24")]):
+        with patch.object(
+            ip_rate_limit.settings, "TRUST_PROXY_LAN", False
+        ), patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", True), patch(
+            "ip_rate_limit.WAN_IPS", set()
+        ), patch(
+            "ip_rate_limit.WAN_NETS", [ip_network("198.51.100.0/24")]
+        ):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is True  # type: ignore[arg-type]
 
     def test_ip_wan_fuera_de_cidr_retorna_false(self):
         request = FakeRequest("1.1.1.1")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", False), \
-             patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", True), \
-             patch("ip_rate_limit.WAN_IPS", set()), \
-             patch("ip_rate_limit.WAN_NETS", [ip_network("198.51.100.0/24")]):
+        with patch.object(
+            ip_rate_limit.settings, "TRUST_PROXY_LAN", False
+        ), patch.object(ip_rate_limit.settings, "TRUST_PROXY_WAN", True), patch(
+            "ip_rate_limit.WAN_IPS", set()
+        ), patch(
+            "ip_rate_limit.WAN_NETS", [ip_network("198.51.100.0/24")]
+        ):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is False  # type: ignore[arg-type]
 
     def test_sin_client_retorna_false(self):
@@ -90,8 +102,9 @@ class TestConnFromTrustedProxy:
     def test_ip_invalida_en_client_retorna_false(self):
         """Si request.client.host no es una IP válida, no debe explotar."""
         request = FakeRequest("no-es-una-ip")
-        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), \
-             patch("ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]):
+        with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), patch(
+            "ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]
+        ):
             assert ip_rate_limit.conn_from_trusted_proxy(request) is False  # type: ignore[arg-type]
 
 
@@ -99,10 +112,13 @@ class TestConnFromTrustedProxy:
 # _extract_ip_from_headers
 # ─────────────────────────────────────────────
 
+
 class TestExtractIpFromHeaders:
     def test_extrae_primera_ip_de_x_forwarded_for_lista(self):
         """X-Forwarded-For puede llegar con múltiples IPs separadas por coma."""
-        request = FakeRequest("proxy", headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.9.9.9"})
+        request = FakeRequest(
+            "proxy", headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.9.9.9"}
+        )
         with patch("ip_rate_limit.HEADER_ORDER", ["x-forwarded-for"]):
             ip = ip_rate_limit._extract_ip_from_headers(request)  # type: ignore[arg-type]
         assert ip == "1.2.3.4"
@@ -152,6 +168,7 @@ class TestExtractIpFromHeaders:
 # get_client_ip
 # ─────────────────────────────────────────────
 
+
 class TestGetClientIp:
     def test_sin_proxy_usa_ip_del_socket(self):
         """Si no es proxy confiable, se ignoran los headers y se usa el socket."""
@@ -163,8 +180,9 @@ class TestGetClientIp:
     def test_con_proxy_confiable_usa_header(self):
         """Si la conexión viene de un proxy de confianza, usa XFF."""
         request = FakeRequest("10.0.0.1", headers={"x-forwarded-for": "5.5.5.5"})
-        with patch("ip_rate_limit.conn_from_trusted_proxy", return_value=True), \
-             patch("ip_rate_limit.HEADER_ORDER", ["x-forwarded-for"]):
+        with patch("ip_rate_limit.conn_from_trusted_proxy", return_value=True), patch(
+            "ip_rate_limit.HEADER_ORDER", ["x-forwarded-for"]
+        ):
             ip = ip_rate_limit.get_client_ip(request)  # type: ignore[arg-type]
         assert ip == "5.5.5.5"
 
@@ -174,8 +192,8 @@ class TestGetClientIp:
         se usa la IP del socket (fallback seguro).
         """
         request = FakeRequest("10.0.0.1", headers={})
-        with patch("ip_rate_limit.conn_from_trusted_proxy", return_value=True), \
-             patch("ip_rate_limit.HEADER_ORDER", ["x-forwarded-for"]):
+        with patch("ip_rate_limit.conn_from_trusted_proxy", return_value=True), patch(
+            "ip_rate_limit.HEADER_ORDER", ["x-forwarded-for"]
+        ):
             ip = ip_rate_limit.get_client_ip(request)  # type: ignore[arg-type]
         assert ip == "10.0.0.1"
-        

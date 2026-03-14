@@ -143,7 +143,10 @@ class TestConsolePipeFormatter:
         out = formatter.format(record)
         out_clean = strip_ansi(out)
 
-        assert "ERROR:    2026-03-08 13:10:00 | app.test | evento_error | request_id=req-err" in out_clean
+        assert (
+            "ERROR:    2026-03-08 13:10:00 | app.test | evento_error | request_id=req-err"
+            in out_clean
+        )
         assert "ValueError: boom" in out_clean
 
     def test_no_incluye_task_name_como_extra(self):
@@ -189,7 +192,9 @@ class TestSetupLogging:
             handler = logger.handlers[0]
             assert isinstance(handler, logging.StreamHandler)
             assert isinstance(handler.formatter, logging_config.JsonPipeFormatter)
-            assert any(isinstance(f, logging_config.RequestIdFilter) for f in handler.filters)
+            assert any(
+                isinstance(f, logging_config.RequestIdFilter) for f in handler.filters
+            )
         finally:
             logger.handlers.clear()
             for h in old_handlers:
@@ -218,11 +223,12 @@ class TestSetupLogging:
             handler = logger.handlers[0]
             assert isinstance(handler, logging.StreamHandler)
             assert isinstance(handler.formatter, logging_config.ConsolePipeFormatter)
-            assert any(isinstance(f, logging_config.RequestIdFilter) for f in handler.filters)
+            assert any(
+                isinstance(f, logging_config.RequestIdFilter) for f in handler.filters
+            )
         finally:
             logger.handlers.clear()
             for h in old_handlers:
                 logger.addHandler(h)
             logger.setLevel(old_level)
             logger.propagate = old_propagate
-            

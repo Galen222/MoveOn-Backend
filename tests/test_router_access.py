@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 import auth
-import pytest
 from config import settings
 from database import obtener_db
 from routers.access import router as access_router
@@ -26,6 +25,7 @@ from services.identity_rate_limit import IdentityRateLimitExceeded
 # Helpers
 # ─────────────────────────────────────────────
 
+
 def _build_app() -> FastAPI:
     """App mínima con solo el router de acceso y los exception handlers relevantes."""
     from exceptions import manejador_http_exception, manejador_validacion_personalizado
@@ -36,11 +36,16 @@ def _build_app() -> FastAPI:
 
     app = FastAPI()
     app.include_router(access_router)
-    app.add_exception_handler(RequestValidationError, manejador_validacion_personalizado)
+    app.add_exception_handler(
+        RequestValidationError, manejador_validacion_personalizado
+    )
+
     async def http_exc_handler(req: Request, exc: Exception) -> JSONResponse:
         if isinstance(exc, HTTPException):
             return manejador_http_exception(req, exc)
-        return JSONResponse(status_code=500, content={"estatus": "error", "mensaje": "Error interno"})
+        return JSONResponse(
+            status_code=500, content={"estatus": "error", "mensaje": "Error interno"}
+        )
 
     app.add_exception_handler(HTTPException, http_exc_handler)
 
@@ -78,6 +83,7 @@ def _valid_app_session_header() -> dict:
 # GET /handshake
 # ─────────────────────────────────────────────
 
+
 class TestHandshake:
     def test_sin_x_app_id_devuelve_403(self):
         client = TestClient(_build_app())
@@ -112,9 +118,9 @@ class TestHandshake:
         monkeypatch.setattr(access_service, "buscar_por_identificador", fake_buscar)
 
         client = TestClient(app)
-        token = client.get(
-            "/handshake", headers={"X-App-Id": settings.APP_ID}
-        ).json()["app_session_token"]
+        token = client.get("/handshake", headers={"X-App-Id": settings.APP_ID}).json()[
+            "app_session_token"
+        ]
 
         # 401 (credenciales inválidas) confirma que pasó la barrera de app_session (no 403)
         response = client.post(
@@ -129,12 +135,15 @@ class TestHandshake:
 # POST /login — seguridad de sesión de app
 # ─────────────────────────────────────────────
 
+
 class TestLoginAppSession:
     """Verifica que /login exige X-App-Session válido."""
 
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
-        response = client.post("/login", json={"identificador": "pepe", "password": "Pass1234"})
+        response = client.post(
+            "/login", json={"identificador": "pepe", "password": "Pass1234"}
+        )
         assert response.status_code == 403
         assert response.headers.get("x-app-session-expired") == "1"
 
@@ -170,6 +179,7 @@ class TestLoginAppSession:
 # POST /login — validación de esquema
 # ─────────────────────────────────────────────
 
+
 class TestLoginValidacion:
     def test_body_vacio_devuelve_422(self):
         app = _app_with_overrides()
@@ -192,13 +202,16 @@ class TestLoginValidacion:
     def test_identificador_vacio_devuelve_422(self):
         app = _app_with_overrides()
         client = TestClient(app)
-        response = client.post("/login", json={"identificador": "", "password": "Pass1234"})
+        response = client.post(
+            "/login", json={"identificador": "", "password": "Pass1234"}
+        )
         assert response.status_code == 422
 
 
 # ─────────────────────────────────────────────
 # POST /login — lógica de negocio
 # ─────────────────────────────────────────────
+
 
 class TestLoginLogica:
     def test_usuario_no_encontrado_devuelve_401(self, monkeypatch):
@@ -209,7 +222,9 @@ class TestLoginLogica:
 
         monkeypatch.setattr(access_service, "buscar_por_identificador", fake_buscar)
         client = TestClient(app)
-        response = client.post("/login", json={"identificador": "noexiste", "password": "Pass1234"})
+        response = client.post(
+            "/login", json={"identificador": "noexiste", "password": "Pass1234"}
+        )
         assert response.status_code == 401
         assert "credenciales" in response.json()["mensaje"].lower()
 
@@ -220,16 +235,16 @@ class TestLoginLogica:
 
         async def fake_buscar(db, identificador):
             return SimpleNamespace(
-                id=1,
-                nombre_usuario="pepe",
-                password_encriptada="$2b$12$hashfake"
+                id=1, nombre_usuario="pepe", password_encriptada="$2b$12$hashfake"
             )
 
         monkeypatch.setattr(access_service, "buscar_por_identificador", fake_buscar)
         monkeypatch.setattr(auth, "comprobar_password", lambda plain, hashed: False)
 
         client = TestClient(app)
-        response = client.post("/login", json={"identificador": "pepe", "password": "WrongPass1"})
+        response = client.post(
+            "/login", json={"identificador": "pepe", "password": "WrongPass1"}
+        )
         assert response.status_code == 401
         assert "credenciales" in response.json()["mensaje"].lower()
 
@@ -240,9 +255,7 @@ class TestLoginLogica:
 
         async def fake_buscar(db, identificador):
             return SimpleNamespace(
-                id=1,
-                nombre_usuario="pepe",
-                password_encriptada="$2b$12$hashfake"
+                id=1, nombre_usuario="pepe", password_encriptada="$2b$12$hashfake"
             )
 
         async def fake_crear_sesion(db, usuario):
@@ -258,7 +271,9 @@ class TestLoginLogica:
         monkeypatch.setattr(access_service, "crear_sesion_login", fake_crear_sesion)
 
         client = TestClient(app)
-        response = client.post("/login", json={"identificador": "pepe", "password": "Pass1234"})
+        response = client.post(
+            "/login", json={"identificador": "pepe", "password": "Pass1234"}
+        )
 
         assert response.status_code == 200
         body = response.json()
@@ -272,11 +287,15 @@ class TestLoginLogica:
 
         monkeypatch.setattr(
             "routers.access.check_identity_limit",
-            lambda scope, identity, limit: (_ for _ in ()).throw(IdentityRateLimitExceeded())
+            lambda scope, identity, limit: (_ for _ in ()).throw(
+                IdentityRateLimitExceeded()
+            ),
         )
 
         client = TestClient(app)
-        response = client.post("/login", json={"identificador": "pepe", "password": "Pass1234"})
+        response = client.post(
+            "/login", json={"identificador": "pepe", "password": "Pass1234"}
+        )
         assert response.status_code == 429
 
     def test_login_respuesta_no_revela_si_es_usuario_o_password(self, monkeypatch):
@@ -285,23 +304,34 @@ class TestLoginLogica:
         devolver el mismo mensaje para no dar pistas al atacante.
         """
         from types import SimpleNamespace
+
         app = _app_with_overrides()
 
         async def fake_buscar_ninguno(db, identificador):
             return None
 
         async def fake_buscar_encontrado(db, identificador):
-            return SimpleNamespace(id=1, nombre_usuario="pepe", password_encriptada="hash")
+            return SimpleNamespace(
+                id=1, nombre_usuario="pepe", password_encriptada="hash"
+            )
 
         monkeypatch.setattr(auth, "comprobar_password", lambda p, h: False)
 
         client = TestClient(app)
 
-        monkeypatch.setattr(access_service, "buscar_por_identificador", fake_buscar_ninguno)
-        r1 = client.post("/login", json={"identificador": "noexiste", "password": "Pass1234"})
+        monkeypatch.setattr(
+            access_service, "buscar_por_identificador", fake_buscar_ninguno
+        )
+        r1 = client.post(
+            "/login", json={"identificador": "noexiste", "password": "Pass1234"}
+        )
 
-        monkeypatch.setattr(access_service, "buscar_por_identificador", fake_buscar_encontrado)
-        r2 = client.post("/login", json={"identificador": "pepe", "password": "WrongPass1"})
+        monkeypatch.setattr(
+            access_service, "buscar_por_identificador", fake_buscar_encontrado
+        )
+        r2 = client.post(
+            "/login", json={"identificador": "pepe", "password": "WrongPass1"}
+        )
 
         assert r1.status_code == r2.status_code == 401
         assert r1.json()["mensaje"] == r2.json()["mensaje"]
@@ -310,6 +340,7 @@ class TestLoginLogica:
 # ─────────────────────────────────────────────
 # POST /token/refresh — seguridad de sesión de app
 # ─────────────────────────────────────────────
+
 
 class TestRefreshAppSession:
     def test_sin_app_session_devuelve_403(self):
@@ -322,6 +353,7 @@ class TestRefreshAppSession:
 # ─────────────────────────────────────────────
 # POST /token/refresh — validación de esquema
 # ─────────────────────────────────────────────
+
 
 class TestRefreshValidacion:
     def test_body_vacio_devuelve_422(self):
@@ -341,6 +373,7 @@ class TestRefreshValidacion:
 # POST /token/refresh — lógica de negocio
 # ─────────────────────────────────────────────
 
+
 class TestRefreshLogica:
     def test_token_invalido_devuelve_401(self, monkeypatch):
         app = _app_with_overrides()
@@ -350,18 +383,24 @@ class TestRefreshLogica:
 
         monkeypatch.setattr(access_service, "refrescar_sesion", fake_refrescar)
         client = TestClient(app)
-        response = client.post("/token/refresh", json={"refresh_token": "token-manipulado"})
+        response = client.post(
+            "/token/refresh", json={"refresh_token": "token-manipulado"}
+        )
         assert response.status_code == 401
 
     def test_token_reutilizado_devuelve_401(self, monkeypatch):
         app = _app_with_overrides()
 
         async def fake_refrescar(db, token):
-            raise HTTPException(status_code=401, detail="Error: Refresh token reutilizado")
+            raise HTTPException(
+                status_code=401, detail="Error: Refresh token reutilizado"
+            )
 
         monkeypatch.setattr(access_service, "refrescar_sesion", fake_refrescar)
         client = TestClient(app)
-        response = client.post("/token/refresh", json={"refresh_token": "tok-reutilizado"})
+        response = client.post(
+            "/token/refresh", json={"refresh_token": "tok-reutilizado"}
+        )
         assert response.status_code == 401
         assert "reutilizado" in response.json()["mensaje"].lower()
 
@@ -410,6 +449,7 @@ class TestRefreshLogica:
 # POST /logout — seguridad de sesión de app
 # ─────────────────────────────────────────────
 
+
 class TestLogoutAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
@@ -421,6 +461,7 @@ class TestLogoutAppSession:
 # ─────────────────────────────────────────────
 # POST /logout — validación de esquema
 # ─────────────────────────────────────────────
+
 
 class TestLogoutValidacion:
     def test_body_vacio_devuelve_422(self):
@@ -439,6 +480,7 @@ class TestLogoutValidacion:
 # ─────────────────────────────────────────────
 # POST /logout — lógica de negocio
 # ─────────────────────────────────────────────
+
 
 class TestLogoutLogica:
     def test_logout_exitoso_devuelve_200(self, monkeypatch):
@@ -464,7 +506,9 @@ class TestLogoutLogica:
 
         monkeypatch.setattr(access_service, "cerrar_sesion", fake_cerrar)
         client = TestClient(app)
-        response = client.post("/logout", json={"refresh_token": "tok-invalido-o-expirado"})
+        response = client.post(
+            "/logout", json={"refresh_token": "tok-invalido-o-expirado"}
+        )
 
         assert response.status_code == 200
 
@@ -487,6 +531,7 @@ class TestLogoutLogica:
 # POST /password/solicitar — seguridad de sesión de app
 # ─────────────────────────────────────────────
 
+
 class TestSolicitarPasswordAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
@@ -498,6 +543,7 @@ class TestSolicitarPasswordAppSession:
 # ─────────────────────────────────────────────
 # POST /password/solicitar — validación de esquema
 # ─────────────────────────────────────────────
+
 
 class TestSolicitarPasswordValidacion:
     def test_body_vacio_devuelve_422(self):
@@ -523,16 +569,22 @@ class TestSolicitarPasswordValidacion:
 # POST /password/solicitar — lógica de negocio
 # ─────────────────────────────────────────────
 
+
 class TestSolicitarPasswordLogica:
     def test_email_existente_devuelve_200_con_mensaje_generico(self, monkeypatch):
         app = _app_with_overrides()
 
         async def fake_generar(db, email, bg):
-            return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
+            return {
+                "estatus": "success",
+                "mensaje": "Si el email corresponde a un usuario recibirá un código",
+            }
 
         monkeypatch.setattr(access_service, "generar_codigo_recuperacion", fake_generar)
         client = TestClient(app)
-        response = client.post("/password/solicitar", json={"email": "pepe@example.com"})
+        response = client.post(
+            "/password/solicitar", json={"email": "pepe@example.com"}
+        )
 
         assert response.status_code == 200
         assert response.json()["estatus"] == "success"
@@ -545,7 +597,10 @@ class TestSolicitarPasswordLogica:
         app = _app_with_overrides()
 
         async def fake_generar(db, email, bg):
-            return {"estatus": "success", "mensaje": "Si el email corresponde a un usuario recibirá un código"}
+            return {
+                "estatus": "success",
+                "mensaje": "Si el email corresponde a un usuario recibirá un código",
+            }
 
         monkeypatch.setattr(access_service, "generar_codigo_recuperacion", fake_generar)
         client = TestClient(app)
@@ -561,11 +616,15 @@ class TestSolicitarPasswordLogica:
 
         monkeypatch.setattr(
             "routers.access.check_identity_limit",
-            lambda scope, identity, limit: (_ for _ in ()).throw(IdentityRateLimitExceeded())
+            lambda scope, identity, limit: (_ for _ in ()).throw(
+                IdentityRateLimitExceeded()
+            ),
         )
 
         client = TestClient(app)
-        response = client.post("/password/solicitar", json={"email": "pepe@example.com"})
+        response = client.post(
+            "/password/solicitar", json={"email": "pepe@example.com"}
+        )
         assert response.status_code == 429
 
 
@@ -573,12 +632,17 @@ class TestSolicitarPasswordLogica:
 # POST /password/confirmar — seguridad de sesión de app
 # ─────────────────────────────────────────────
 
+
 class TestConfirmarPasswordAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
         response = client.post(
             "/password/confirmar",
-            json={"email": "a@a.com", "codigo": "123456", "nueva_password": "Nueva1234"}
+            json={
+                "email": "a@a.com",
+                "codigo": "123456",
+                "nueva_password": "Nueva1234",
+            },
         )
         assert response.status_code == 403
         assert response.headers.get("x-app-session-expired") == "1"
@@ -587,6 +651,7 @@ class TestConfirmarPasswordAppSession:
 # ─────────────────────────────────────────────
 # POST /password/confirmar — validación de esquema
 # ─────────────────────────────────────────────
+
 
 class TestConfirmarPasswordValidacion:
     def test_body_vacio_devuelve_422(self):
@@ -600,7 +665,11 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "no-email", "codigo": "123456", "nueva_password": "Nueva1234"}
+            json={
+                "email": "no-email",
+                "codigo": "123456",
+                "nueva_password": "Nueva1234",
+            },
         )
         assert response.status_code == 422
 
@@ -609,7 +678,7 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "pepe@example.com", "nueva_password": "Nueva1234"}
+            json={"email": "pepe@example.com", "nueva_password": "Nueva1234"},
         )
         assert response.status_code == 422
 
@@ -618,7 +687,7 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "pepe@example.com", "codigo": "123456"}
+            json={"email": "pepe@example.com", "codigo": "123456"},
         )
         assert response.status_code == 422
 
@@ -628,7 +697,11 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "pepe@example.com", "codigo": "12345", "nueva_password": "Nueva1234"}
+            json={
+                "email": "pepe@example.com",
+                "codigo": "12345",
+                "nueva_password": "Nueva1234",
+            },
         )
         assert response.status_code == 422
 
@@ -637,7 +710,11 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "pepe@example.com", "codigo": "1234567", "nueva_password": "Nueva1234"}
+            json={
+                "email": "pepe@example.com",
+                "codigo": "1234567",
+                "nueva_password": "Nueva1234",
+            },
         )
         assert response.status_code == 422
 
@@ -646,7 +723,11 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "pepe@example.com", "codigo": "12345A", "nueva_password": "Nueva1234"}
+            json={
+                "email": "pepe@example.com",
+                "codigo": "12345A",
+                "nueva_password": "Nueva1234",
+            },
         )
         assert response.status_code == 422
 
@@ -656,7 +737,11 @@ class TestConfirmarPasswordValidacion:
         client = TestClient(app)
         response = client.post(
             "/password/confirmar",
-            json={"email": "pepe@example.com", "codigo": "123456", "nueva_password": "debil"}
+            json={
+                "email": "pepe@example.com",
+                "codigo": "123456",
+                "nueva_password": "debil",
+            },
         )
         assert response.status_code == 422
 
@@ -665,18 +750,21 @@ class TestConfirmarPasswordValidacion:
 # POST /password/confirmar — lógica de negocio
 # ─────────────────────────────────────────────
 
+
 class TestConfirmarPasswordLogica:
     _payload = {
         "email": "pepe@example.com",
         "codigo": "123456",
-        "nueva_password": "Nueva1234"
+        "nueva_password": "Nueva1234",
     }
 
     def test_codigo_incorrecto_devuelve_400(self, monkeypatch):
         app = _app_with_overrides()
 
         async def fake_resetear(db, datos):
-            raise HTTPException(status_code=400, detail="Error: Código o email inválidos")
+            raise HTTPException(
+                status_code=400, detail="Error: Código o email inválidos"
+            )
 
         monkeypatch.setattr(access_service, "resetear_password", fake_resetear)
         client = TestClient(app)
@@ -702,7 +790,10 @@ class TestConfirmarPasswordLogica:
         app = _app_with_overrides()
 
         async def fake_resetear(db, datos):
-            return {"estatus": "success", "mensaje": "Contraseña actualizada correctamente"}
+            return {
+                "estatus": "success",
+                "mensaje": "Contraseña actualizada correctamente",
+            }
 
         monkeypatch.setattr(access_service, "resetear_password", fake_resetear)
         client = TestClient(app)
@@ -716,7 +807,9 @@ class TestConfirmarPasswordLogica:
 
         monkeypatch.setattr(
             "routers.access.check_identity_limit",
-            lambda scope, identity, limit: (_ for _ in ()).throw(IdentityRateLimitExceeded())
+            lambda scope, identity, limit: (_ for _ in ()).throw(
+                IdentityRateLimitExceeded()
+            ),
         )
 
         client = TestClient(app)
@@ -731,7 +824,10 @@ class TestConfirmarPasswordLogica:
         async def fake_resetear(db, datos):
             capturado["email"] = datos.email
             capturado["codigo"] = datos.codigo
-            return {"estatus": "success", "mensaje": "Contraseña actualizada correctamente"}
+            return {
+                "estatus": "success",
+                "mensaje": "Contraseña actualizada correctamente",
+            }
 
         monkeypatch.setattr(access_service, "resetear_password", fake_resetear)
         client = TestClient(app)
@@ -739,4 +835,3 @@ class TestConfirmarPasswordLogica:
 
         assert str(capturado["email"]).lower() == "pepe@example.com"
         assert capturado["codigo"] == "123456"
-        

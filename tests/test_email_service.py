@@ -59,19 +59,19 @@ def _capture_logger(caplog, logger_name: str, level: int):
 
 class TestEsErrorTransitorio:
     def test_timeout_es_transitorio(self):
-        assert email_service._es_error_transitorio(
-            SMTPTimeoutError("timeout")
-        ) is True
+        assert email_service._es_error_transitorio(SMTPTimeoutError("timeout")) is True
 
     def test_connect_error_es_transitorio(self):
-        assert email_service._es_error_transitorio(
-            SMTPConnectError("connect error")
-        ) is True
+        assert (
+            email_service._es_error_transitorio(SMTPConnectError("connect error"))
+            is True
+        )
 
     def test_disconnect_es_transitorio(self):
-        assert email_service._es_error_transitorio(
-            SMTPServerDisconnected("disconnect")
-        ) is True
+        assert (
+            email_service._es_error_transitorio(SMTPServerDisconnected("disconnect"))
+            is True
+        )
 
     def test_auth_error_no_es_transitorio(self):
         exc = SMTPAuthenticationError(535, "auth failed")
@@ -96,7 +96,9 @@ class TestConstruirMensaje:
     def test_construye_subject_from_to_y_cuerpos(self, monkeypatch):
         _configurar_settings(monkeypatch)
 
-        with patch.object(email_service.Path, "exists", return_value=False), patch.object(
+        with patch.object(
+            email_service.Path, "exists", return_value=False
+        ), patch.object(
             email_service.email_templates,
             "recuperacion_password_template",
             return_value="<html><body>HTML TEST</body></html>",
@@ -144,9 +146,7 @@ class TestConstruirMensaje:
         assert "cid:moveon_logo" in html
 
         partes_imagen = [
-            part
-            for part in msg.walk()
-            if part.get_content_maintype() == "image"
+            part for part in msg.walk() if part.get_content_maintype() == "image"
         ]
 
         assert len(partes_imagen) == 1
@@ -158,7 +158,9 @@ class TestConstruirMensaje:
         _configurar_settings(monkeypatch)
 
         with _capture_logger(caplog, "app.email", logging.WARNING):
-            with patch.object(email_service.Path, "exists", return_value=False), patch.object(
+            with patch.object(
+                email_service.Path, "exists", return_value=False
+            ), patch.object(
                 email_service.email_templates,
                 "recuperacion_password_template",
                 return_value="<html><body>sin logo</body></html>",
@@ -254,7 +256,9 @@ class TestEnviarCodigoRecuperacion:
         mock_sleep.assert_awaited_once_with(1.0)
 
     @pytest.mark.asyncio
-    async def test_reintenta_hasta_agotar_intentos_en_error_transitorio(self, monkeypatch):
+    async def test_reintenta_hasta_agotar_intentos_en_error_transitorio(
+        self, monkeypatch
+    ):
         _configurar_settings(monkeypatch)
 
         mock_send = AsyncMock(
@@ -295,9 +299,7 @@ class TestEnviarCodigoRecuperacion:
     async def test_no_reintenta_en_error_permanente(self, monkeypatch):
         _configurar_settings(monkeypatch)
 
-        mock_send = AsyncMock(
-            side_effect=SMTPAuthenticationError(535, "auth failed")
-        )
+        mock_send = AsyncMock(side_effect=SMTPAuthenticationError(535, "auth failed"))
         mock_sleep = AsyncMock()
 
         with patch.object(
@@ -419,4 +421,3 @@ class TestEnviarCodigoRecuperacion:
         assert ok is False
         assert mock_send.await_count == 1
         mock_sleep.assert_not_awaited()
-        

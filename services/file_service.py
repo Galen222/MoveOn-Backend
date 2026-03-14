@@ -19,10 +19,10 @@ import cloudinary
 
 from config import settings
 
-logger = logging.getLogger("app.files")
-
 # Pillow para verificar que el archivo es realmente una imagen
 from PIL import Image, ImageOps, UnidentifiedImageError
+
+logger = logging.getLogger("app.files")
 
 # Límite de seguridad (anti "decompression bomb")
 # Ajustable por env (ej: 13MP)
@@ -116,23 +116,31 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
     content_lower = content.lower()
     for signature in MALICIOUS_SIGNATURES:
         if signature in content_lower:
-            raise HTTPException(status_code=400, detail="Error: Contenido malicioso detectado")
+            raise HTTPException(
+                status_code=400, detail="Error: Contenido malicioso detectado"
+            )
 
     try:
         img = Image.open(BytesIO(content))
         img.verify()
     except (UnidentifiedImageError, OSError):
-        raise HTTPException(status_code=400, detail="Error: El archivo no es una imagen válida")
+        raise HTTPException(
+            status_code=400, detail="Error: El archivo no es una imagen válida"
+        )
 
     try:
         img2 = Image.open(BytesIO(content))
         img2.load()
         if (img2.width * img2.height) > MAX_IMAGE_PIXELS:
-            raise HTTPException(status_code=400, detail="Error: Imagen demasiado grande")
+            raise HTTPException(
+                status_code=400, detail="Error: Imagen demasiado grande"
+            )
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=400, detail="Error: El archivo no es una imagen válida")
+        raise HTTPException(
+            status_code=400, detail="Error: El archivo no es una imagen válida"
+        )
 
     return content
 
@@ -146,7 +154,9 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
         # Así evitamos que algunas fotos queden giradas al strippear EXIF.
         im = ImageOps.exif_transpose(im)
     except (UnidentifiedImageError, OSError):
-        raise HTTPException(status_code=400, detail="Error: El archivo no es una imagen válida")
+        raise HTTPException(
+            status_code=400, detail="Error: El archivo no es una imagen válida"
+        )
 
     out = BytesIO()
 

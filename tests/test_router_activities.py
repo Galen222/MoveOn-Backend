@@ -11,7 +11,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -19,25 +18,29 @@ from fastapi.testclient import TestClient
 
 import auth
 from database import obtener_db
-from exceptions import error_response, manejador_http_exception, manejador_validacion_personalizado
+from exceptions import manejador_http_exception, manejador_validacion_personalizado
 from routers.activities import router as activities_router
 from services import activities_service
-from services.identity_rate_limit import IdentityRateLimitExceeded
 
 
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
 
+
 def _build_app() -> FastAPI:
     app = FastAPI()
     app.include_router(activities_router)
-    app.add_exception_handler(RequestValidationError, manejador_validacion_personalizado)
+    app.add_exception_handler(
+        RequestValidationError, manejador_validacion_personalizado
+    )
 
     async def http_exc_handler(req: Request, exc: Exception) -> JSONResponse:
         if isinstance(exc, HTTPException):
             return manejador_http_exception(req, exc)
-        return JSONResponse(status_code=500, content={"estatus": "error", "mensaje": "Error interno"})
+        return JSONResponse(
+            status_code=500, content={"estatus": "error", "mensaje": "Error interno"}
+        )
 
     app.add_exception_handler(HTTPException, http_exc_handler)
     return app
@@ -87,6 +90,7 @@ def _actividad_fake(**kwargs) -> SimpleNamespace:
 # POST /actividad/guardar — app session
 # ─────────────────────────────────────────────
 
+
 class TestGuardarActividadAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
@@ -99,6 +103,7 @@ class TestGuardarActividadAppSession:
 # POST /actividad/guardar — validación de esquema
 # ─────────────────────────────────────────────
 
+
 class TestGuardarActividadValidacion:
     def test_body_vacio_devuelve_422(self):
         client = TestClient(_app_con_overrides())
@@ -107,62 +112,128 @@ class TestGuardarActividadValidacion:
     def test_sin_tipo_devuelve_422(self):
         payload = _payload_actividad()
         del payload["tipo"]
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_tipo_invalido_devuelve_422(self):
         payload = {**_payload_actividad(), "tipo": "Nadar"}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_distancia_negativa_devuelve_422(self):
         payload = {**_payload_actividad(), "distancia": -100}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_distancia_cero_devuelve_422(self):
         payload = {**_payload_actividad(), "distancia": 0}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_distancia_float_devuelve_422(self):
         """StrictInt rechaza flotantes aunque sean enteros."""
         payload = {**_payload_actividad(), "distancia": 5000.0}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_distancia_superior_a_300km_devuelve_422(self):
         payload = {**_payload_actividad(), "distancia": 300001}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_duracion_negativa_devuelve_422(self):
         payload = {**_payload_actividad(), "duracion": -1}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_duracion_superior_a_24h_devuelve_422(self):
         payload = {**_payload_actividad(), "duracion": 86401}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_calorias_negativas_devuelve_422(self):
         payload = {**_payload_actividad(), "calorias_quemadas": 0}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_calorias_superiores_a_10000_devuelve_422(self):
         payload = {**_payload_actividad(), "calorias_quemadas": 10001}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_ruta_mapa_url_invalida_devuelve_422(self):
         payload = {**_payload_actividad(), "ruta_mapa_url": "no-es-una-url"}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_fecha_futura_devuelve_422(self):
         payload = {**_payload_actividad(), "fecha_ruta": "2099-01-01T00:00:00Z"}
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
     def test_sin_fecha_ruta_devuelve_422(self):
         payload = _payload_actividad()
         del payload["fecha_ruta"]
-        assert TestClient(_app_con_overrides()).post("/actividad/guardar", json=payload).status_code == 422
+        assert (
+            TestClient(_app_con_overrides())
+            .post("/actividad/guardar", json=payload)
+            .status_code
+            == 422
+        )
 
 
 # ─────────────────────────────────────────────
 # POST /actividad/guardar — lógica de negocio
 # ─────────────────────────────────────────────
+
 
 class TestGuardarActividadLogica:
     def test_guardar_exitoso_devuelve_200_con_campos(self, monkeypatch):
@@ -216,6 +287,7 @@ class TestGuardarActividadLogica:
 # GET /actividad/obtener/{id_actividad}
 # ─────────────────────────────────────────────
 
+
 class TestObtenerActividadAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
@@ -248,7 +320,9 @@ class TestObtenerActividadLogica:
         app = _app_con_overrides()
 
         async def fake_obtener(db, usuario_actual_id, id_actividad):
-            raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+            raise HTTPException(
+                status_code=404, detail="Error: Actividad no encontrada"
+            )
 
         monkeypatch.setattr(activities_service, "obtener_actividad", fake_obtener)
         response = TestClient(app).get("/actividad/obtener/999")
@@ -260,7 +334,9 @@ class TestObtenerActividadLogica:
 
         async def fake_obtener(db, usuario_actual_id, id_actividad):
             # El servicio lanza 404 si la actividad no pertenece al usuario
-            raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+            raise HTTPException(
+                status_code=404, detail="Error: Actividad no encontrada"
+            )
 
         monkeypatch.setattr(activities_service, "obtener_actividad", fake_obtener)
         response = TestClient(app).get("/actividad/obtener/99")
@@ -271,23 +347,35 @@ class TestObtenerActividadLogica:
 # GET /actividad/obtener_todas
 # ─────────────────────────────────────────────
 
+
 class TestObtenerTodasAppSession:
     def test_sin_app_session_devuelve_403(self):
-        assert TestClient(_build_app()).get("/actividad/obtener_todas").status_code == 403
+        assert (
+            TestClient(_build_app()).get("/actividad/obtener_todas").status_code == 403
+        )
 
 
 class TestObtenerTodasValidacion:
     def test_skip_negativo_devuelve_422(self):
         client = TestClient(_app_con_overrides())
-        assert client.get("/actividad/obtener_todas", params={"skip": -1}).status_code == 422
+        assert (
+            client.get("/actividad/obtener_todas", params={"skip": -1}).status_code
+            == 422
+        )
 
     def test_limit_cero_devuelve_422(self):
         client = TestClient(_app_con_overrides())
-        assert client.get("/actividad/obtener_todas", params={"limit": 0}).status_code == 422
+        assert (
+            client.get("/actividad/obtener_todas", params={"limit": 0}).status_code
+            == 422
+        )
 
     def test_limit_superior_a_100_devuelve_422(self):
         client = TestClient(_app_con_overrides())
-        assert client.get("/actividad/obtener_todas", params={"limit": 101}).status_code == 422
+        assert (
+            client.get("/actividad/obtener_todas", params={"limit": 101}).status_code
+            == 422
+        )
 
 
 class TestObtenerTodasLogica:
@@ -353,7 +441,9 @@ class TestObtenerTodasLogica:
             }
 
         monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
-        TestClient(app).get("/actividad/obtener_todas", params={"skip": 20, "limit": 10})
+        TestClient(app).get(
+            "/actividad/obtener_todas", params={"skip": 20, "limit": 10}
+        )
         assert capturado == {"skip": 20, "limit": 10}
 
     def test_valores_por_defecto_skip_0_limit_20(self, monkeypatch):
@@ -389,7 +479,9 @@ class TestObtenerTodasLogica:
             }
 
         monkeypatch.setattr(activities_service, "obtener_actividades", fake_obtener)
-        response = TestClient(app).get("/actividad/obtener_todas", params={"skip": 0, "limit": 2})
+        response = TestClient(app).get(
+            "/actividad/obtener_todas", params={"skip": 0, "limit": 2}
+        )
         assert response.status_code == 200
         assert response.json()["has_more"] is True
 
@@ -398,6 +490,7 @@ class TestObtenerTodasLogica:
 # DELETE /actividad/borrar/{id_actividad}
 # ─────────────────────────────────────────────
 
+
 class TestBorrarActividadAppSession:
     def test_sin_app_session_devuelve_403(self):
         assert TestClient(_build_app()).delete("/actividad/borrar/1").status_code == 403
@@ -405,7 +498,10 @@ class TestBorrarActividadAppSession:
 
 class TestBorrarActividadValidacion:
     def test_id_no_numerico_devuelve_422(self):
-        assert TestClient(_app_con_overrides()).delete("/actividad/borrar/abc").status_code == 422
+        assert (
+            TestClient(_app_con_overrides()).delete("/actividad/borrar/abc").status_code
+            == 422
+        )
 
 
 class TestBorrarActividadLogica:
@@ -413,7 +509,11 @@ class TestBorrarActividadLogica:
         app = _app_con_overrides()
 
         async def fake_eliminar(db, usuario_actual_id, id_actividad):
-            return {"estatus": "success", "mensaje": "Actividad eliminada", "nuevo_total_puntos": 3}
+            return {
+                "estatus": "success",
+                "mensaje": "Actividad eliminada",
+                "nuevo_total_puntos": 3,
+            }
 
         monkeypatch.setattr(activities_service, "eliminar_actividad", fake_eliminar)
         response = TestClient(app).delete("/actividad/borrar/1")
@@ -426,7 +526,9 @@ class TestBorrarActividadLogica:
         app = _app_con_overrides()
 
         async def fake_eliminar(db, usuario_actual_id, id_actividad):
-            raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+            raise HTTPException(
+                status_code=404, detail="Error: Actividad no encontrada"
+            )
 
         monkeypatch.setattr(activities_service, "eliminar_actividad", fake_eliminar)
         response = TestClient(app).delete("/actividad/borrar/999")
@@ -438,7 +540,11 @@ class TestBorrarActividadLogica:
 
         async def fake_eliminar(db, usuario_actual_id, id_actividad):
             capturado["id"] = id_actividad
-            return {"estatus": "success", "mensaje": "Actividad eliminada", "nuevo_total_puntos": 0}
+            return {
+                "estatus": "success",
+                "mensaje": "Actividad eliminada",
+                "nuevo_total_puntos": 0,
+            }
 
         monkeypatch.setattr(activities_service, "eliminar_actividad", fake_eliminar)
         TestClient(app).delete("/actividad/borrar/42")
@@ -449,9 +555,13 @@ class TestBorrarActividadLogica:
 # DELETE /actividad/borrar_todas
 # ─────────────────────────────────────────────
 
+
 class TestBorrarTodasAppSession:
     def test_sin_app_session_devuelve_403(self):
-        assert TestClient(_build_app()).delete("/actividad/borrar_todas").status_code == 403
+        assert (
+            TestClient(_build_app()).delete("/actividad/borrar_todas").status_code
+            == 403
+        )
 
 
 class TestBorrarTodasLogica:
@@ -459,7 +569,10 @@ class TestBorrarTodasLogica:
         app = _app_con_overrides()
 
         async def fake_eliminar(db, usuario_actual_id):
-            return {"estatus": "success", "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 5 actividades."}
+            return {
+                "estatus": "success",
+                "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 5 actividades.",
+            }
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
         response = TestClient(app).delete("/actividad/borrar_todas")
@@ -470,7 +583,10 @@ class TestBorrarTodasLogica:
         app = _app_con_overrides()
 
         async def fake_eliminar(db, usuario_actual_id):
-            return {"estatus": "success", "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 3 actividades."}
+            return {
+                "estatus": "success",
+                "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 3 actividades.",
+            }
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
         response = TestClient(app).delete("/actividad/borrar_todas")
@@ -480,7 +596,10 @@ class TestBorrarTodasLogica:
         app = _app_con_overrides()
 
         async def fake_eliminar(db, usuario_actual_id):
-            return {"estatus": "success", "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 0 actividades."}
+            return {
+                "estatus": "success",
+                "mensaje": "Historial de actividades eliminado correctamente. Se han borrado 0 actividades.",
+            }
 
         monkeypatch.setattr(activities_service, "eliminar_actividades", fake_eliminar)
         response = TestClient(app).delete("/actividad/borrar_todas")

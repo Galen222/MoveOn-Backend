@@ -30,10 +30,7 @@ router = APIRouter(tags=["Seguridad"])
 # routers/access.py
 @router.get("/handshake", response_model=schemas.RespuestaHandshake)
 @rate_limit(settings.RL_HANDSHAKE)
-async def handshake(
-    request: Request,
-    x_app_id: Optional[str] = Header(default=None)
-):
+async def handshake(request: Request, x_app_id: Optional[str] = Header(default=None)):
     if not hmac.compare_digest((x_app_id or ""), settings.APP_ID):
         logger.warning(
             "handshake_fallido",
@@ -45,7 +42,7 @@ async def handshake(
         )
         raise HTTPException(
             status_code=403,
-            detail="Error: El acceso no proviene de la aplicación MoveOn"
+            detail="Error: El acceso no proviene de la aplicación MoveOn",
         )
 
     logger.info(
@@ -66,14 +63,16 @@ async def login(
     request: Request,
     datos: schemas.Login,
     db: AsyncSession = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
     # Rate-limit adicional por identidad (anti-abuso distribuido)
     # Lanza IdentityRateLimitExceeded (main.py la maneja).
     check_identity_limit("login", datos.identificador, settings.RL_LOGIN_ID)
 
     # Búsqueda flexible por nombre o email.
-    usuario_encontrado = await access_service.buscar_por_identificador(db, datos.identificador)
+    usuario_encontrado = await access_service.buscar_por_identificador(
+        db, datos.identificador
+    )
 
     # Validación de existencia y coincidencia de hash de contraseña.
     if not usuario_encontrado:
@@ -118,7 +117,7 @@ async def refresh_token(
     request: Request,
     datos: schemas.SolicitudRefreshToken,
     db: AsyncSession = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
     return await access_service.refrescar_sesion(db, datos.refresh_token)
 
@@ -130,7 +129,7 @@ async def logout(
     request: Request,
     datos: schemas.SolicitudLogout,
     db: AsyncSession = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
     return await access_service.cerrar_sesion(db, datos.refresh_token)
 
@@ -144,12 +143,16 @@ async def solicitar_password(
     datos: schemas.SolicitarPassword,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
     # Rate-limit adicional por identidad (anti-abuso distribuido)
-    check_identity_limit("password_solicitar", datos.email, settings.RL_PASSWORD_SOLICITAR_ID)
+    check_identity_limit(
+        "password_solicitar", datos.email, settings.RL_PASSWORD_SOLICITAR_ID
+    )
 
-    return await access_service.generar_codigo_recuperacion(db, datos.email, background_tasks)
+    return await access_service.generar_codigo_recuperacion(
+        db, datos.email, background_tasks
+    )
 
 
 # Confirma el código y actualiza la contraseña.
@@ -159,9 +162,11 @@ async def confirmar_password(
     request: Request,
     datos: schemas.ConfirmarPassword,
     db: AsyncSession = Depends(obtener_db),
-    _auth_app=Depends(auth.verificar_sesion_aplicacion)
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
     # Rate-limit adicional por identidad (anti-abuso distribuido)
-    check_identity_limit("password_confirmar", datos.email, settings.RL_PASSWORD_CONFIRMAR_ID)
+    check_identity_limit(
+        "password_confirmar", datos.email, settings.RL_PASSWORD_CONFIRMAR_ID
+    )
 
     return await access_service.resetear_password(db, datos)
