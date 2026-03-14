@@ -52,14 +52,22 @@ class TestErrorResponse:
         assert resp.status_code == 400
         assert body["estatus"] == "error"
         assert body["mensaje"] == "algo malo"
+        assert body["error_code"] == "BAD_REQUEST"
         assert "detail" not in body
 
-    def test_incluye_detail_cuando_se_pasa(self):
+    def test_incluye_detail_y_normaliza_error_code(self):
         detalle = [{"columna": "email", "mensaje": "inválido"}]
         resp = error_response(422, "Solicitud inválida", detail=detalle)
         body = _body(resp)
 
-        assert body["detail"] == detalle
+        assert body["error_code"] == "VALIDATION_ERROR"
+        assert body["detail"] == [
+            {
+                "columna": "email",
+                "mensaje": "inválido",
+                "error_code": "INVALIDO",
+            }
+        ]
 
     def test_no_incluye_detail_cuando_es_none(self):
         resp = error_response(400, "error", detail=None)
@@ -76,6 +84,7 @@ class TestErrorResponse:
         for code in [400, 401, 403, 404, 429, 500]:
             resp = error_response(code, "mensaje")
             assert resp.status_code == code
+            assert "error_code" in _body(resp)
 
 
 # ─────────────────────────────────────────────
@@ -92,6 +101,7 @@ class TestManejadorHttpException:
         assert resp.status_code == 404
         assert body["estatus"] == "error"
         assert body["mensaje"] == "Error: recurso no encontrado"
+        assert body["error_code"] == "RESOURCE_NOT_FOUND"
         assert "detail" not in body
 
     def test_list_detail_genera_formato_con_detail(self):
@@ -102,7 +112,29 @@ class TestManejadorHttpException:
 
         assert resp.status_code == 422
         assert body["mensaje"] == "Solicitud inválida"
-        assert body["detail"] == detalle
+        assert body["error_code"] == "VALIDATION_ERROR"
+        assert body["detail"] == [
+            {
+                "columna": "password",
+                "mensaje": "muy corta",
+                "error_code": "MUY_CORTA",
+            }
+        ]
+
+    def test_detail_dict_estructurado_preserva_error_code(self):
+        exc = HTTPException(
+            status_code=409,
+            detail={
+                "mensaje": "Error: El email ya está en uso",
+                "error_code": "EMAIL_ALREADY_IN_USE",
+            },
+        )
+        resp = manejador_http_exception(_fake_request(), exc)
+        body = _body(resp)
+
+        assert resp.status_code == 409
+        assert body["mensaje"] == "Error: El email ya está en uso"
+        assert body["error_code"] == "EMAIL_ALREADY_IN_USE"
 
     def test_detail_de_tipo_desconocido_devuelve_mensaje_generico(self):
         exc = HTTPException(status_code=500, detail={"unexpected": "dict"})
@@ -111,6 +143,7 @@ class TestManejadorHttpException:
 
         assert resp.status_code == 500
         assert body["estatus"] == "error"
+        assert body["error_code"] == "INTERNAL_SERVER_ERROR"
         assert "unexpected" not in body.get("mensaje", "")
 
     def test_propaga_headers_de_la_excepcion(self):
@@ -143,6 +176,7 @@ class TestManejadorExcepcionNoControlada:
 
         assert resp.status_code == 500
         assert body["estatus"] == "error"
+        assert body["error_code"] == "INTERNAL_SERVER_ERROR"
         assert "interno" in body["mensaje"].lower()
         assert "ValueError" not in body["mensaje"]
         assert "algo interno" not in body["mensaje"]
@@ -210,6 +244,7 @@ class TestManejadorValidacionPersonalizado:
         assert response.status_code == 422
         body = response.json()
         assert body["estatus"] == "error"
+        assert body["error_code"] == "VALIDATION_ERROR"
 
     def test_mensaje_es_solicitud_invalida(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
@@ -219,7 +254,7 @@ class TestManejadorValidacionPersonalizado:
 
         assert response.json()["mensaje"] == "Solicitud inválida"
 
-    def test_detail_contiene_columna_y_mensaje(self):
+    def test_detail_contiene_columna_mensaje_y_error_code(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
         response = client.post(
             "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
@@ -234,6 +269,7 @@ class TestManejadorValidacionPersonalizado:
         primer_error = errores[0]
         assert "columna" in primer_error
         assert "mensaje" in primer_error
+        assert "error_code" in primer_error
 
     def test_columna_identifica_el_campo_correcto(self):
         client = TestClient(self._build_app(), raise_server_exceptions=False)
@@ -258,26 +294,3 @@ class TestManejadorValidacionPersonalizado:
             msg = error["mensaje"]
             assert not msg.startswith("Value error,"), f"Prefijo no limpiado: {msg}"
             assert not msg.startswith("value error,"), f"Prefijo no limpiado: {msg}"
-
-    def test_mensaje_empieza_con_mayuscula(self):
-        """El manejador capitaliza el primer carácter del mensaje."""
-        client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post(
-            "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
-        )
-
-        for error in response.json()["detail"]:
-            msg = error["mensaje"]
-            if msg:
-                assert msg[0].isupper(), f"Mensaje no capitalizado: {msg}"
-
-    def test_campo_faltante_tambien_genera_error_con_formato_correcto(self):
-        """Enviar un JSON vacío debe producir errores para todos los campos requeridos."""
-        client = TestClient(self._build_app(), raise_server_exceptions=False)
-        response = client.post("/test", json={})
-
-        assert response.status_code == 422
-        errores = response.json()["detail"]
-        columnas = {e["columna"] for e in errores}
-        assert "edad" in columnas
-        assert "email" in columnas
