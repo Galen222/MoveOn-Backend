@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: 877311255ecd
+Revision ID: 4d6bc6199275
 Revises: 
-Create Date: 2026-03-11 18:54:17.776089
+Create Date: 2026-03-15 01:08:49.412306
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '877311255ecd'
+revision: str = '4d6bc6199275'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -35,6 +35,9 @@ def upgrade() -> None:
     sa.Column('foto_perfil', sa.String(length=500), nullable=True),
     sa.Column('foto_fecha_actualizacion', sa.DateTime(timezone=True), nullable=True),
     sa.Column('total_metros', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
+    sa.Column('total_calorias', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
+    sa.Column('objetivo_semanal_metros', sa.BigInteger(), server_default=sa.text('50000'), nullable=False),
+    sa.Column('objetivo_mensual_metros', sa.BigInteger(), server_default=sa.text('150000'), nullable=False),
     sa.Column('fecha_registro', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.Column('fecha_eula', sa.DateTime(timezone=True), nullable=False),
     sa.Column('acepta_terminos', sa.Boolean(), nullable=False),
@@ -60,7 +63,10 @@ def upgrade() -> None:
     sa.CheckConstraint('fecha_nacimiento <= CURRENT_DATE', name='ck_usuarios_fecha_nacimiento_not_future'),
     sa.CheckConstraint('foto_perfil IS NULL OR char_length(btrim(foto_perfil)) BETWEEN 1 AND 500', name='ck_usuarios_foto_perfil_len'),
     sa.CheckConstraint('nombre_real IS NULL OR char_length(btrim(nombre_real)) BETWEEN 3 AND 80', name='ck_usuarios_nombre_real_len'),
+    sa.CheckConstraint('objetivo_mensual_metros BETWEEN 10 AND 2000000', name='ck_usuarios_objetivo_mensual_range'),
+    sa.CheckConstraint('objetivo_semanal_metros BETWEEN 10 AND 2000000', name='ck_usuarios_objetivo_semanal_range'),
     sa.CheckConstraint('peso IS NULL OR (peso BETWEEN 20 AND 300)', name='ck_usuarios_peso_range'),
+    sa.CheckConstraint('total_calorias >= 0', name='ck_usuarios_total_calorias_non_negative'),
     sa.CheckConstraint('total_metros >= 0', name='ck_usuarios_total_metros_non_negative'),
     sa.PrimaryKeyConstraint('id')
     )
