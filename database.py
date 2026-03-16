@@ -49,6 +49,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 from config import settings
 from domain.enums import ProvinciaEspaña, GeneroUsuario, TipoActividad
 from utils import validators
+from exceptions import AppValidationError
 
 
 # =========================================================
@@ -160,6 +161,9 @@ def _validar_enum_str(
     valor: Optional[Any],
     permitidos: set[str],
     nombre_campo: str,
+    *,
+    must_be_text_code: str,
+    invalid_code: str,
 ) -> Optional[str]:
     """
     Valida un valor de enum persistido como String.
@@ -176,50 +180,87 @@ def _validar_enum_str(
         valor = valor.value
 
     if not isinstance(valor, str):
-        raise ValueError(f"Error: {nombre_campo} debe ser un texto válido")
+        raise AppValidationError(
+            f"Error: {nombre_campo} debe ser un texto válido",
+            must_be_text_code,
+        )
 
     valor = valor.strip()
     if valor not in permitidos:
-        raise ValueError(f"Error: {nombre_campo} no es válido")
+        raise AppValidationError(
+            f"Error: {nombre_campo} no es válido",
+            invalid_code,
+        )
 
     return valor
 
 
-def _validar_hex64_opcional(valor: Optional[str], nombre_campo: str) -> Optional[str]:
+def _validar_hex64_opcional(
+    valor: Optional[str],
+    nombre_campo: str,
+    *,
+    must_be_string_code: str,
+    invalid_code: str,
+) -> Optional[str]:
     """Valida un hash hexadecimal SHA-256 de 64 caracteres."""
     if valor is None:
         return None
 
     if not isinstance(valor, str):
-        raise ValueError(f"Error: {nombre_campo} debe ser un string")
+        raise AppValidationError(
+            f"Error: {nombre_campo} debe ser un string",
+            must_be_string_code,
+        )
 
     valor = valor.strip()
     if not _HEX64_RE.fullmatch(valor):
-        raise ValueError(
-            f"Error: {nombre_campo} debe ser un hash SHA-256 hexadecimal de 64 caracteres"
+        raise AppValidationError(
+            f"Error: {nombre_campo} debe ser un hash SHA-256 hexadecimal de 64 caracteres",
+            invalid_code,
         )
 
     return valor.lower()
 
 
-def _validar_texto_no_vacio(valor: str, nombre_campo: str, max_len: int) -> str:
+def _validar_texto_no_vacio(
+    valor: str,
+    nombre_campo: str,
+    max_len: int,
+    *,
+    must_be_string_code: str,
+    empty_code: str,
+    too_long_code: str,
+) -> str:
     """Valida que un texto no esté vacío y no supere una longitud máxima."""
     if not isinstance(valor, str):
-        raise ValueError(f"Error: {nombre_campo} debe ser un string")
+        raise AppValidationError(
+            f"Error: {nombre_campo} debe ser un string",
+            must_be_string_code,
+        )
 
     valor = valor.strip()
     if not valor:
-        raise ValueError(f"Error: {nombre_campo} no puede estar vacío")
+        raise AppValidationError(
+            f"Error: {nombre_campo} no puede estar vacío",
+            empty_code,
+        )
     if len(valor) > max_len:
-        raise ValueError(
-            f"Error: {nombre_campo} no puede superar los {max_len} caracteres"
+        raise AppValidationError(
+            f"Error: {nombre_campo} no puede superar los {max_len} caracteres",
+            too_long_code,
         )
 
     return valor
 
 
 def _validar_url_http_opcional(
-    valor: Optional[str], nombre_campo: str, max_len: int = 2048
+    valor: Optional[str],
+    nombre_campo: str,
+    max_len: int = 2048,
+    *,
+    must_be_text_code: str,
+    too_long_code: str,
+    invalid_code: str,
 ) -> Optional[str]:
     """
     Valida una URL http/https opcional.
@@ -230,21 +271,28 @@ def _validar_url_http_opcional(
         return None
 
     if not isinstance(valor, str):
-        raise ValueError(f"Error: {nombre_campo} debe ser un texto")
+        raise AppValidationError(
+            f"Error: {nombre_campo} debe ser un texto",
+            must_be_text_code,
+        )
 
     valor = valor.strip()
     if not valor:
         return None
 
     if len(valor) > max_len:
-        raise ValueError(
-            f"Error: {nombre_campo} no puede superar los {max_len} caracteres"
+        raise AppValidationError(
+            f"Error: {nombre_campo} no puede superar los {max_len} caracteres",
+            too_long_code,
         )
 
     try:
         parsed = _HTTP_URL_ADAPTER.validate_python(valor)
     except PydanticValidationError:
-        raise ValueError(f"Error: {nombre_campo} no es una URL http/https válida")
+        raise AppValidationError(
+            f"Error: {nombre_campo} no es una URL http/https válida",
+            invalid_code,
+        )
 
     return str(parsed)
 
@@ -496,21 +544,26 @@ class Usuario(Base):
     @validates("nombre_usuario")
     def validar_nombre_usuario(self, key: str, valor: str) -> str:
         if not isinstance(valor, str):
-            raise ValueError("Error: El nombre de usuario debe ser un texto")
+            raise AppValidationError(
+                "Error: El nombre de usuario debe ser un texto", "USERNAME_MUST_BE_TEXT"
+            )
 
         valor = valor.strip()
 
         if len(valor) < 5:
-            raise ValueError(
-                "Error: El nombre de usuario debe tener al menos 5 caracteres"
+            raise AppValidationError(
+                "Error: El nombre de usuario debe tener al menos 5 caracteres",
+                "USERNAME_TOO_SHORT",
             )
         if len(valor) > 50:
-            raise ValueError(
-                "Error: El nombre de usuario no puede superar los 50 caracteres"
+            raise AppValidationError(
+                "Error: El nombre de usuario no puede superar los 50 caracteres",
+                "USERNAME_TOO_LONG",
             )
         if not _USERNAME_RE.fullmatch(valor):
-            raise ValueError(
-                "Error: El nombre de usuario solo puede contener letras y números"
+            raise AppValidationError(
+                "Error: El nombre de usuario solo puede contener letras y números",
+                "USERNAME_INVALID_FORMAT",
             )
 
         return valor
@@ -518,28 +571,42 @@ class Usuario(Base):
     @validates("email")
     def validar_email(self, key: str, valor: str) -> str:
         if not isinstance(valor, str):
-            raise ValueError("Error: El email debe ser un texto")
+            raise AppValidationError(
+                "Error: El email debe ser un texto", "EMAIL_MUST_BE_TEXT"
+            )
 
         valor = valor.strip().lower()
         if not valor:
-            raise ValueError("Error: El email es obligatorio")
+            raise AppValidationError("Error: El email es obligatorio", "EMAIL_REQUIRED")
 
         try:
             email_info = validate_email(valor, check_deliverability=False)
             return email_info.normalized.lower()
         except EmailNotValidError:
-            raise ValueError("Error: El formato del correo electrónico no es válido")
+            raise AppValidationError(
+                "Error: El formato del correo electrónico no es válido",
+                "EMAIL_FORMAT_INVALID",
+            )
 
     @validates("password_encriptada")
     def validar_password_encriptada(self, key: str, valor: str) -> str:
-        return _validar_texto_no_vacio(valor, "La contraseña encriptada", 255)
+        return _validar_texto_no_vacio(
+            valor,
+            "La contraseña encriptada",
+            255,
+            must_be_string_code="ENCRYPTED_PASSWORD_MUST_BE_STRING",
+            empty_code="ENCRYPTED_PASSWORD_EMPTY",
+            too_long_code="ENCRYPTED_PASSWORD_TOO_LONG",
+        )
 
     @validates("nombre_real")
     def validar_nombre_real(self, key: str, valor: Optional[str]) -> Optional[str]:
         if valor is None:
             return None
         if not isinstance(valor, str):
-            raise ValueError("Error: El nombre real debe ser un texto")
+            raise AppValidationError(
+                "Error: El nombre real debe ser un texto", "REAL_NAME_MUST_BE_TEXT"
+            )
 
         valor = valor.strip()
         return validators.validar_nombre_real_logica(valor)
@@ -547,20 +614,30 @@ class Usuario(Base):
     @validates("fecha_nacimiento")
     def validar_fecha_nacimiento(self, key: str, valor: date) -> date:
         if not isinstance(valor, date):
-            raise ValueError("Error: La fecha de nacimiento debe ser una fecha válida")
+            raise AppValidationError(
+                "Error: La fecha de nacimiento debe ser una fecha válida",
+                "BIRTH_DATE_INVALID",
+            )
         return validators.validar_fecha_nacimiento_logica(valor)
 
     @validates("genero")
     def validar_genero(self, key: str, valor: Optional[Any]) -> Optional[str]:
-        return _validar_enum_str(valor, VALID_GENEROS, "El género")
+        return _validar_enum_str(
+            valor,
+            VALID_GENEROS,
+            "El género",
+            must_be_text_code="GENDER_MUST_BE_TEXT",
+            invalid_code="GENDER_INVALID",
+        )
 
     @validates("altura")
     def validar_altura(self, key: str, valor: Optional[int]) -> Optional[int]:
         if valor is None:
             return None
         if not isinstance(valor, int):
-            raise ValueError(
-                "Error: La altura debe ser un número entero en centímetros"
+            raise AppValidationError(
+                "Error: La altura debe ser un número entero en centímetros",
+                "HEIGHT_MUST_BE_INTEGER_CENTIMETERS",
             )
         return validators.validar_altura_logica(valor)
 
@@ -569,18 +646,34 @@ class Usuario(Base):
         if valor is None:
             return None
         if not isinstance(valor, (int, float)):
-            raise ValueError("Error: El peso debe ser un número en kilos")
+            raise AppValidationError(
+                "Error: El peso debe ser un número en kilos",
+                "WEIGHT_MUST_BE_KILOGRAM_NUMBER",
+            )
         return validators.validar_peso_logica(float(valor))
 
     @validates("provincia")
     def validar_provincia(self, key: str, valor: Optional[Any]) -> Optional[str]:
-        return _validar_enum_str(valor, VALID_PROVINCIAS, "La provincia")
+        return _validar_enum_str(
+            valor,
+            VALID_PROVINCIAS,
+            "La provincia",
+            must_be_text_code="PROVINCE_MUST_BE_TEXT",
+            invalid_code="PROVINCE_INVALID",
+        )
 
     @validates("foto_perfil")
     def validar_foto_perfil(self, key: str, valor: Optional[str]) -> Optional[str]:
         if valor is None:
             return None
-        return _validar_texto_no_vacio(valor, "La foto de perfil", 500)
+        return _validar_texto_no_vacio(
+            valor,
+            "La foto de perfil",
+            500,
+            must_be_string_code="PROFILE_PHOTO_MUST_BE_STRING",
+            empty_code="PROFILE_PHOTO_EMPTY",
+            too_long_code="PROFILE_PHOTO_TOO_LONG",
+        )
 
     @validates("foto_fecha_actualizacion", "fecha_registro", "codigo_expiracion")
     def validar_fechas_auxiliares(
@@ -591,8 +684,9 @@ class Usuario(Base):
     @validates("fecha_eula")
     def validar_fecha_eula(self, key: str, valor: datetime) -> datetime:
         if not isinstance(valor, datetime):
-            raise ValueError(
-                "Error: La fecha de aceptación debe ser una fecha-hora válida"
+            raise AppValidationError(
+                "Error: La fecha de aceptación debe ser una fecha-hora válida",
+                "TERMS_ACCEPTED_AT_INVALID",
             )
 
         valor_utc = _normalizar_datetime_utc(valor)
@@ -601,71 +695,110 @@ class Usuario(Base):
         # Misma lógica de schemas.py: margen pequeño para evitar falsos positivos por reloj.
         ahora = _ahora_utc()
         if valor_utc > ahora + timedelta(minutes=5):
-            raise ValueError("Error: La fecha de aceptación no puede ser futura")
+            raise AppValidationError(
+                "Error: La fecha de aceptación no puede ser futura",
+                "TERMS_ACCEPTED_AT_IN_FUTURE",
+            )
 
         return valor_utc
 
     @validates("total_metros")
     def validar_total_metros(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: El total de metros debe ser un número entero")
+            raise AppValidationError(
+                "Error: El total de metros debe ser un número entero",
+                "TOTAL_DISTANCE_MUST_BE_INTEGER",
+            )
         if valor < 0:
-            raise ValueError("Error: El total de metros no puede ser negativo")
+            raise AppValidationError(
+                "Error: El total de metros no puede ser negativo",
+                "TOTAL_DISTANCE_NEGATIVE",
+            )
         return valor
 
     @validates("total_calorias")
     def validar_total_calorias(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: El total de calorías debe ser un número entero")
+            raise AppValidationError(
+                "Error: El total de calorías debe ser un número entero",
+                "TOTAL_CALORIES_MUST_BE_INTEGER",
+            )
         if valor < 0:
-            raise ValueError("Error: El total de calorías no puede ser negativo")
+            raise AppValidationError(
+                "Error: El total de calorías no puede ser negativo",
+                "TOTAL_CALORIES_NEGATIVE",
+            )
         return valor
 
     @validates("objetivo_semanal_metros")
     def validar_objetivo_semanal(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: El objetivo semanal debe ser un número entero")
+            raise AppValidationError(
+                "Error: El objetivo semanal debe ser un número entero",
+                "WEEKLY_GOAL_MUST_BE_INTEGER",
+            )
         if not (10 <= valor <= 2_000_000):
-            raise ValueError(
-                "Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros"
+            raise AppValidationError(
+                "Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros",
+                "WEEKLY_GOAL_OUT_OF_RANGE",
             )
         return valor
 
     @validates("objetivo_mensual_metros")
     def validar_objetivo_mensual(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: El objetivo mensual debe ser un número entero")
+            raise AppValidationError(
+                "Error: El objetivo mensual debe ser un número entero",
+                "MONTHLY_GOAL_MUST_BE_INTEGER",
+            )
         if not (10 <= valor <= 2_000_000):
-            raise ValueError(
-                "Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros"
+            raise AppValidationError(
+                "Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros",
+                "MONTHLY_GOAL_OUT_OF_RANGE",
             )
         return valor
 
     @validates("acepta_terminos")
     def validar_acepta_terminos(self, key: str, valor: bool) -> bool:
         if not isinstance(valor, bool):
-            raise ValueError("Error: acepta_terminos debe ser booleano")
+            raise AppValidationError(
+                "Error: acepta_terminos debe ser booleano",
+                "TERMS_ACCEPTANCE_MUST_BE_BOOLEAN",
+            )
         if valor is not True:
-            raise ValueError("Error: Debes aceptar los términos para crear un usuario")
+            raise AppValidationError(
+                "Error: Debes aceptar los términos para crear un usuario",
+                "ACCOUNT_TERMS_ACCEPTANCE_REQUIRED",
+            )
         return valor
 
     @validates("perfil_visible")
     def validar_perfil_visible(self, key: str, valor: bool) -> bool:
         if not isinstance(valor, bool):
-            raise ValueError("Error: perfil_visible debe ser booleano")
+            raise AppValidationError(
+                "Error: perfil_visible debe ser booleano",
+                "PROFILE_VISIBILITY_MUST_BE_BOOLEAN",
+            )
         return valor
 
     @validates("version_terminos")
     def validar_version_terminos(self, key: str, valor: str) -> str:
         if not isinstance(valor, str):
-            raise ValueError("Error: La versión de términos debe ser un texto")
+            raise AppValidationError(
+                "Error: La versión de términos debe ser un texto",
+                "TERMS_VERSION_MUST_BE_TEXT",
+            )
 
         valor = valor.strip()
         if not valor:
-            raise ValueError("Error: La versión de los términos es obligatoria")
+            raise AppValidationError(
+                "Error: La versión de los términos es obligatoria",
+                "TERMS_VERSION_REQUIRED",
+            )
         if len(valor) > 10:
-            raise ValueError(
-                "Error: La versión de los términos no puede superar los 10 caracteres"
+            raise AppValidationError(
+                "Error: La versión de los términos no puede superar los 10 caracteres",
+                "TERMS_VERSION_TOO_LONG",
             )
 
         return valor
@@ -674,7 +807,12 @@ class Usuario(Base):
     def validar_codigo_recuperacion(
         self, key: str, valor: Optional[str]
     ) -> Optional[str]:
-        return _validar_hex64_opcional(valor, "codigo_recuperacion")
+        return _validar_hex64_opcional(
+            valor,
+            "codigo_recuperacion",
+            must_be_string_code="RECOVERY_CODE_HASH_MUST_BE_STRING",
+            invalid_code="RECOVERY_CODE_HASH_INVALID",
+        )
 
 
 # =========================================================
@@ -757,36 +895,55 @@ class Actividad(Base):
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: usuario_id debe ser un entero")
+            raise AppValidationError(
+                "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
+            )
         if valor <= 0:
-            raise ValueError("Error: usuario_id debe ser mayor a 0")
+            raise AppValidationError(
+                "Error: usuario_id debe ser mayor a 0", "USER_ID_MUST_BE_POSITIVE"
+            )
         return valor
 
     @validates("tipo")
     def validar_tipo(self, key: str, valor: Optional[Any]) -> str:
         resultado = _validar_enum_str(
-            valor, VALID_TIPOS_ACTIVIDAD, "El tipo de actividad"
+            valor,
+            VALID_TIPOS_ACTIVIDAD,
+            "El tipo de actividad",
+            must_be_text_code="ACTIVITY_TYPE_MUST_BE_TEXT",
+            invalid_code="ACTIVITY_TYPE_INVALID",
         )
         if resultado is None:
-            raise ValueError("Error: El tipo de actividad es obligatorio")
+            raise AppValidationError(
+                "Error: El tipo de actividad es obligatorio", "ACTIVITY_TYPE_REQUIRED"
+            )
         return resultado
 
     @validates("distancia")
     def validar_distancia(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: La distancia debe ser un número entero")
+            raise AppValidationError(
+                "Error: La distancia debe ser un número entero",
+                "DISTANCE_MUST_BE_INTEGER",
+            )
         return validators.validar_distancia_logica(valor)
 
     @validates("duracion")
     def validar_duracion(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: La duración debe ser un número entero")
+            raise AppValidationError(
+                "Error: La duración debe ser un número entero",
+                "DURATION_MUST_BE_INTEGER",
+            )
         return validators.validar_duracion_logica(valor)
 
     @validates("calorias_quemadas")
     def validar_calorias(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: Las calorías deben ser un número entero")
+            raise AppValidationError(
+                "Error: Las calorías deben ser un número entero",
+                "CALORIES_MUST_BE_INTEGER",
+            )
         return validators.validar_calorias_logica(valor)
 
     @validates("ruta_polilinea")
@@ -796,17 +953,28 @@ class Actividad(Base):
         if valor is None:
             return None
         if not isinstance(valor, str):
-            raise ValueError("Error: La polilínea debe ser un texto")
+            raise AppValidationError(
+                "Error: La polilínea debe ser un texto", "POLYLINE_MUST_BE_TEXT"
+            )
         return validators.validar_polilinea_logica(valor)
 
     @validates("ruta_mapa_url")
     def validar_ruta_mapa_url(self, key: str, valor: Optional[str]) -> Optional[str]:
-        return _validar_url_http_opcional(valor, "La URL del mapa", 2048)
+        return _validar_url_http_opcional(
+            valor,
+            "La URL del mapa",
+            2048,
+            must_be_text_code="MAP_URL_MUST_BE_TEXT",
+            too_long_code="MAP_URL_TOO_LONG",
+            invalid_code="MAP_URL_INVALID",
+        )
 
     @validates("fecha_ruta")
     def validar_fecha_ruta(self, key: str, valor: datetime) -> datetime:
         if not isinstance(valor, datetime):
-            raise ValueError("Error: fecha_ruta debe ser una fecha-hora válida")
+            raise AppValidationError(
+                "Error: fecha_ruta debe ser una fecha-hora válida", "ROUTE_DATE_INVALID"
+            )
         return validators.validar_fecha_ruta_logica(valor)
 
 
@@ -900,22 +1068,40 @@ class SesionRefresh(Base):
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
         if not isinstance(valor, int):
-            raise ValueError("Error: usuario_id debe ser un entero")
+            raise AppValidationError(
+                "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
+            )
         if valor <= 0:
-            raise ValueError("Error: usuario_id debe ser mayor a 0")
+            raise AppValidationError(
+                "Error: usuario_id debe ser mayor a 0", "USER_ID_MUST_BE_POSITIVE"
+            )
         return valor
 
     @validates("jti", "familia_id", "reemplazada_por_jti")
     def validar_ids_sesion(self, key: str, valor: Optional[str]) -> Optional[str]:
         if valor is None:
             return None
-        return _validar_texto_no_vacio(valor, key, 64)
+        return _validar_texto_no_vacio(
+            valor,
+            key,
+            64,
+            must_be_string_code="SESSION_IDENTIFIER_MUST_BE_STRING",
+            empty_code="SESSION_IDENTIFIER_EMPTY",
+            too_long_code="SESSION_IDENTIFIER_TOO_LONG",
+        )
 
     @validates("token_hash")
     def validar_token_hash(self, key: str, valor: str) -> str:
-        resultado = _validar_hex64_opcional(valor, "token_hash")
+        resultado = _validar_hex64_opcional(
+            valor,
+            "token_hash",
+            must_be_string_code="TOKEN_HASH_MUST_BE_STRING",
+            invalid_code="TOKEN_HASH_INVALID",
+        )
         if resultado is None:
-            raise ValueError("Error: token_hash es obligatorio")
+            raise AppValidationError(
+                "Error: token_hash es obligatorio", "TOKEN_HASH_REQUIRED"
+            )
         return resultado
 
     @validates("creada_en", "ultimo_uso_en", "expira_en", "revocada_en")
@@ -923,7 +1109,9 @@ class SesionRefresh(Base):
         valor = _normalizar_datetime_utc(valor)
 
         if key == "expira_en" and valor is None:
-            raise ValueError("Error: expira_en es obligatorio")
+            raise AppValidationError(
+                "Error: expira_en es obligatorio", "EXPIRES_AT_REQUIRED"
+            )
 
         return valor
 

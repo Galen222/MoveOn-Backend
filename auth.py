@@ -11,10 +11,11 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import logging
 from jwt.exceptions import InvalidTokenError
-from fastapi import HTTPException, Header, Depends
+from fastapi import Header, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Any, Optional
 from config import settings
+from exceptions import app_http_exception
 
 logger = logging.getLogger("app.auth")
 
@@ -93,8 +94,10 @@ def decodifica_jwt(token: str, secret: str, expected_typ: str) -> dict[str, Any]
     )
 
     if payload.get("typ") != expected_typ:
-        raise HTTPException(
-            status_code=401, detail=f"Error: Token no es de tipo {expected_typ}"
+        raise app_http_exception(
+            status_code=401,
+            mensaje=f"Error: Token no es de tipo {expected_typ}",
+            error_code="TOKEN_TYPE_MISMATCH",
         )
 
     return payload
@@ -119,9 +122,10 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
             "sesion_aplicacion_ausente",
             extra={},
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=403,
-            detail="Error: Falta el token de sesión",
+            mensaje="Error: Falta el token de sesión",
+            error_code="SESSION_TOKEN_MISSING",
             headers={"x-app-session-expired": "1"},
         )
 
@@ -134,9 +138,10 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
             "sesion_aplicacion_invalida_o_expirada",
             extra={},
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=403,
-            detail="Error: Token inválido o expirado",
+            mensaje="Error: Token inválido o expirado",
+            error_code="TOKEN_INVALID_OR_EXPIRED",
             headers={"x-app-session-expired": "1"},
         )
     except HTTPException:
@@ -145,9 +150,10 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
             extra={},
         )
         # Si falla por typ u otras validaciones, lo tratamos igual que expirado/inválido
-        raise HTTPException(
+        raise app_http_exception(
             status_code=403,
-            detail="Error: Token inválido o expirado",
+            mensaje="Error: Token inválido o expirado",
+            error_code="TOKEN_INVALID_OR_EXPIRED",
             headers={"x-app-session-expired": "1"},
         )
 
@@ -182,8 +188,10 @@ def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
             "decodificacion_refresh_fallida",
             extra={},
         )
-        raise HTTPException(
-            status_code=401, detail="Error: Refresh token inválido o expirado"
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token inválido o expirado",
+            error_code="REFRESH_TOKEN_INVALID_OR_EXPIRED",
         )
 
 
@@ -206,8 +214,10 @@ def obtener_usuario_actual(
                 "access_token_sin_sub_valido",
                 extra={},
             )
-            raise HTTPException(
-                status_code=401, detail="Error: Token no contiene un usuario válido"
+            raise app_http_exception(
+                status_code=401,
+                mensaje="Error: Token no contiene un usuario válido",
+                error_code="TOKEN_MISSING_VALID_USER",
             )
 
         return int(sub)
@@ -216,6 +226,8 @@ def obtener_usuario_actual(
             "access_token_invalido_o_expirado",
             extra={},
         )
-        raise HTTPException(
-            status_code=401, detail="Error: Token de acceso inválido o expirado"
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Token de acceso inválido o expirado",
+            error_code="ACCESS_TOKEN_INVALID_OR_EXPIRED",
         )

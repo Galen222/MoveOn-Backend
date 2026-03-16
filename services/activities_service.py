@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, delete as sa_delete, and_
-from fastapi import HTTPException
+from exceptions import app_http_exception
 import logging
 import database
 import schemas
@@ -33,7 +33,11 @@ async def crear_actividad(
                 "usuario_id": usuario_actual_id,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     # Se Crea el objeto de base de datos.
     nueva_actividad = database.Actividad(
@@ -126,7 +130,11 @@ async def obtener_actividad(
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     _, actividad = fila
 
@@ -139,7 +147,11 @@ async def obtener_actividad(
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Actividad no encontrada",
+            error_code="ACTIVITY_NOT_FOUND",
+        )
 
     return actividad
 
@@ -169,7 +181,11 @@ async def obtener_actividades(
                 "limit": limit,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     total = (
         await db.execute(
@@ -245,7 +261,11 @@ async def eliminar_actividad(
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     usuario, actividad = fila
 
@@ -257,7 +277,11 @@ async def eliminar_actividad(
                 "actividad_id": id_actividad,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Actividad no encontrada")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Actividad no encontrada",
+            error_code="ACTIVITY_NOT_FOUND",
+        )
 
     # Se resta la distancia y las calorías al eliminar la actividad.
     # Evita números negativos por errores de redondeo flotante.
@@ -316,7 +340,11 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
                 "usuario_id": usuario_actual_id,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     # Contar cuántas hay, para devolver el número borrado.
     num_borrados = (

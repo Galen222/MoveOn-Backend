@@ -27,6 +27,7 @@ from schemas import ProvinciaEspaña
 from utils import calculos
 from starlette.concurrency import run_in_threadpool
 from config import settings
+from exceptions import app_http_exception
 from ip_rate_limit import rate_limit
 from datetime import datetime, timezone
 
@@ -217,9 +218,10 @@ async def foto_perfil(
                 file_service.borrar_foto, nueva_ruta_foto, usuario_actual_id
             )
 
-        raise HTTPException(
+        raise app_http_exception(
             status_code=500,
-            detail="Error: No se ha podido actualizar la foto de perfil",
+            mensaje="Error: No se ha podido actualizar la foto de perfil",
+            error_code="PROFILE_PHOTO_UPDATE_FAILED",
         )
 
     # 4) Solo después del commit borramos la antigua

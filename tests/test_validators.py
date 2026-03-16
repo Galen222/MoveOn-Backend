@@ -1,3 +1,4 @@
+
 # tests/test_validators.py
 #
 # Tests unitarios para utils/validators.py.
@@ -7,6 +8,7 @@
 import pytest
 from datetime import date, datetime, timezone, timedelta
 
+from exceptions import AppValidationError
 from utils import validators
 
 
@@ -274,20 +276,29 @@ class TestInterceptarErrorPydantic:
             return v.upper()
 
         resultado = validators.interceptar_error_pydantic(
-            "hola", handler, "Error custom"
+            "hola",
+            handler,
+            "CUSTOM_VALIDATION_ERROR",
+            "Error custom",
         )
         assert resultado == "HOLA"
 
-    def test_handler_falla_lanza_valueerror_con_mensaje_custom(self):
-        """Si el handler lanza cualquier excepción, se reemplaza por ValueError con mensaje personalizado."""
+    def test_handler_falla_lanza_appvalidationerror_con_mensaje_y_codigo(self):
+        """Si el handler lanza cualquier excepción, se reemplaza por AppValidationError con mensaje y error_code."""
 
         def handler_que_falla(v):
             raise TypeError("error interno de pydantic")
 
-        with pytest.raises(ValueError, match="Mi mensaje personalizado"):
+        with pytest.raises(AppValidationError) as exc_info:
             validators.interceptar_error_pydantic(
-                "dato", handler_que_falla, "Mi mensaje personalizado"
+                "dato",
+                handler_que_falla,
+                "CUSTOM_VALIDATION_ERROR",
+                "Mi mensaje personalizado",
             )
+
+        assert str(exc_info.value) == "Mi mensaje personalizado"
+        assert exc_info.value.error_code == "CUSTOM_VALIDATION_ERROR"
 
     def test_captura_cualquier_tipo_de_excepcion(self):
         """No solo TypeError: cualquier Exception se intercepta."""
@@ -295,10 +306,16 @@ class TestInterceptarErrorPydantic:
         def handler_runtime(v):
             raise RuntimeError("algo raro")
 
-        with pytest.raises(ValueError, match="Error capturado"):
+        with pytest.raises(AppValidationError) as exc_info:
             validators.interceptar_error_pydantic(
-                42, handler_runtime, "Error capturado"
+                42,
+                handler_runtime,
+                "RUNTIME_VALIDATION_ERROR",
+                "Error capturado",
             )
+
+        assert str(exc_info.value) == "Error capturado"
+        assert exc_info.value.error_code == "RUNTIME_VALIDATION_ERROR"
 
     def test_handler_con_none_funciona(self):
         """Si el valor es None y el handler lo acepta, devuelve None."""
@@ -306,16 +323,29 @@ class TestInterceptarErrorPydantic:
         def handler(v):
             return v
 
-        resultado = validators.interceptar_error_pydantic(None, handler, "Error")
+        resultado = validators.interceptar_error_pydantic(
+            None,
+            handler,
+            "NONE_VALIDATION_ERROR",
+            "Error",
+        )
         assert resultado is None
 
     def test_handler_con_valueerror_tambien_se_intercepta(self):
-        """Un ValueError del handler se reemplaza por el mensaje personalizado."""
+        """Un ValueError del handler se reemplaza por AppValidationError con el mensaje limpio."""
 
         def handler_value_error(v):
             raise ValueError("mensaje original de pydantic")
 
-        with pytest.raises(ValueError, match="Mensaje limpio"):
+        with pytest.raises(AppValidationError) as exc_info:
             validators.interceptar_error_pydantic(
-                "x", handler_value_error, "Mensaje limpio"
+                "x",
+                handler_value_error,
+                "VALUE_ERROR_INTERCEPTED",
+                "Mensaje limpio",
             )
+
+        assert str(exc_info.value) == "Mensaje limpio"
+        assert exc_info.value.error_code == "VALUE_ERROR_INTERCEPTED"
+
+

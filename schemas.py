@@ -20,6 +20,7 @@ from datetime import date, datetime
 from typing import Optional, Any, List
 import re
 from utils import validators
+from exceptions import AppValidationError
 from domain.enums import ProvinciaEspaña, GeneroUsuario, TipoActividad
 
 
@@ -54,13 +55,22 @@ class Registro(BaseModel):
         """Revisa que se reciban todos los campos obligatorios."""
         if isinstance(values, dict):
             if "nombre_usuario" not in values or not values["nombre_usuario"]:
-                raise ValueError("Error: El nombre de usuario es obligatorio")
+                raise AppValidationError(
+                    "Error: El nombre de usuario es obligatorio", "USERNAME_REQUIRED"
+                )
             if "email" not in values or not values["email"]:
-                raise ValueError("Error: El email es obligatorio")
+                raise AppValidationError(
+                    "Error: El email es obligatorio", "EMAIL_REQUIRED"
+                )
             if "password" not in values or not values["password"]:
-                raise ValueError("Error: La contraseña es obligatoria")
+                raise AppValidationError(
+                    "Error: La contraseña es obligatoria", "PASSWORD_REQUIRED"
+                )
             if "fecha_nacimiento" not in values:
-                raise ValueError("Error: La fecha de nacimiento es obligatoria")
+                raise AppValidationError(
+                    "Error: La fecha de nacimiento es obligatoria",
+                    "BIRTH_DATE_REQUIRED",
+                )
         return values
 
     @field_validator("nombre_usuario")
@@ -70,18 +80,21 @@ class Registro(BaseModel):
         valor = valor.strip()
         # Validación de longitud mínima.
         if len(valor) < 5:
-            raise ValueError(
-                "Error: El nombre de usuario debe tener al menos 5 caracteres"
+            raise AppValidationError(
+                "Error: El nombre de usuario debe tener al menos 5 caracteres",
+                "USERNAME_TOO_SHORT",
             )
 
         if len(valor) > 50:  # ✅ añadido
-            raise ValueError(
-                "Error: El nombre de usuario no puede superar los 50 caracteres"
+            raise AppValidationError(
+                "Error: El nombre de usuario no puede superar los 50 caracteres",
+                "USERNAME_TOO_LONG",
             )
         # Validación formato alfanumérico sin espacios.
         if not re.match("^[a-zA-Z0-9]*$", valor):
-            raise ValueError(
-                "Error: El nombre de usuario solo puede contener letras y números"
+            raise AppValidationError(
+                "Error: El nombre de usuario solo puede contener letras y números",
+                "USERNAME_INVALID_FORMAT",
             )
         return valor
 
@@ -106,7 +119,10 @@ class Registro(BaseModel):
     def validar_email_registro_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato del correo electrónico no es válido"
+            v,
+            handler,
+            "EMAIL_FORMAT_INVALID",
+            "Error: El formato del correo electrónico no es válido",
         )
 
     @field_validator("password")
@@ -119,7 +135,10 @@ class Registro(BaseModel):
     def validar_fecha_nacimiento_registro_custom(cls, v, handler):
         """Intercepta el formato de fecha para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La fecha debe tener formato AAAA-MM-DD"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La fecha debe tener formato AAAA-MM-DD",
         )
 
     @field_validator("fecha_nacimiento")
@@ -132,7 +151,7 @@ class Registro(BaseModel):
     def validar_genero_registro_custom(cls, v, handler):
         """Intercepta el genero para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El género seleccionado no es válido"
+            v, handler, "VALIDATION_ERROR", "Error: El género seleccionado no es válido"
         )
 
     @field_validator("altura", mode="wrap")
@@ -140,7 +159,10 @@ class Registro(BaseModel):
     def validar_altura_registro_custom(cls, v, handler):
         """Intercepta la altura para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La altura debe ser un número entero en centimetros"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La altura debe ser un número entero en centimetros",
         )
 
     @field_validator("altura")
@@ -153,7 +175,10 @@ class Registro(BaseModel):
     def validar_peso_registro_custom(cls, v, handler):
         """Intercepta el peso para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El peso debe ser un número en kilos"
+            v,
+            handler,
+            "WEIGHT_MUST_BE_KILOGRAM_NUMBER",
+            "Error: El peso debe ser un número en kilos",
         )
 
     @field_validator("peso")
@@ -166,7 +191,10 @@ class Registro(BaseModel):
     def validar_provincia_registro_custom(cls, v, handler):
         """Intercepta el error de Enum para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La ubicación seleccionada no es válida"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La ubicación seleccionada no es válida",
         )
 
     @field_validator("perfil_visible", mode="wrap")
@@ -174,15 +202,19 @@ class Registro(BaseModel):
     def validar_perfil_visible_registro_custom(cls, v, handler):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato de perfil visible no es válido"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: El formato de perfil visible no es válido",
         )
 
     @field_validator("acepta_terminos")
     @classmethod
     def validar_acepta_terminos(cls, v: bool) -> bool:
         if not v:
-            raise ValueError(
-                "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte"
+            raise AppValidationError(
+                "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte",
+                "REGISTRATION_CONSENTS_REQUIRED",
             )
         return v
 
@@ -190,7 +222,10 @@ class Registro(BaseModel):
     @classmethod
     def validar_fecha_aceptacion_terminos_custom(cls, v, handler):
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La fecha de aceptación debe tener formato ISO-8601"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La fecha de aceptación debe tener formato ISO-8601",
         )
 
     @field_validator("fecha_aceptacion_terminos")
@@ -201,7 +236,10 @@ class Registro(BaseModel):
         ahora = datetime.now(timezone.utc)
         v_utc = v if v.tzinfo else v.replace(tzinfo=timezone.utc)
         if v_utc > ahora + timedelta(minutes=5):
-            raise ValueError("Error: La fecha de aceptación no puede ser futura")
+            raise AppValidationError(
+                "Error: La fecha de aceptación no puede ser futura",
+                "TERMS_ACCEPTED_AT_IN_FUTURE",
+            )
         return v_utc
 
     @field_validator("version_terminos")
@@ -209,7 +247,10 @@ class Registro(BaseModel):
     def validar_version_terminos(cls, v: str) -> str:
         v = v.strip()
         if not v:
-            raise ValueError("Error: La versión de los términos es obligatoria")
+            raise AppValidationError(
+                "Error: La versión de los términos es obligatoria",
+                "TERMS_VERSION_REQUIRED",
+            )
         return v
 
 
@@ -231,9 +272,13 @@ class Login(BaseModel):
         """Revisa que se reciban todos los campos obligatorios."""
         if isinstance(values, dict):
             if "identificador" not in values or not values["identificador"]:
-                raise ValueError("Error: El identificador es obligatorio")
+                raise AppValidationError(
+                    "Error: El identificador es obligatorio", "IDENTIFIER_REQUIRED"
+                )
             if "password" not in values or not values["password"]:
-                raise ValueError("Error: La contraseña es obligatoria")
+                raise AppValidationError(
+                    "Error: La contraseña es obligatoria", "PASSWORD_REQUIRED"
+                )
         return values
 
     @field_validator("identificador", mode="before")
@@ -243,7 +288,9 @@ class Login(BaseModel):
             # Quitar espacios.
             valor_limpio = valor.strip()
             if not valor_limpio:
-                raise ValueError("Error: El identificador no puede estar vacío")
+                raise AppValidationError(
+                    "Error: El identificador no puede estar vacío", "IDENTIFIER_EMPTY"
+                )
             return valor_limpio
         return valor
 
@@ -263,7 +310,9 @@ class SolicitudRefreshToken(BaseModel):
     def validar_campos_requeridos_refresh(cls, values: Any) -> Any:
         if isinstance(values, dict):
             if "refresh_token" not in values or not values["refresh_token"]:
-                raise ValueError("Error: El refresh token es obligatorio")
+                raise AppValidationError(
+                    "Error: El refresh token es obligatorio", "REFRESH_TOKEN_REQUIRED"
+                )
         return values
 
     @field_validator("refresh_token", mode="before")
@@ -272,7 +321,10 @@ class SolicitudRefreshToken(BaseModel):
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
-                raise ValueError("Error: El refresh token no puede estar vacío")
+                raise AppValidationError(
+                    "Error: El refresh token no puede estar vacío",
+                    "REFRESH_TOKEN_EMPTY",
+                )
             return valor_limpio
         return valor
 
@@ -346,7 +398,10 @@ class ActualizarPerfil(BaseModel):
     def validar_email_actualizacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato del correo electrónico no es válido"
+            v,
+            handler,
+            "EMAIL_FORMAT_INVALID",
+            "Error: El formato del correo electrónico no es válido",
         )
 
     @field_validator("password")
@@ -359,7 +414,10 @@ class ActualizarPerfil(BaseModel):
     def validar_fecha_nacimiento_actualizacion_custom(cls, v, handler):
         """Intercepta el formato de fecha para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La fecha debe tener formato AAAA-MM-DD"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La fecha debe tener formato AAAA-MM-DD",
         )
 
     @field_validator("fecha_nacimiento")
@@ -372,7 +430,7 @@ class ActualizarPerfil(BaseModel):
     def validar_genero_actualizacion_custom(cls, v, handler):
         """Intercepta el genero para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El género seleccionado no es válido"
+            v, handler, "VALIDATION_ERROR", "Error: El género seleccionado no es válido"
         )
 
     @field_validator("altura", mode="wrap")
@@ -380,7 +438,10 @@ class ActualizarPerfil(BaseModel):
     def validar_altura_actualizacion_custom(cls, v, handler):
         """Intercepta la altura para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La altura debe ser un número entero en cm"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La altura debe ser un número entero en cm",
         )
 
     @field_validator("altura")
@@ -393,7 +454,10 @@ class ActualizarPerfil(BaseModel):
     def validar_peso_actualizacion_custom(cls, v, handler):
         """Intercepta el peso para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El peso debe ser un número en kilos"
+            v,
+            handler,
+            "WEIGHT_MUST_BE_KILOGRAM_NUMBER",
+            "Error: El peso debe ser un número en kilos",
         )
 
     @field_validator("peso")
@@ -406,7 +470,10 @@ class ActualizarPerfil(BaseModel):
     def validar_provincia_actualizacion_custom(cls, v, handler):
         """Intercepta el error de Enum para para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La ubicación seleccionada no es válida"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La ubicación seleccionada no es válida",
         )
 
     @field_validator("perfil_visible", mode="wrap")
@@ -414,7 +481,10 @@ class ActualizarPerfil(BaseModel):
     def validar_perfil_visible_actualizacion_custom(cls, v, handler):
         """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato de perfil visible no es válido"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: El formato de perfil visible no es válido",
         )
 
     @field_validator("objetivo_semanal_metros")
@@ -423,12 +493,14 @@ class ActualizarPerfil(BaseModel):
         if v is None:
             return v
         if not isinstance(v, int):
-            raise ValueError(
-                "Error: El objetivo semanal debe ser un número entero en metros"
+            raise AppValidationError(
+                "Error: El objetivo semanal debe ser un número entero en metros",
+                "WEEKLY_GOAL_MUST_BE_INTEGER_METERS",
             )
         if not (10 <= v <= 2_000_000):
-            raise ValueError(
-                "Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros"
+            raise AppValidationError(
+                "Error: El objetivo semanal debe estar entre 10 y 2 000 000 metros",
+                "WEEKLY_GOAL_OUT_OF_RANGE",
             )
         return v
 
@@ -438,12 +510,14 @@ class ActualizarPerfil(BaseModel):
         if v is None:
             return v
         if not isinstance(v, int):
-            raise ValueError(
-                "Error: El objetivo mensual debe ser un número entero en metros"
+            raise AppValidationError(
+                "Error: El objetivo mensual debe ser un número entero en metros",
+                "MONTHLY_GOAL_MUST_BE_INTEGER_METERS",
             )
         if not (10 <= v <= 2_000_000):
-            raise ValueError(
-                "Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros"
+            raise AppValidationError(
+                "Error: El objetivo mensual debe estar entre 10 y 2 000 000 metros",
+                "MONTHLY_GOAL_OUT_OF_RANGE",
             )
         return v
 
@@ -494,7 +568,9 @@ class SolicitarPassword(BaseModel):
         """Revisa que se reciban todos los campos obligatorios."""
         if isinstance(values, dict):
             if "email" not in values or not values["email"]:
-                raise ValueError("Error: El email es obligatorio")
+                raise AppValidationError(
+                    "Error: El email es obligatorio", "EMAIL_REQUIRED"
+                )
         return values
 
     @field_validator("email", mode="before")
@@ -510,7 +586,10 @@ class SolicitarPassword(BaseModel):
     def validar_email_solicitar_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato del correo electrónico no es válido"
+            v,
+            handler,
+            "EMAIL_FORMAT_INVALID",
+            "Error: El formato del correo electrónico no es válido",
         )
 
 
@@ -527,11 +606,17 @@ class ConfirmarPassword(BaseModel):
         """Revisa que se reciban todos los campos obligatorios."""
         if isinstance(values, dict):
             if "email" not in values or not values["email"]:
-                raise ValueError("Error: El email es obligatorio")
+                raise AppValidationError(
+                    "Error: El email es obligatorio", "EMAIL_REQUIRED"
+                )
             if "codigo" not in values or not values["codigo"]:
-                raise ValueError("Error: El código es obligatorio")
+                raise AppValidationError(
+                    "Error: El código es obligatorio", "CODE_REQUIRED"
+                )
             if "nueva_password" not in values or not values["nueva_password"]:
-                raise ValueError("Error: La nueva contraseña es obligatoria")
+                raise AppValidationError(
+                    "Error: La nueva contraseña es obligatoria", "NEW_PASSWORD_REQUIRED"
+                )
         return values
 
     @field_validator("nueva_password")
@@ -546,11 +631,19 @@ class ConfirmarPassword(BaseModel):
             # Quitar espacios delante y detrás.
             valor_limpio = v.strip()
             if not valor_limpio:
-                raise ValueError("Error: El código no puede estar vacío")
+                raise AppValidationError(
+                    "Error: El código no puede estar vacío", "CODE_EMPTY"
+                )
             if len(valor_limpio) != 6:
-                raise ValueError("Error: El código debe tener exactamente 6 caracteres")
+                raise AppValidationError(
+                    "Error: El código debe tener exactamente 6 caracteres",
+                    "CODE_INVALID_LENGTH",
+                )
             if not valor_limpio.isdigit():
-                raise ValueError("Error: El código debe contener solo números")
+                raise AppValidationError(
+                    "Error: El código debe contener solo números",
+                    "CODE_MUST_BE_NUMERIC",
+                )
             return valor_limpio
         return v
 
@@ -567,7 +660,10 @@ class ConfirmarPassword(BaseModel):
     def validar_email_confirmar_recuperacion_custom(cls, v, handler):
         """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato del correo electrónico no es válido"
+            v,
+            handler,
+            "EMAIL_FORMAT_INVALID",
+            "Error: El formato del correo electrónico no es válido",
         )
 
 
@@ -587,13 +683,23 @@ class GuardarActividad(BaseModel):
         """Revisa manualmente que lleguen los datos para dar el mensaje de error personalizado."""
         if isinstance(values, dict):
             if "tipo" not in values:
-                raise ValueError("Error: El tipo de actividad es obligatorio")
+                raise AppValidationError(
+                    "Error: El tipo de actividad es obligatorio",
+                    "ACTIVITY_TYPE_REQUIRED",
+                )
             if "distancia" not in values:
-                raise ValueError("Error: La distancia es obligatoria")
+                raise AppValidationError(
+                    "Error: La distancia es obligatoria", "DISTANCE_REQUIRED"
+                )
             if "duracion" not in values:
-                raise ValueError("Error: La duración es obligatoria")
+                raise AppValidationError(
+                    "Error: La duración es obligatoria", "DURATION_REQUIRED"
+                )
             if "calorias_quemadas" not in values:
-                raise ValueError("Error: Las calorías quemadas son obligatorias")
+                raise AppValidationError(
+                    "Error: Las calorías quemadas son obligatorias",
+                    "BURNED_CALORIES_REQUIRED",
+                )
         return values
 
     @field_validator("tipo", mode="wrap")
@@ -601,7 +707,7 @@ class GuardarActividad(BaseModel):
     def validar_tipo_actividad_custom(cls, v, handler):
         """Intercepta errores en el Enum de tipo de actividad."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El tipo de actividad no es válido"
+            v, handler, "VALIDATION_ERROR", "Error: El tipo de actividad no es válido"
         )
 
     @field_validator("distancia", mode="wrap")
@@ -609,7 +715,10 @@ class GuardarActividad(BaseModel):
     def validar_distancia_actividad_custom(cls, v, handler):
         """Intercepta errores de tipo en distancia."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La distancia debe ser un número válido en metros"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La distancia debe ser un número válido en metros",
         )
 
     @field_validator("distancia")
@@ -622,7 +731,10 @@ class GuardarActividad(BaseModel):
     def validar_duracion_actividad_custom(cls, v, handler):
         """Intercepta errores de tipo en duración."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: La duración debe ser un número entero en segundos"
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La duración debe ser un número entero en segundos",
         )
 
     @field_validator("duracion")
@@ -635,7 +747,10 @@ class GuardarActividad(BaseModel):
     def validar_calorias_actividad_custom(cls, v, handler):
         """Intercepta errores de tipo en calorías."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: Las calorías deben ser un número entero"
+            v,
+            handler,
+            "CALORIES_MUST_BE_INTEGER",
+            "Error: Las calorías deben ser un número entero",
         )
 
     @field_validator("calorias_quemadas")
@@ -648,7 +763,7 @@ class GuardarActividad(BaseModel):
     def validar_fecha_ruta_actividad_custom(cls, v, handler):
         """Intercepta errores de formato de fecha."""
         return validators.interceptar_error_pydantic(
-            v, handler, "Error: El formato de fecha no es válido"
+            v, handler, "VALIDATION_ERROR", "Error: El formato de fecha no es válido"
         )
 
     @field_validator("fecha_ruta")

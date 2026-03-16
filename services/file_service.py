@@ -18,6 +18,7 @@ import cloudinary.uploader
 import cloudinary
 
 from config import settings
+from exceptions import app_http_exception
 
 # Pillow para verificar que el archivo es realmente una imagen
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -97,7 +98,11 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 
 def validar_seguridad(archivo: UploadFile) -> bytes:
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
-        raise HTTPException(status_code=400, detail="Error: Solo imágenes JPG o PNG")
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: Solo imágenes JPG o PNG",
+            error_code="IMAGE_FORMAT_NOT_ALLOWED",
+        )
 
     archivo.file.seek(0, os.SEEK_END)
     tamano = archivo.file.tell()
@@ -105,9 +110,10 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
 
     if tamano > MAX_IMAGE_BYTES:
         mb = MAX_IMAGE_BYTES / (1024 * 1024)
-        raise HTTPException(
+        raise app_http_exception(
             status_code=400,
-            detail=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)",
+            mensaje=f"Error: La imagen supera el máximo permitido ({mb:.2f}MB)",
+            error_code="IMAGE_FILE_TOO_LARGE",
         )
 
     content = archivo.file.read()
@@ -116,30 +122,38 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
     content_lower = content.lower()
     for signature in MALICIOUS_SIGNATURES:
         if signature in content_lower:
-            raise HTTPException(
-                status_code=400, detail="Error: Contenido malicioso detectado"
+            raise app_http_exception(
+                status_code=400,
+                mensaje="Error: Contenido malicioso detectado",
+                error_code="MALICIOUS_CONTENT_DETECTED",
             )
 
     try:
         img = Image.open(BytesIO(content))
         img.verify()
     except (UnidentifiedImageError, OSError):
-        raise HTTPException(
-            status_code=400, detail="Error: El archivo no es una imagen válida"
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El archivo no es una imagen válida",
+            error_code="INVALID_IMAGE_FILE",
         )
 
     try:
         img2 = Image.open(BytesIO(content))
         img2.load()
         if (img2.width * img2.height) > MAX_IMAGE_PIXELS:
-            raise HTTPException(
-                status_code=400, detail="Error: Imagen demasiado grande"
+            raise app_http_exception(
+                status_code=400,
+                mensaje="Error: Imagen demasiado grande",
+                error_code="IMAGE_TOO_LARGE",
             )
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=400, detail="Error: El archivo no es una imagen válida"
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El archivo no es una imagen válida",
+            error_code="INVALID_IMAGE_FILE",
         )
 
     return content
@@ -154,8 +168,10 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
         # Así evitamos que algunas fotos queden giradas al strippear EXIF.
         im = ImageOps.exif_transpose(im)
     except (UnidentifiedImageError, OSError):
-        raise HTTPException(
-            status_code=400, detail="Error: El archivo no es una imagen válida"
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El archivo no es una imagen válida",
+            error_code="INVALID_IMAGE_FILE",
         )
 
     out = BytesIO()
@@ -173,9 +189,10 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
 
         if len(data) > MAX_IMAGE_BYTES:
             mb = MAX_IMAGE_BYTES / (1024 * 1024)
-            raise HTTPException(
+            raise app_http_exception(
                 status_code=400,
-                detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)",
+                mensaje=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)",
+                error_code="PROCESSED_IMAGE_TOO_LARGE",
             )
         return data
 
@@ -190,9 +207,10 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
 
     if len(data) > MAX_IMAGE_BYTES:
         mb = MAX_IMAGE_BYTES / (1024 * 1024)
-        raise HTTPException(
+        raise app_http_exception(
             status_code=400,
-            detail=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)",
+            mensaje=f"Error: La imagen procesada supera el máximo ({mb:.2f}MB)",
+            error_code="PROCESSED_IMAGE_TOO_LARGE",
         )
 
     return data
@@ -232,9 +250,10 @@ def procesar_subida(
                 "storage_type": settings.STORAGE_TYPE,
             },
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=500,
-            detail="Error: No se ha podido procesar la imagen",
+            mensaje="Error: No se ha podido procesar la imagen",
+            error_code="IMAGE_PROCESSING_FAILED",
         )
 
 
@@ -280,9 +299,10 @@ def guardar_local(
                 ),
             },
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=500,
-            detail="Error: No se ha podido guardar la imagen localmente",
+            mensaje="Error: No se ha podido guardar la imagen localmente",
+            error_code="IMAGE_SAVE_FAILED",
         )
 
 
@@ -307,9 +327,10 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
 
         url = resultado.get("secure_url")
         if not url:
-            raise HTTPException(
+            raise app_http_exception(
                 status_code=500,
-                detail="Error: Cloudinary no devolvió URL válida",
+                mensaje="Error: Cloudinary no devolvió URL válida",
+                error_code="CLOUDINARY_INVALID_URL",
             )
 
         # Guardamos una URL canónica sin versión.
@@ -326,9 +347,10 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
                 "storage_type": settings.STORAGE_TYPE,
             },
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=500,
-            detail="Error: No se ha podido subir la imagen a la nube",
+            mensaje="Error: No se ha podido subir la imagen a la nube",
+            error_code="IMAGE_UPLOAD_FAILED",
         )
 
 

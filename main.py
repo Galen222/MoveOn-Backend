@@ -4,7 +4,7 @@
 Punto de Entrada Principal - MoveOn API.
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 import logging
 from config import settings
+from exceptions import app_http_exception
 
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -87,7 +88,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.8.3",
+    version="0.8.4",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
@@ -235,5 +236,9 @@ async def readyz(db: AsyncSession = Depends(database.obtener_db)):
 @rate_limit(settings.RL_FAVICON)
 async def favicon(request: Request):
     if not os.path.exists("favicon.ico"):
-        raise HTTPException(status_code=404, detail="No existe favicon.ico")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="No existe favicon.ico",
+            error_code="FAVICON_NOT_FOUND",
+        )
     return FileResponse("favicon.ico")

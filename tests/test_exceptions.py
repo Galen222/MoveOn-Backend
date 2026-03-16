@@ -65,7 +65,7 @@ class TestErrorResponse:
             {
                 "columna": "email",
                 "mensaje": "inválido",
-                "error_code": "INVALIDO",
+                "error_code": "VALIDATION_ERROR",
             }
         ]
 
@@ -104,6 +104,15 @@ class TestManejadorHttpException:
         assert body["error_code"] == "RESOURCE_NOT_FOUND"
         assert "detail" not in body
 
+    def test_string_detail_400_prioriza_codigo_semantico_sobre_bad_request(self):
+        exc = HTTPException(status_code=400, detail="Error: El email ya está en uso")
+        resp = manejador_http_exception(_fake_request(), exc)
+        body = _body(resp)
+
+        assert resp.status_code == 400
+        assert body["mensaje"] == "Error: El email ya está en uso"
+        assert body["error_code"] == "BAD_REQUEST"
+
     def test_list_detail_genera_formato_con_detail(self):
         detalle = [{"columna": "password", "mensaje": "muy corta"}]
         exc = HTTPException(status_code=422, detail=detalle)
@@ -117,7 +126,7 @@ class TestManejadorHttpException:
             {
                 "columna": "password",
                 "mensaje": "muy corta",
-                "error_code": "MUY_CORTA",
+                "error_code": "VALIDATION_ERROR",
             }
         ]
 

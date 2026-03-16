@@ -20,6 +20,7 @@ import auth
 import database
 import schemas
 from config import settings
+from exceptions import app_http_exception
 from services import email_service
 from typing import Optional
 
@@ -148,16 +149,22 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     familia_id = payload.get("fam")
 
     if not isinstance(usuario_id_token, str) or not usuario_id_token.isdigit():
-        raise HTTPException(
-            status_code=401, detail="Error: Refresh token inválido (sub)"
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token inválido (sub)",
+            error_code="REFRESH_TOKEN_INVALID_SUB",
         )
     if not isinstance(jti, str) or not jti:
-        raise HTTPException(
-            status_code=401, detail="Error: Refresh token inválido (jti)"
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token inválido (jti)",
+            error_code="REFRESH_TOKEN_INVALID_JTI",
         )
     if not isinstance(familia_id, str) or not familia_id:
-        raise HTTPException(
-            status_code=401, detail="Error: Refresh token inválido (familia)"
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token inválido (familia)",
+            error_code="REFRESH_TOKEN_INVALID_FAMILY",
         )
 
     usuario_id_token = int(usuario_id_token)
@@ -188,7 +195,11 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
                 "familia_id": familia_id,
             },
         )
-        raise HTTPException(status_code=401, detail="Error: Refresh token inválido")
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token inválido",
+            error_code="REFRESH_TOKEN_INVALID",
+        )
 
     refresh_hash = _hash_refresh_token(refresh_token)
     if not hmac.compare_digest(str(sesion.token_hash), refresh_hash):
@@ -203,8 +214,10 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         # Token manipulado / no coincide con el registrado
         await _revocar_familia_refresh(db, sesion.familia_id)
         await _commit_or_rollback()
-        raise HTTPException(
-            status_code=401, detail="Error: Refresh token inválido o reutilizado"
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token inválido o reutilizado",
+            error_code="REFRESH_TOKEN_INVALID_OR_REUSED",
         )
 
     if sesion.revocada_en is not None:
@@ -219,7 +232,11 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         # Reutilización de token rotado/revocado => revocamos toda la familia
         await _revocar_familia_refresh(db, sesion.familia_id)
         await _commit_or_rollback()
-        raise HTTPException(status_code=401, detail="Error: Refresh token reutilizado")
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token reutilizado",
+            error_code="REFRESH_TOKEN_REUSED",
+        )
 
     ahora = _ahora_utc()
     if ahora > _normalizar_utc(sesion.expira_en):
@@ -233,7 +250,11 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         )
         sesion.revocada_en = ahora
         await _commit_or_rollback()
-        raise HTTPException(status_code=401, detail="Error: Refresh token expirado")
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Refresh token expirado",
+            error_code="REFRESH_TOKEN_EXPIRED",
+        )
 
     usuario = (
         await db.execute(
@@ -252,7 +273,11 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
         )
         sesion.revocada_en = ahora
         await _commit_or_rollback()
-        raise HTTPException(status_code=401, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     # Rotación: invalidar refresh actual y crear uno nuevo en la misma familia
     nuevo_jti = uuid.uuid4().hex
@@ -491,7 +516,11 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
                 "email": datos.email.lower(),
             },
         )
-        raise HTTPException(status_code=400, detail="Error: Código o email inválidos")
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: Código o email inválidos",
+            error_code="RECOVERY_CODE_OR_EMAIL_INVALID",
+        )
 
     if _ahora_utc() > _normalizar_utc(usuario.codigo_expiracion):
         logger.info(
@@ -501,7 +530,11 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
                 "email": datos.email.lower(),
             },
         )
-        raise HTTPException(status_code=400, detail="Error: El código ha expirado")
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El código ha expirado",
+            error_code="CODE_EXPIRED",
+        )
 
     try:
         usuario.password_encriptada = await run_in_threadpool(

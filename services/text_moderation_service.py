@@ -12,6 +12,7 @@ from typing import Literal
 from fastapi import HTTPException
 
 from config import settings
+from exceptions import app_http_exception
 
 logger = logging.getLogger("app.text_moderation")
 
@@ -87,12 +88,16 @@ def _moderar_activado() -> bool:
     return bool(settings.TEXT_MODERATION_ENABLED)
 
 
-def _mensaje_bloqueo(field: FieldType) -> str:
+def _bloqueo_payload(field: FieldType) -> tuple[str, str]:
     if field == "username":
         return (
-            "Error: El nombre de usuario contiene lenguaje inapropiado o no permitido"
+            "Error: El nombre de usuario contiene lenguaje inapropiado o no permitido",
+            "USERNAME_INAPPROPRIATE_OR_NOT_ALLOWED",
         )
-    return "Error: El nombre real contiene lenguaje inapropiado o no permitido"
+    return (
+        "Error: El nombre real contiene lenguaje inapropiado o no permitido",
+        "REAL_NAME_INAPPROPRIATE_OR_NOT_ALLOWED",
+    )
 
 
 def _reserved_tokens() -> list[str]:
@@ -101,22 +106,6 @@ def _reserved_tokens() -> list[str]:
         for token in _parse_csv(settings.TEXT_MODERATION_RESERVED_USERNAME_TOKENS)
         if _normalizar_username(token)
     ]
-
-
-def _ignore_phrases() -> set[str]:
-    return {
-        _normalizar_frase(token)
-        for token in _parse_csv(settings.TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS)
-        if _normalizar_frase(token)
-    }
-
-
-def _ignore_usernames() -> set[str]:
-    return {
-        _normalizar_username(token)
-        for token in _parse_csv(settings.TEXT_MODERATION_IGNORE_DICTIONARY_TOKENS)
-        if _normalizar_username(token)
-    }
 
 
 @lru_cache(maxsize=8)
@@ -168,16 +157,11 @@ def _load_dictionary_cached(
             if not term or term in ignored_phrases:
                 continue
 
-            # Para nombre real:
-            # - tokens de una sola palabra: match exacto por palabra
-            # - frases: match exacto del nombre completo normalizado
             if " " in term:
                 phrase_terms.add(term)
             elif len(term) >= _REAL_NAME_MIN_TERM_LEN:
                 single_terms.add(term)
 
-            # Para username:
-            # normalizamos quitando todo lo que no sea alfanumérico
             username_term = _normalizar_username(line)
             if (
                 username_term
@@ -239,9 +223,6 @@ def _match_username_dictionary(texto: str) -> str | None:
             left = username[:start]
             right = username[end:]
 
-            # Política conservadora:
-            # bloquea si la palabrota está sola o rodeada solo de dígitos.
-            # Ej: puta69, 69puta, 69puta420
             if (not left or left.isdigit()) and (not right or right.isdigit()):
                 return term
 
@@ -262,11 +243,9 @@ def _match_real_name_dictionary(texto: str) -> str | None:
 
     dictionary = _load_dictionary()
 
-    # Si todo el nombre es una frase ofensiva completa
     if normalizado in dictionary["phrase_terms"]:
         return normalizado
 
-    # Si alguna palabra exacta del nombre coincide con una palabra ofensiva
     for token in _tokenizar_nombre_real(normalizado):
         if token in dictionary["single_terms"]:
             return token
@@ -282,6 +261,8 @@ async def _validar(texto: str, *, field: FieldType) -> None:
     if not _moderar_activado():
         return
 
+    mensaje, error_code = _bloqueo_payload(field)
+
     try:
         if field == "username":
             reserved_match = _match_reserved_username(texto)
@@ -295,7 +276,11 @@ async def _validar(texto: str, *, field: FieldType) -> None:
                         "match": reserved_match,
                     },
                 )
-                raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
+                raise app_http_exception(
+                    status_code=400,
+                    mensaje=mensaje,
+                    error_code=error_code,
+                )
 
             profanity_match = _match_username_dictionary(texto)
             if profanity_match:
@@ -308,7 +293,11 @@ async def _validar(texto: str, *, field: FieldType) -> None:
                         "match": profanity_match,
                     },
                 )
-                raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
+                raise app_http_exception(
+                    status_code=400,
+                    mensaje=mensaje,
+                    error_code=error_code,
+                )
 
             return
 
@@ -323,7 +312,11 @@ async def _validar(texto: str, *, field: FieldType) -> None:
                     "match": profanity_match,
                 },
             )
-            raise HTTPException(status_code=400, detail=_mensaje_bloqueo(field))
+            raise app_http_exception(
+                status_code=400,
+                mensaje=mensaje,
+                error_code=error_code,
+            )
 
     except HTTPException:
         raise
@@ -343,9 +336,10 @@ async def _validar(texto: str, *, field: FieldType) -> None:
         if settings.TEXT_MODERATION_FAIL_OPEN:
             return
 
-        raise HTTPException(
+        raise app_http_exception(
             status_code=503,
-            detail="Error: No se pudo validar el contenido en este momento",
+            mensaje="Error: No se pudo validar el contenido en este momento",
+            error_code="CONTENT_VALIDATION_UNAVAILABLE",
         )
 
 

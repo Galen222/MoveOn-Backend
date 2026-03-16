@@ -6,7 +6,7 @@ Endpoints de Seguridad de Aplicación y Autenticación.
 Gestiona el apretón de manos (handshake) inicial para validar la App,
 el inicio de sesión, refresh y cierre de sesión.
 """
-from fastapi import APIRouter, Depends, HTTPException, Header, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, Header, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -15,6 +15,7 @@ import schemas
 from database import obtener_db
 from services import access_service
 from config import settings
+from exceptions import app_http_exception
 from ip_rate_limit import rate_limit
 from services.identity_rate_limit import check_identity_limit
 import hmac
@@ -40,9 +41,10 @@ async def handshake(request: Request, x_app_id: Optional[str] = Header(default=N
                 "method": request.method,
             },
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=403,
-            detail="Error: El acceso no proviene de la aplicación MoveOn",
+            mensaje="Error: El acceso no proviene de la aplicación MoveOn",
+            error_code="INVALID_APP_ORIGIN",
         )
 
     logger.info(
@@ -83,7 +85,11 @@ async def login(
                 "motivo": "usuario_no_encontrado",
             },
         )
-        raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Credenciales no validas",
+            error_code="INVALID_CREDENTIALS",
+        )
 
     es_valido = await run_in_threadpool(
         auth.comprobar_password,
@@ -98,7 +104,11 @@ async def login(
                 "motivo": "password_invalida",
             },
         )
-        raise HTTPException(status_code=401, detail="Error: Credenciales no validas")
+        raise app_http_exception(
+            status_code=401,
+            mensaje="Error: Credenciales no validas",
+            error_code="INVALID_CREDENTIALS",
+        )
 
     logger.info(
         "inicio_sesion_correcto",

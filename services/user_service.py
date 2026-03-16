@@ -16,13 +16,13 @@ from datetime import datetime, timezone
 import logging
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 from services import text_moderation_service
-
+from exceptions import app_http_exception
+from fastapi import HTTPException
 import auth
 import database
 import schemas
@@ -43,8 +43,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     # Normalizaciones básicas
     nombre_usuario = datos.nombre_usuario.strip()
     if not nombre_usuario:
-        raise HTTPException(
-            status_code=400, detail="Error: El nombre de usuario no puede estar vacío"
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El nombre de usuario no puede estar vacío",
+            error_code="USERNAME_EMPTY",
         )
 
     # Guardamos email siempre en minúsculas para que la unicidad sea consistente
@@ -83,8 +85,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
                     "email": email,
                 },
             )
-            raise HTTPException(
-                status_code=400, detail="Error: El nombre de usuario ya está en uso"
+            raise app_http_exception(
+                status_code=400,
+                mensaje="Error: El nombre de usuario ya está en uso",
+                error_code="USERNAME_ALREADY_IN_USE",
             )
 
         logger.warning(
@@ -94,7 +98,11 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
                 "email": email,
             },
         )
-        raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El email ya está en uso",
+            error_code="EMAIL_ALREADY_IN_USE",
+        )
 
     # 2) Hash de contraseña en threadpool (bcrypt es CPU-bound y bloquea el event loop)
     password_hash = await run_in_threadpool(auth.encriptar_password, datos.password)
@@ -136,9 +144,10 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
             },
             exc_info=True,
         )
-        raise HTTPException(
+        raise app_http_exception(
             status_code=400,
-            detail="Error: El nombre de usuario o el email ya están en uso",
+            mensaje="Error: El nombre de usuario o el email ya están en uso",
+            error_code="USERNAME_OR_EMAIL_ALREADY_IN_USE",
         )
     except Exception:
         await db.rollback()
@@ -180,8 +189,10 @@ async def obtener_perfil(
                 "for_update": for_update,
             },
         )
-        raise HTTPException(
-            status_code=404, detail="Error: Perfil de usuario no encontrado"
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Perfil de usuario no encontrado",
+            error_code="USER_PROFILE_NOT_FOUND",
         )
 
     return usuario
@@ -245,8 +256,10 @@ async def actualizar_perfil_usuario(
 
         if "email" in payload:
             if payload["email"] is None:
-                raise HTTPException(
-                    status_code=400, detail="Error: El email no puede ser null"
+                raise app_http_exception(
+                    status_code=400,
+                    mensaje="Error: El email no puede ser null",
+                    error_code="EMAIL_NULL",
                 )
 
             email = str(payload["email"]).strip().lower()
@@ -269,16 +282,20 @@ async def actualizar_perfil_usuario(
                         "nuevo_email": email,
                     },
                 )
-                raise HTTPException(
-                    status_code=400, detail="Error: El email ya está en uso"
+                raise app_http_exception(
+                    status_code=400,
+                    mensaje="Error: El email ya está en uso",
+                    error_code="EMAIL_ALREADY_IN_USE",
                 )
 
             usuario.email = email
 
         if "password" in payload:
             if payload["password"] is None:
-                raise HTTPException(
-                    status_code=400, detail="Error: La contraseña no puede ser null"
+                raise app_http_exception(
+                    status_code=400,
+                    mensaje="Error: La contraseña no puede ser null",
+                    error_code="PASSWORD_NULL",
                 )
 
             usuario.password_encriptada = await run_in_threadpool(
@@ -298,32 +315,37 @@ async def actualizar_perfil_usuario(
 
         if "fecha_nacimiento" in payload:
             if payload["fecha_nacimiento"] is None:
-                raise HTTPException(
+                raise app_http_exception(
                     status_code=400,
-                    detail="Error: La fecha de nacimiento no puede ser null",
+                    mensaje="Error: La fecha de nacimiento no puede ser null",
+                    error_code="BIRTH_DATE_NULL",
                 )
             usuario.fecha_nacimiento = payload["fecha_nacimiento"]
 
         if "perfil_visible" in payload:
             if payload["perfil_visible"] is None:
-                raise HTTPException(
-                    status_code=400, detail="Error: perfil_visible no puede ser null"
+                raise app_http_exception(
+                    status_code=400,
+                    mensaje="Error: perfil_visible no puede ser null",
+                    error_code="PROFILE_VISIBILITY_NULL",
                 )
             usuario.perfil_visible = payload["perfil_visible"]
 
         if "objetivo_semanal_metros" in payload:
             if payload["objetivo_semanal_metros"] is None:
-                raise HTTPException(
+                raise app_http_exception(
                     status_code=400,
-                    detail="Error: El objetivo semanal no puede ser null",
+                    mensaje="Error: El objetivo semanal no puede ser null",
+                    error_code="WEEKLY_GOAL_NULL",
                 )
             usuario.objetivo_semanal_metros = payload["objetivo_semanal_metros"]
 
         if "objetivo_mensual_metros" in payload:
             if payload["objetivo_mensual_metros"] is None:
-                raise HTTPException(
+                raise app_http_exception(
                     status_code=400,
-                    detail="Error: El objetivo mensual no puede ser null",
+                    mensaje="Error: El objetivo mensual no puede ser null",
+                    error_code="MONTHLY_GOAL_NULL",
                 )
             usuario.objetivo_mensual_metros = payload["objetivo_mensual_metros"]
 
@@ -343,7 +365,11 @@ async def actualizar_perfil_usuario(
             },
             exc_info=True,
         )
-        raise HTTPException(status_code=400, detail="Error: El email ya está en uso")
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El email ya está en uso",
+            error_code="EMAIL_ALREADY_IN_USE",
+        )
     except Exception:
         await db.rollback()
         raise
@@ -388,7 +414,11 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
                 "nombre_objetivo": nombre_objetivo,
             },
         )
-        raise HTTPException(status_code=404, detail="Error: Usuario no encontrado")
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
 
     # LÓGICA DE PRIVACIDAD
     if not usuario.perfil_visible:
@@ -398,7 +428,11 @@ async def obtener_perfil_publico(db: AsyncSession, nombre_objetivo: str):
                 "usuario_objetivo": usuario.nombre_usuario,
             },
         )
-        raise HTTPException(status_code=403, detail="Error: Este perfil es privado")
+        raise app_http_exception(
+            status_code=403,
+            mensaje="Error: Este perfil es privado",
+            error_code="PROFILE_PRIVATE",
+        )
 
     return usuario
 

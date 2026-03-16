@@ -422,7 +422,9 @@ class TestFotoPerfil:
         )
 
         async def fake_obtener(db, usuario_actual_id, for_update=False):
-            raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
+            raise HTTPException(
+                status_code=404, detail="Error: Perfil de usuario no encontrado"
+            )
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         response = self._post_foto(TestClient(app))
@@ -556,7 +558,9 @@ class TestActualizarPerfil:
         app = _app_con_overrides()
 
         async def fake_obtener(db, usuario_actual_id, for_update=False):
-            raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
+            raise HTTPException(
+                status_code=404, detail="Error: Perfil de usuario no encontrado"
+            )
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         response = TestClient(app).patch("/perfil/actualizar", json={})
@@ -590,7 +594,9 @@ class TestBorrarPerfil:
         app = _app_con_overrides()
 
         async def fake_obtener(db, usuario_actual_id, for_update=False):
-            raise HTTPException(status_code=404, detail="Error: Perfil no encontrado")
+            raise HTTPException(
+                status_code=404, detail="Error: Perfil de usuario no encontrado"
+            )
 
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         response = TestClient(app).delete("/perfil/borrar")
