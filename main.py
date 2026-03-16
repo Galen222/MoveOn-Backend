@@ -202,6 +202,7 @@ async def home(request: Request):
 
 
 @app.get("/healthz", include_in_schema=False)
+@app.head("/healthz", include_in_schema=False)
 async def healthz():
     return {"status": "ok"}
 
