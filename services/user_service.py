@@ -174,7 +174,8 @@ async def obtener_perfil(
     db: AsyncSession, usuario_actual_id: int, for_update: bool = False
 ):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
-    query = select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
+    query = select(database.Usuario).where(
+        database.Usuario.id == usuario_actual_id)
 
     if for_update:
         query = query.with_for_update()
@@ -469,7 +470,8 @@ async def buscar_usuario(
 
     filtros = (
         database.Usuario.perfil_visible.is_(True),
-        database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
+        database.Usuario.nombre_usuario.ilike(
+            f"%{termino_seguro}%", escape="\\"),
         database.Usuario.id != usuario_actual_id,
     )
 
@@ -582,6 +584,7 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
                 "foto_perfil": foto_perfil,
                 "foto_version": foto_version,
                 "total_puntos": puntos,
+                "total_metros": total_metros,
             }
         )
 

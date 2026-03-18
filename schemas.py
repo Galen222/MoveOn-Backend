@@ -813,6 +813,7 @@ class ObtenerRanking(BaseModel):
     foto_perfil: Optional[str] = None
     foto_version: int = 0
     total_puntos: int
+    total_metros: int
 
 
 class RespuestaGenerica(BaseModel):
