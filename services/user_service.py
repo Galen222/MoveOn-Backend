@@ -519,8 +519,26 @@ async def buscar_usuario(
 
 
 async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
-    """Elimina permanentemente el registro de la base de datos."""
+    """Elimina permanentemente el registro de la base de datos.
+
+    Antes del DELETE, revoca explícitamente los refresh tokens activos
+    para dejar registro limpio de revocación (revocada_en) en vez de depender
+    solo del CASCADE.
+    Nota: el access token activo sigue válido hasta su expiración natural
+    (hasta ACCESS_TOKEN_EXPIRE_MINUTES). Para invalidación inmediata haría
+    falta una blacklist en memoria.
+    """
     try:
+        ahora = datetime.now(timezone.utc)
+        await db.execute(
+            update(database.SesionRefresh)
+            .where(
+                database.SesionRefresh.usuario_id == usuario.id,
+                database.SesionRefresh.revocada_en.is_(None),
+            )
+            .values(revocada_en=ahora)
+        )
+
         await db.delete(usuario)
         await db.commit()
     except Exception:
