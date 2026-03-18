@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional, AsyncGenerator, Any
 from urllib.parse import quote_plus
+import logging
 import re
 
 import sqlalchemy as sa
@@ -40,9 +41,10 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
+    create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 
@@ -53,36 +55,55 @@ from exceptions import AppValidationError
 
 
 # =========================================================
-# Conexión a base de datos
+# Conexión a base de datos (lazy)
 # =========================================================
 
-# Escapamos usuario y password por seguridad si contienen caracteres especiales.
-user_safe = quote_plus(settings.DB_USER)
-pass_safe = quote_plus(settings.DB_PASSWORD)
+logger = logging.getLogger("app.database")
 
-DATABASE_URL = (
-    f"postgresql+asyncpg://{user_safe}:{pass_safe}"
-    f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
-)
+engine: AsyncEngine | None = None
+AsyncSessionLocal: async_sessionmaker[AsyncSession] | None = None
 
-# Engine async con pool configurable desde .env
-engine = create_async_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=int(settings.DB_POOL_SIZE),
-    max_overflow=int(settings.DB_MAX_OVERFLOW),
-    pool_timeout=int(settings.DB_POOL_TIMEOUT),
-    pool_recycle=int(settings.DB_POOL_RECYCLE),
-)
 
-# Factory de sesiones async
-AsyncSessionLocal = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    autoflush=False,
-    autocommit=False,
-    expire_on_commit=False,  # evita expiraciones molestas tras commit
-)
+def _build_database_url() -> str:
+    """Construye la URL de conexión escapando usuario y password."""
+    user_safe = quote_plus(settings.DB_USER)
+    pass_safe = quote_plus(settings.DB_PASSWORD)
+
+    return (
+        f"postgresql+asyncpg://{user_safe}:{pass_safe}"
+        f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    )
+
+
+def _init_db_objects() -> None:
+    """
+    Inicializa engine y sessionmaker solo una vez.
+
+    No abre conexión real a PostgreSQL; solo prepara los objetos de SQLAlchemy.
+    """
+    global engine, AsyncSessionLocal
+
+    if engine is not None and AsyncSessionLocal is not None:
+        return
+
+    database_url = _build_database_url()
+
+    engine = create_async_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=int(settings.DB_POOL_SIZE),
+        max_overflow=int(settings.DB_MAX_OVERFLOW),
+        pool_timeout=int(settings.DB_POOL_TIMEOUT),
+        pool_recycle=int(settings.DB_POOL_RECYCLE),
+    )
+
+    AsyncSessionLocal = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        autoflush=False,
+        autocommit=False,
+        expire_on_commit=False,  # evita expiraciones molestas tras commit
+    )
 
 
 # =========================================================
@@ -1123,26 +1144,60 @@ class SesionRefresh(Base):
 
 async def init_db() -> None:
     """
-    Crea las tablas si AUTO_CREATE_TABLES=true.
+    Inicializa los objetos de BD y, si procede, crea tablas.
 
-    En producción, si usas Alembic, lo habitual es dejar esto desactivado
-    y aplicar las migraciones manualmente.
+    Importante:
+    - Si la BD no está disponible en startup, NO levantamos excepción.
+    - La app arranca igualmente.
+    - /readyz devolverá 503 mientras la BD siga caída.
     """
+    _init_db_objects()
+
     if not settings.AUTO_CREATE_TABLES:
         return
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    assert engine is not None  # para type checkers
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        logger.info(
+            "db_init_ok",
+            extra={"auto_create_tables": settings.AUTO_CREATE_TABLES},
+        )
+    except Exception as exc:
+        logger.warning(
+            "fallo_BD_inicio_continua",
+            extra={
+                "auto_create_tables": settings.AUTO_CREATE_TABLES,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        # No relanzamos: el servidor debe arrancar aunque PostgreSQL esté caído.
 
 
 async def close_db() -> None:
-    """Cierra el engine async de SQLAlchemy."""
+    """Cierra el engine async de SQLAlchemy si existe."""
+    global engine, AsyncSessionLocal
+
+    if engine is None:
+        return
+
     await engine.dispose()
+    engine = None
+    AsyncSessionLocal = None
 
 
 async def obtener_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependencia de FastAPI para inyectar una sesión async.
+    Inicializa lazy engine/sessionmaker si aún no existen.
     """
+    _init_db_objects()
+
+    assert AsyncSessionLocal is not None  # para type checkers
+
     async with AsyncSessionLocal() as db:
         yield db

@@ -42,8 +42,17 @@ logger = logging.getLogger("app.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Inicializar base de datos.
-    await database.init_db()
+    # Inicializar base de datos sin bloquear el arranque si PostgreSQL está caído.
+    try:
+        await database.init_db()
+    except Exception as exc:
+        logger.warning(
+            "fallo_inesperado_BD_inicio_continua",
+            extra={
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
 
     # Obtener el tipo de almacenamiento para las imagenes.
     # Seleccionando entre local (desarrollo) y Cloudinary (producción)
@@ -75,7 +84,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # (Opcional) Cerrar recursos de la BD al apagar la app.
     await database.close_db()
 
     logger.info(
