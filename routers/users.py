@@ -234,7 +234,7 @@ async def foto_perfil(
             file_service.borrar_foto, foto_antigua, usuario_actual_id
         )
 
-        return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
+    return {"estatus": "success", "mensaje": "Foto actualizada correctamente"}
 
 
 @router.patch("/perfil/actualizar", response_model=schemas.RespuestaGenerica)
