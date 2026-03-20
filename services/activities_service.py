@@ -11,13 +11,13 @@ from utils import calculos
 logger = logging.getLogger("app.activities")
 
 
+
 async def crear_actividad(
     db: AsyncSession, usuario_actual_id: int, datos: schemas.GuardarActividad
 ):
     """
-    Busca al usuario y registra una nueva actividad deportiva.
+    Busca al usuario y registra una nueva actividad deportiva enriquecida.
     """
-    # Se busca el usuario por su ID (viene del token)
     usuario = (
         await db.execute(
             select(database.Usuario)
@@ -29,9 +29,7 @@ async def crear_actividad(
     if not usuario:
         logger.warning(
             "crear_actividad_usuario_no_encontrado",
-            extra={
-                "usuario_id": usuario_actual_id,
-            },
+            extra={"usuario_id": usuario_actual_id},
         )
         raise app_http_exception(
             status_code=404,
@@ -39,28 +37,33 @@ async def crear_actividad(
             error_code="USER_NOT_FOUND",
         )
 
-    # Se Crea el objeto de base de datos.
     nueva_actividad = database.Actividad(
         usuario_id=usuario.id,
         tipo=datos.tipo.value,
         distancia=datos.distancia,
-        duracion=datos.duracion,
+        duracion_total=datos.duracion_total,
+        duracion_movimiento=datos.duracion_movimiento,
+        duracion_parado=datos.duracion_parado,
+        duracion_pausa_manual=datos.duracion_pausa_manual,
         calorias_quemadas=datos.calorias_quemadas,
+        ritmo_medio_movimiento=datos.ritmo_medio_movimiento,
+        ritmo_medio_total=datos.ritmo_medio_total,
+        velocidad_media_x100=datos.velocidad_media_x100,
+        velocidad_max_x100=datos.velocidad_max_x100,
+        auto_pausas=datos.auto_pausas,
+        pausas_manuales=datos.pausas_manuales,
+        alertas_velocidad=datos.alertas_velocidad,
         ruta_polilinea=datos.ruta_polilinea,
         ruta_mapa_url=str(datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
         fecha_ruta=datos.fecha_ruta,
     )
 
-    # Sumar distancia y calorías al acumulado histórico del usuario.
-    # La fila del usuario ya está bloqueada con FOR UPDATE, así que el cálculo puede hacerse
-    # en Python sin caer en una race condition y manteniendo el tipo como int para Pylance.
     total_actual = int(usuario.total_metros or 0)
     usuario.total_metros = total_actual + int(datos.distancia)
 
     total_calorias_actual = int(usuario.total_calorias or 0)
     usuario.total_calorias = total_calorias_actual + int(datos.calorias_quemadas)
 
-    # Se guarda en BD.
     try:
         db.add(nueva_actividad)
         await db.commit()
@@ -76,21 +79,32 @@ async def crear_actividad(
             "actividad_id": nueva_actividad.id,
             "tipo": nueva_actividad.tipo,
             "distancia": nueva_actividad.distancia,
-            "duracion": nueva_actividad.duracion,
+            "duracion_total": nueva_actividad.duracion_total,
+            "duracion_movimiento": nueva_actividad.duracion_movimiento,
+            "duracion_parado": nueva_actividad.duracion_parado,
             "nuevo_total_metros": usuario.total_metros,
             "nuevo_total_calorias": usuario.total_calorias,
         },
     )
 
-    # Calcular los puntos para el Ranking.
     puntos_actualizados = calculos.calcular_puntos_nivel(usuario.total_metros)
 
     respuesta = {
         "id": nueva_actividad.id,
         "tipo": nueva_actividad.tipo,
         "distancia": nueva_actividad.distancia,
-        "duracion": nueva_actividad.duracion,
+        "duracion_total": nueva_actividad.duracion_total,
+        "duracion_movimiento": nueva_actividad.duracion_movimiento,
+        "duracion_parado": nueva_actividad.duracion_parado,
+        "duracion_pausa_manual": nueva_actividad.duracion_pausa_manual,
         "calorias_quemadas": nueva_actividad.calorias_quemadas,
+        "ritmo_medio_movimiento": nueva_actividad.ritmo_medio_movimiento,
+        "ritmo_medio_total": nueva_actividad.ritmo_medio_total,
+        "velocidad_media_x100": nueva_actividad.velocidad_media_x100,
+        "velocidad_max_x100": nueva_actividad.velocidad_max_x100,
+        "auto_pausas": nueva_actividad.auto_pausas,
+        "pausas_manuales": nueva_actividad.pausas_manuales,
+        "alertas_velocidad": nueva_actividad.alertas_velocidad,
         "ruta_polilinea": nueva_actividad.ruta_polilinea,
         "ruta_mapa_url": nueva_actividad.ruta_mapa_url,
         "fecha_ruta": nueva_actividad.fecha_ruta,
@@ -386,3 +400,5 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
         "estatus": "success",
         "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades.",
     }
+
+

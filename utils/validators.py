@@ -194,3 +194,66 @@ def validar_polilinea_logica(v: str) -> str:
     if len(v) < 5:
         raise AppValidationError("Error: La ruta parece inválida", "ROUTE_INVALID")
     return v
+
+
+
+
+
+def validar_duracion_no_negativa_logica(v: int, field_name: str, error_prefix: str) -> int:
+    """Valida duraciones no negativas con máximo operativo de 24 horas."""
+    if v < 0:
+        raise AppValidationError(
+            f"Error: {field_name} no puede ser negativa",
+            f"{error_prefix}_NEGATIVE",
+        )
+    if v > 86400:
+        raise AppValidationError(
+            f"Error: {field_name} excede el límite de 24 horas",
+            f"{error_prefix}_TOO_LONG",
+        )
+    return v
+
+
+def validar_ritmo_segundos_km_logica(v: int, field_name: str, error_prefix: str) -> int:
+    """Valida ritmos en segundos por kilómetro."""
+    if v < 0:
+        raise AppValidationError(
+            f"Error: {field_name} no puede ser negativo",
+            f"{error_prefix}_NEGATIVE",
+        )
+    if v > 3600:
+        raise AppValidationError(
+            f"Error: {field_name} parece inválido",
+            f"{error_prefix}_OUT_OF_RANGE",
+        )
+    return v
+
+
+def validar_velocidad_x100_logica(v: int, field_name: str, error_prefix: str) -> int:
+    """Valida velocidades expresadas como km/h * 100."""
+    if v < 0:
+        raise AppValidationError(
+            f"Error: {field_name} no puede ser negativa",
+            f"{error_prefix}_NEGATIVE",
+        )
+    if v > 10000:
+        raise AppValidationError(
+            f"Error: {field_name} parece inválida",
+            f"{error_prefix}_OUT_OF_RANGE",
+        )
+    return v
+
+
+def validar_contador_tracking_logica(v: int, field_name: str, error_prefix: str) -> int:
+    """Valida contadores de pausas/alertas del tracking."""
+    if v < 0:
+        raise AppValidationError(
+            f"Error: {field_name} no puede ser negativo",
+            f"{error_prefix}_NEGATIVE",
+        )
+    if v > 500:
+        raise AppValidationError(
+            f"Error: {field_name} excede el límite permitido",
+            f"{error_prefix}_OUT_OF_RANGE",
+        )
+    return v

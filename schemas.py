@@ -667,45 +667,54 @@ class ConfirmarPassword(BaseModel):
         )
 
 
+
 class GuardarActividad(BaseModel):
+    """Payload validado para persistir una actividad con métricas enriquecidas."""
+
     tipo: TipoActividad
     distancia: StrictInt = Field(...)
-    duracion: StrictInt = Field(...)
+    duracion_total: StrictInt = Field(...)
+    duracion_movimiento: StrictInt = Field(...)
+    duracion_parado: StrictInt = Field(default=0)
+    duracion_pausa_manual: StrictInt = Field(default=0)
     calorias_quemadas: StrictInt = Field(...)
+    ritmo_medio_movimiento: StrictInt = Field(default=0)
+    ritmo_medio_total: StrictInt = Field(default=0)
+    velocidad_media_x100: StrictInt = Field(default=0)
+    velocidad_max_x100: StrictInt = Field(default=0)
+    auto_pausas: StrictInt = Field(default=0)
+    pausas_manuales: StrictInt = Field(default=0)
+    alertas_velocidad: StrictInt = Field(default=0)
     ruta_polilinea: Optional[str] = None
-    # URL válida (http/https) + límite razonable
     ruta_mapa_url: Optional[AnyHttpUrl] = Field(None, max_length=2048)
     fecha_ruta: datetime
 
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_actividad(cls, values: Any) -> Any:
-        """Revisa manualmente que lleguen los datos para dar el mensaje de error personalizado."""
         if isinstance(values, dict):
-            if "tipo" not in values:
-                raise AppValidationError(
-                    "Error: El tipo de actividad es obligatorio",
-                    "ACTIVITY_TYPE_REQUIRED",
-                )
-            if "distancia" not in values:
-                raise AppValidationError(
-                    "Error: La distancia es obligatoria", "DISTANCE_REQUIRED"
-                )
-            if "duracion" not in values:
-                raise AppValidationError(
-                    "Error: La duración es obligatoria", "DURATION_REQUIRED"
-                )
-            if "calorias_quemadas" not in values:
-                raise AppValidationError(
+            required_fields = {
+                "tipo": ("Error: El tipo de actividad es obligatorio", "ACTIVITY_TYPE_REQUIRED"),
+                "distancia": ("Error: La distancia es obligatoria", "DISTANCE_REQUIRED"),
+                "duracion_total": ("Error: La duración total es obligatoria", "TOTAL_DURATION_REQUIRED"),
+                "duracion_movimiento": (
+                    "Error: La duración en movimiento es obligatoria",
+                    "MOVING_DURATION_REQUIRED",
+                ),
+                "calorias_quemadas": (
                     "Error: Las calorías quemadas son obligatorias",
                     "BURNED_CALORIES_REQUIRED",
-                )
+                ),
+                "fecha_ruta": ("Error: La fecha de la actividad es obligatoria", "ACTIVITY_DATE_REQUIRED"),
+            }
+            for field_name, (message, code) in required_fields.items():
+                if field_name not in values:
+                    raise AppValidationError(message, code)
         return values
 
     @field_validator("tipo", mode="wrap")
     @classmethod
     def validar_tipo_actividad_custom(cls, v, handler):
-        """Intercepta errores en el Enum de tipo de actividad."""
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El tipo de actividad no es válido"
         )
@@ -713,7 +722,6 @@ class GuardarActividad(BaseModel):
     @field_validator("distancia", mode="wrap")
     @classmethod
     def validar_distancia_actividad_custom(cls, v, handler):
-        """Intercepta errores de tipo en distancia."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -726,26 +734,45 @@ class GuardarActividad(BaseModel):
     def validar_distancia_actividad(cls, v):
         return validators.validar_distancia_logica(v)
 
-    @field_validator("duracion", mode="wrap")
+    @field_validator(
+        "duracion_total",
+        "duracion_movimiento",
+        "duracion_parado",
+        "duracion_pausa_manual",
+        mode="wrap",
+    )
     @classmethod
-    def validar_duracion_actividad_custom(cls, v, handler):
-        """Intercepta errores de tipo en duración."""
+    def validar_duraciones_custom(cls, v, handler):
         return validators.interceptar_error_pydantic(
             v,
             handler,
             "VALIDATION_ERROR",
-            "Error: La duración debe ser un número entero en segundos",
+            "Error: Las duraciones deben ser números enteros en segundos",
         )
 
-    @field_validator("duracion")
+    @field_validator("duracion_total")
     @classmethod
-    def validar_duracion_actividad(cls, v):
+    def validar_duracion_total(cls, v):
         return validators.validar_duracion_logica(v)
+
+    @field_validator("duracion_movimiento")
+    @classmethod
+    def validar_duracion_movimiento(cls, v):
+        return validators.validar_duracion_logica(v)
+
+    @field_validator("duracion_parado")
+    @classmethod
+    def validar_duracion_parado(cls, v):
+        return validators.validar_duracion_no_negativa_logica(v, "la duración parada", "STOPPED_DURATION")
+
+    @field_validator("duracion_pausa_manual")
+    @classmethod
+    def validar_duracion_pausa_manual(cls, v):
+        return validators.validar_duracion_no_negativa_logica(v, "la duración de pausa manual", "MANUAL_PAUSE_DURATION")
 
     @field_validator("calorias_quemadas", mode="wrap")
     @classmethod
     def validar_calorias_actividad_custom(cls, v, handler):
-        """Intercepta errores de tipo en calorías."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -758,10 +785,74 @@ class GuardarActividad(BaseModel):
     def validar_calorias_actividad(cls, v):
         return validators.validar_calorias_logica(v)
 
+    @field_validator("ritmo_medio_movimiento", "ritmo_medio_total", mode="wrap")
+    @classmethod
+    def validar_ritmos_custom(cls, v, handler):
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: Los ritmos deben ser enteros en segundos por kilómetro",
+        )
+
+    @field_validator("ritmo_medio_movimiento")
+    @classmethod
+    def validar_ritmo_medio_movimiento(cls, v):
+        return validators.validar_ritmo_segundos_km_logica(v, "el ritmo medio en movimiento", "MOVING_PACE")
+
+    @field_validator("ritmo_medio_total")
+    @classmethod
+    def validar_ritmo_medio_total(cls, v):
+        return validators.validar_ritmo_segundos_km_logica(v, "el ritmo medio total", "TOTAL_PACE")
+
+    @field_validator("velocidad_media_x100", "velocidad_max_x100", mode="wrap")
+    @classmethod
+    def validar_velocidades_custom(cls, v, handler):
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: Las velocidades deben ser enteros en km/h x100",
+        )
+
+    @field_validator("velocidad_media_x100")
+    @classmethod
+    def validar_velocidad_media(cls, v):
+        return validators.validar_velocidad_x100_logica(v, "la velocidad media", "AVERAGE_SPEED")
+
+    @field_validator("velocidad_max_x100")
+    @classmethod
+    def validar_velocidad_max(cls, v):
+        return validators.validar_velocidad_x100_logica(v, "la velocidad máxima", "MAX_SPEED")
+
+    @field_validator("auto_pausas", "pausas_manuales", "alertas_velocidad", mode="wrap")
+    @classmethod
+    def validar_contadores_custom(cls, v, handler):
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: Los contadores deben ser enteros no negativos",
+        )
+
+    @field_validator("auto_pausas")
+    @classmethod
+    def validar_auto_pausas(cls, v):
+        return validators.validar_contador_tracking_logica(v, "las auto pausas", "AUTO_PAUSE_COUNT")
+
+    @field_validator("pausas_manuales")
+    @classmethod
+    def validar_pausas_manuales(cls, v):
+        return validators.validar_contador_tracking_logica(v, "las pausas manuales", "MANUAL_PAUSE_COUNT")
+
+    @field_validator("alertas_velocidad")
+    @classmethod
+    def validar_alertas_velocidad(cls, v):
+        return validators.validar_contador_tracking_logica(v, "las alertas de velocidad", "SPEED_ALERT_COUNT")
+
     @field_validator("fecha_ruta", mode="wrap")
     @classmethod
     def validar_fecha_ruta_actividad_custom(cls, v, handler):
-        """Intercepta errores de formato de fecha."""
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El formato de fecha no es válido"
         )
@@ -769,7 +860,6 @@ class GuardarActividad(BaseModel):
     @field_validator("fecha_ruta")
     @classmethod
     def validar_fecha_ruta_actividad(cls, v):
-        # Primero validamos formato (wrap) implícito en Pydantic, luego lógica
         return validators.validar_fecha_ruta_logica(v)
 
     @field_validator("ruta_polilinea", mode="before")
@@ -779,6 +869,50 @@ class GuardarActividad(BaseModel):
             return None
         return validators.validar_polilinea_logica(v)
 
+    @model_validator(mode="after")
+    def validar_consistencia_temporal(self):
+        if self.duracion_movimiento > self.duracion_total:
+            raise AppValidationError(
+                "Error: La duración en movimiento no puede superar la duración total",
+                "MOVING_DURATION_EXCEEDS_TOTAL",
+            )
+        if self.duracion_parado > self.duracion_total:
+            raise AppValidationError(
+                "Error: La duración parada no puede superar la duración total",
+                "STOPPED_DURATION_EXCEEDS_TOTAL",
+            )
+        if self.duracion_movimiento + self.duracion_parado != self.duracion_total:
+            raise AppValidationError(
+                "Error: La suma de duración en movimiento y parada debe coincidir con la duración total",
+                "DURATION_BREAKDOWN_MISMATCH",
+            )
+        if self.duracion_pausa_manual > self.duracion_total:
+            raise AppValidationError(
+                "Error: La pausa manual no puede superar la duración total",
+                "MANUAL_PAUSE_EXCEEDS_TOTAL",
+            )
+        if self.velocidad_max_x100 < self.velocidad_media_x100:
+            raise AppValidationError(
+                "Error: La velocidad máxima no puede ser menor que la velocidad media",
+                "MAX_SPEED_BELOW_AVERAGE_SPEED",
+            )
+        if self.distancia > 0 and self.duracion_movimiento <= 0:
+            raise AppValidationError(
+                "Error: Una actividad con distancia debe tener tiempo en movimiento",
+                "MOVING_DURATION_REQUIRED_FOR_DISTANCE",
+            )
+        if self.duracion_movimiento > 0 and self.ritmo_medio_movimiento <= 0:
+            raise AppValidationError(
+                "Error: Falta el ritmo medio en movimiento",
+                "MOVING_PACE_REQUIRED",
+            )
+        if self.duracion_total > 0 and self.ritmo_medio_total <= 0:
+            raise AppValidationError(
+                "Error: Falta el ritmo medio total",
+                "TOTAL_PACE_REQUIRED",
+            )
+        return self
+
 
 class RespuestaObtenerActividad(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -786,8 +920,18 @@ class RespuestaObtenerActividad(BaseModel):
     id: int
     tipo: str
     distancia: StrictInt = Field(...)
-    duracion: int
+    duracion_total: int
+    duracion_movimiento: int
+    duracion_parado: int
+    duracion_pausa_manual: int
     calorias_quemadas: int
+    ritmo_medio_movimiento: int
+    ritmo_medio_total: int
+    velocidad_media_x100: int
+    velocidad_max_x100: int
+    auto_pausas: int
+    pausas_manuales: int
+    alertas_velocidad: int
     ruta_polilinea: Optional[str] = None
     ruta_mapa_url: Optional[str] = None
     fecha_ruta: datetime
@@ -795,6 +939,7 @@ class RespuestaObtenerActividad(BaseModel):
 
 
 class RespuestaObtenerActividadesPaginada(BaseModel):
+
     items: List[RespuestaObtenerActividad]
     total: int
     skip: int
@@ -819,3 +964,5 @@ class ObtenerRanking(BaseModel):
 class RespuestaGenerica(BaseModel):
     estatus: str
     mensaje: str
+
+
