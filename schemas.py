@@ -358,6 +358,10 @@ class RespuestaInformacionPerfil(BaseModel):
     perfil_visible: bool
     total_puntos: int
     total_calorias: int = 0
+    total_calorias: int = 0
+    total_duracion_segundos: int = 0
+    total_actividades: int = 0
+    objetivo_semanal_metros: int = 50000
     objetivo_semanal_metros: int = 50000
     objetivo_mensual_metros: int = 150000
 
@@ -667,7 +671,6 @@ class ConfirmarPassword(BaseModel):
         )
 
 
-
 class GuardarActividad(BaseModel):
     """Payload validado para persistir una actividad con métricas enriquecidas."""
 
@@ -964,5 +967,3 @@ class ObtenerRanking(BaseModel):
 class RespuestaGenerica(BaseModel):
     estatus: str
     mensaje: str
-
-

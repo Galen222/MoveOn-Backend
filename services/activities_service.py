@@ -11,7 +11,6 @@ from utils import calculos
 logger = logging.getLogger("app.activities")
 
 
-
 async def crear_actividad(
     db: AsyncSession, usuario_actual_id: int, datos: schemas.GuardarActividad
 ):
@@ -54,7 +53,8 @@ async def crear_actividad(
         pausas_manuales=datos.pausas_manuales,
         alertas_velocidad=datos.alertas_velocidad,
         ruta_polilinea=datos.ruta_polilinea,
-        ruta_mapa_url=str(datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
+        ruta_mapa_url=str(
+            datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
         fecha_ruta=datos.fecha_ruta,
     )
 
@@ -62,7 +62,15 @@ async def crear_actividad(
     usuario.total_metros = total_actual + int(datos.distancia)
 
     total_calorias_actual = int(usuario.total_calorias or 0)
-    usuario.total_calorias = total_calorias_actual + int(datos.calorias_quemadas)
+    usuario.total_calorias = total_calorias_actual + \
+        int(datos.calorias_quemadas)
+
+    total_duracion_actual = int(usuario.total_duracion_segundos or 0)
+    usuario.total_duracion_segundos = total_duracion_actual + \
+        int(datos.duracion_total)
+
+    total_actividades_actual = int(usuario.total_actividades or 0)
+    usuario.total_actividades = total_actividades_actual + 1
 
     try:
         db.add(nueva_actividad)
@@ -84,6 +92,8 @@ async def crear_actividad(
             "duracion_parado": nueva_actividad.duracion_parado,
             "nuevo_total_metros": usuario.total_metros,
             "nuevo_total_calorias": usuario.total_calorias,
+            "nuevo_total_duracion": usuario.total_duracion_segundos,
+            "nuevo_total_actividades": usuario.total_actividades,
         },
     )
 
@@ -117,7 +127,6 @@ async def crear_actividad(
 async def obtener_actividad(
     db: AsyncSession, usuario_actual_id: int, id_actividad: int
 ):
-    # Burcar usuario
     # Reducimos queries duplicadas: en vez de consultar primero el usuario y luego la actividad,
     # se hace una sola query con OUTER JOIN para seguir distinguiendo entre usuario inexistente
     # y actividad inexistente o que no pertenece a este usuario.
@@ -152,7 +161,6 @@ async def obtener_actividad(
 
     _, actividad = fila
 
-    # Buscar la actividad asegurando que pertenezca a este usuario
     if not actividad:
         logger.info(
             "actividad_no_encontrada",
@@ -177,12 +185,10 @@ async def obtener_actividades(
     Obtiene la lista paginada de actividades del usuario autenticado
     junto con metadata de paginación.
     """
-    # Validar que el usuario exista, igual que en el resto de operaciones
-    # de actividades, para no devolver una lista vacía si el token apunta
-    # a un usuario ya inexistente.
     usuario_existe = (
         await db.execute(
-            select(database.Usuario.id).where(database.Usuario.id == usuario_actual_id)
+            select(database.Usuario.id).where(
+                database.Usuario.id == usuario_actual_id)
         )
     ).scalar_one_or_none()
 
@@ -249,7 +255,7 @@ async def obtener_actividades(
 async def eliminar_actividad(
     db: AsyncSession, usuario_actual_id: int, id_actividad: int
 ):
-    # Se sigue bloqueando el usuario porque se modifica total_metros,
+    # Se sigue bloqueando el usuario porque se modifican los acumulados,
     # pero usuario + actividad se recuperan en una sola query.
     fila = (
         await db.execute(
@@ -297,10 +303,6 @@ async def eliminar_actividad(
             error_code="ACTIVITY_NOT_FOUND",
         )
 
-    # Se resta la distancia y las calorías al eliminar la actividad.
-    # Evita números negativos por errores de redondeo flotante.
-    # La fila del usuario está bloqueada, así que el cálculo puede hacerse en Python
-    # y mantener el atributo tipado como int.
     try:
         total_actual = int(usuario.total_metros or 0)
         distancia_actividad = int(actividad.distancia or 0)
@@ -308,7 +310,16 @@ async def eliminar_actividad(
 
         total_calorias_actual = int(usuario.total_calorias or 0)
         calorias_actividad = int(actividad.calorias_quemadas or 0)
-        usuario.total_calorias = max(0, total_calorias_actual - calorias_actividad)
+        usuario.total_calorias = max(
+            0, total_calorias_actual - calorias_actividad)
+
+        total_duracion_actual = int(usuario.total_duracion_segundos or 0)
+        duracion_actividad = int(actividad.duracion_total or 0)
+        usuario.total_duracion_segundos = max(
+            0, total_duracion_actual - duracion_actividad)
+
+        total_actividades_actual = int(usuario.total_actividades or 0)
+        usuario.total_actividades = max(0, total_actividades_actual - 1)
 
         await db.delete(actividad)
         await db.commit()
@@ -323,12 +334,14 @@ async def eliminar_actividad(
             "actividad_id": id_actividad,
             "distancia_restada": actividad.distancia,
             "calorias_restadas": actividad.calorias_quemadas,
+            "duracion_restada": actividad.duracion_total,
             "nuevo_total_metros": usuario.total_metros,
             "nuevo_total_calorias": usuario.total_calorias,
+            "nuevo_total_duracion": usuario.total_duracion_segundos,
+            "nuevo_total_actividades": usuario.total_actividades,
         },
     )
 
-    # Recalcular los puntos con el valor actualizado
     puntos = calculos.calcular_puntos_nivel(usuario.total_metros)
     return {
         "estatus": "success",
@@ -338,7 +351,6 @@ async def eliminar_actividad(
 
 
 async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
-    # Buscar usuario (bloqueo para evitar race conditions con crear_actividad/eliminar_actividad)
     usuario = (
         await db.execute(
             select(database.Usuario)
@@ -360,7 +372,6 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
             error_code="USER_NOT_FOUND",
         )
 
-    # Contar cuántas hay, para devolver el número borrado.
     num_borrados = (
         await db.execute(
             select(func.count())
@@ -370,16 +381,16 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
     ).scalar_one()
 
     try:
-        # Borrado masivo de actividades
         await db.execute(
             sa_delete(database.Actividad).where(
                 database.Actividad.usuario_id == usuario.id
             )
         )
 
-        # Reset de metros y calorías
         usuario.total_metros = 0
         usuario.total_calorias = 0
+        usuario.total_duracion_segundos = 0
+        usuario.total_actividades = 0
 
         await db.commit()
     except Exception:
@@ -393,6 +404,8 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
             "num_borradas": int(num_borrados),
             "nuevo_total_metros": 0,
             "nuevo_total_calorias": 0,
+            "nuevo_total_duracion": 0,
+            "nuevo_total_actividades": 0,
         },
     )
 
@@ -400,5 +413,3 @@ async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
         "estatus": "success",
         "mensaje": f"Historial de actividades eliminado correctamente. Se han borrado {int(num_borrados)} actividades.",
     }
-
-
