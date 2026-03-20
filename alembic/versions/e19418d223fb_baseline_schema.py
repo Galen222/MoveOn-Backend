@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: b124b6549dcf
+Revision ID: e19418d223fb
 Revises: 
-Create Date: 2026-03-20 01:46:29.337345
+Create Date: 2026-03-20 19:28:00.106666
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'b124b6549dcf'
+revision: str = 'e19418d223fb'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -36,6 +36,8 @@ def upgrade() -> None:
     sa.Column('foto_fecha_actualizacion', sa.DateTime(timezone=True), nullable=True),
     sa.Column('total_metros', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
     sa.Column('total_calorias', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
+    sa.Column('total_duracion_segundos', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
+    sa.Column('total_actividades', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('objetivo_semanal_metros', sa.BigInteger(), server_default=sa.text('50000'), nullable=False),
     sa.Column('objetivo_mensual_metros', sa.BigInteger(), server_default=sa.text('150000'), nullable=False),
     sa.Column('fecha_registro', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
@@ -66,7 +68,9 @@ def upgrade() -> None:
     sa.CheckConstraint('objetivo_mensual_metros BETWEEN 10 AND 2000000', name='ck_usuarios_objetivo_mensual_range'),
     sa.CheckConstraint('objetivo_semanal_metros BETWEEN 10 AND 2000000', name='ck_usuarios_objetivo_semanal_range'),
     sa.CheckConstraint('peso IS NULL OR (peso BETWEEN 20 AND 300)', name='ck_usuarios_peso_range'),
+    sa.CheckConstraint('total_actividades >= 0', name='ck_usuarios_total_actividades_non_negative'),
     sa.CheckConstraint('total_calorias >= 0', name='ck_usuarios_total_calorias_non_negative'),
+    sa.CheckConstraint('total_duracion_segundos >= 0', name='ck_usuarios_total_duracion_non_negative'),
     sa.CheckConstraint('total_metros >= 0', name='ck_usuarios_total_metros_non_negative'),
     sa.PrimaryKeyConstraint('id')
     )
