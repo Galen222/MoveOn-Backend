@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: 4d6bc6199275
+Revision ID: b124b6549dcf
 Revises: 
-Create Date: 2026-03-15 01:08:49.412306
+Create Date: 2026-03-20 01:46:29.337345
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '4d6bc6199275'
+revision: str = 'b124b6549dcf'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -78,18 +78,41 @@ def upgrade() -> None:
     sa.Column('usuario_id', sa.Integer(), nullable=False),
     sa.Column('tipo', sa.String(length=20), nullable=False),
     sa.Column('distancia', sa.Integer(), nullable=False),
-    sa.Column('duracion', sa.Integer(), nullable=False),
+    sa.Column('duracion_total', sa.Integer(), nullable=False),
+    sa.Column('duracion_movimiento', sa.Integer(), nullable=False),
+    sa.Column('duracion_parado', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('duracion_pausa_manual', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('calorias_quemadas', sa.Integer(), nullable=False),
+    sa.Column('ritmo_medio_movimiento', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('ritmo_medio_total', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('velocidad_media_x100', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('velocidad_max_x100', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('auto_pausas', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('pausas_manuales', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('alertas_velocidad', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('ruta_polilinea', sa.Text(), nullable=True),
     sa.Column('ruta_mapa_url', sa.String(length=2048), nullable=True),
     sa.Column('fecha_ruta', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.CheckConstraint("ruta_mapa_url IS NULL OR ruta_mapa_url ~* '^https?://'", name='ck_actividades_ruta_mapa_url_http'),
     sa.CheckConstraint("tipo IN ('Caminar', 'Correr')", name='ck_actividades_tipo_values'),
+    sa.CheckConstraint('alertas_velocidad >= 0 AND alertas_velocidad <= 500', name='ck_actividades_alertas_velocidad_range'),
+    sa.CheckConstraint('auto_pausas >= 0 AND auto_pausas <= 500', name='ck_actividades_auto_pausas_range'),
     sa.CheckConstraint('calorias_quemadas > 0 AND calorias_quemadas <= 10000', name='ck_actividades_calorias_range'),
     sa.CheckConstraint('distancia > 0 AND distancia <= 300000', name='ck_actividades_distancia_range'),
-    sa.CheckConstraint('duracion > 0 AND duracion <= 86400', name='ck_actividades_duracion_range'),
+    sa.CheckConstraint('duracion_movimiento + duracion_parado = duracion_total', name='ck_actividades_duracion_breakdown_match'),
+    sa.CheckConstraint('duracion_movimiento > 0 AND duracion_movimiento <= 86400', name='ck_actividades_duracion_movimiento_range'),
+    sa.CheckConstraint('duracion_parado >= 0 AND duracion_parado <= 86400', name='ck_actividades_duracion_parado_range'),
+    sa.CheckConstraint('duracion_pausa_manual <= duracion_total', name='ck_actividades_duracion_pausa_manual_total'),
+    sa.CheckConstraint('duracion_pausa_manual >= 0 AND duracion_pausa_manual <= 86400', name='ck_actividades_duracion_pausa_manual_range'),
+    sa.CheckConstraint('duracion_total > 0 AND duracion_total <= 86400', name='ck_actividades_duracion_total_range'),
+    sa.CheckConstraint('pausas_manuales >= 0 AND pausas_manuales <= 500', name='ck_actividades_pausas_manuales_range'),
+    sa.CheckConstraint('ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600', name='ck_actividades_ritmo_medio_movimiento_range'),
+    sa.CheckConstraint('ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600', name='ck_actividades_ritmo_medio_total_range'),
     sa.CheckConstraint('ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048', name='ck_actividades_ruta_mapa_url_len'),
     sa.CheckConstraint('ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5', name='ck_actividades_ruta_polilinea_len'),
+    sa.CheckConstraint('velocidad_max_x100 >= 0 AND velocidad_max_x100 <= 10000', name='ck_actividades_velocidad_max_range'),
+    sa.CheckConstraint('velocidad_max_x100 >= velocidad_media_x100', name='ck_actividades_velocidad_max_ge_media'),
+    sa.CheckConstraint('velocidad_media_x100 >= 0 AND velocidad_media_x100 <= 10000', name='ck_actividades_velocidad_media_range'),
     sa.ForeignKeyConstraint(['usuario_id'], ['usuarios.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )

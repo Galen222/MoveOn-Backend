@@ -75,6 +75,20 @@ def _build_database_url() -> str:
     )
 
 
+def get_database_url() -> str:
+    """
+    Devuelve la URL de base de datos lista para ser usada por la app o por Alembic.
+
+    Se expone como helper público para evitar que herramientas externas dependan de
+    detalles internos del módulo.
+    """
+    return _build_database_url()
+
+
+# Compatibilidad con Alembic/env.py y con cualquier import legado.
+DATABASE_URL = get_database_url()
+
+
 def _init_db_objects() -> None:
     """
     Inicializa engine y sessionmaker solo una vez.
@@ -841,12 +855,13 @@ class Usuario(Base):
 # =========================================================
 
 
+
 class Actividad(Base):
     """
-    Tabla de actividades deportivas.
+    Tabla de actividades deportivas enriquecida con métricas de tracking.
 
-    Se persiste el tipo como String para mantener compatibilidad con los servicios
-    actuales, pero el valor queda restringido por enum compartido y por checks SQL.
+    Se mantienen valores enteros para facilitar validación, sincronización y
+    compatibilidad con el cliente móvil offline.
     """
 
     __tablename__ = "actividades"
@@ -861,15 +876,21 @@ class Actividad(Base):
 
     tipo: Mapped[str] = mapped_column(String(20), nullable=False)
     distancia: Mapped[int] = mapped_column(Integer, nullable=False)
-    duracion: Mapped[int] = mapped_column(Integer, nullable=False)
+    duracion_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    duracion_movimiento: Mapped[int] = mapped_column(Integer, nullable=False)
+    duracion_parado: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    duracion_pausa_manual: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     calorias_quemadas: Mapped[int] = mapped_column(Integer, nullable=False)
+    ritmo_medio_movimiento: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    ritmo_medio_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    velocidad_media_x100: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    velocidad_max_x100: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    auto_pausas: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    pausas_manuales: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    alertas_velocidad: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
 
-    # La polilínea puede ser larga; por eso se deja en Text
     ruta_polilinea: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # La URL sí tiene un límite real en el schema: 2048
     ruta_mapa_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
-
     fecha_ruta: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -879,37 +900,29 @@ class Actividad(Base):
     )
 
     __table_args__ = (
-        # Enum compartido
         CheckConstraint(
             _build_enum_check_sql("tipo", VALID_TIPOS_ACTIVIDAD, allow_null=False),
             name="ck_actividades_tipo_values",
         ),
-        # Reglas de negocio de actividad
-        CheckConstraint(
-            "distancia > 0 AND distancia <= 300000",
-            name="ck_actividades_distancia_range",
-        ),
-        CheckConstraint(
-            "duracion > 0 AND duracion <= 86400", name="ck_actividades_duracion_range"
-        ),
-        CheckConstraint(
-            "calorias_quemadas > 0 AND calorias_quemadas <= 10000",
-            name="ck_actividades_calorias_range",
-        ),
-        # Ruta opcional
-        CheckConstraint(
-            "ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5",
-            name="ck_actividades_ruta_polilinea_len",
-        ),
-        CheckConstraint(
-            "ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048",
-            name="ck_actividades_ruta_mapa_url_len",
-        ),
-        CheckConstraint(
-            r"ruta_mapa_url IS NULL OR ruta_mapa_url ~* '^https?://'",
-            name="ck_actividades_ruta_mapa_url_http",
-        ),
-        # Índice útil para recuperar actividades por usuario y fecha
+        CheckConstraint("distancia > 0 AND distancia <= 300000", name="ck_actividades_distancia_range"),
+        CheckConstraint("duracion_total > 0 AND duracion_total <= 86400", name="ck_actividades_duracion_total_range"),
+        CheckConstraint("duracion_movimiento > 0 AND duracion_movimiento <= 86400", name="ck_actividades_duracion_movimiento_range"),
+        CheckConstraint("duracion_parado >= 0 AND duracion_parado <= 86400", name="ck_actividades_duracion_parado_range"),
+        CheckConstraint("duracion_pausa_manual >= 0 AND duracion_pausa_manual <= 86400", name="ck_actividades_duracion_pausa_manual_range"),
+        CheckConstraint("duracion_movimiento + duracion_parado = duracion_total", name="ck_actividades_duracion_breakdown_match"),
+        CheckConstraint("duracion_pausa_manual <= duracion_total", name="ck_actividades_duracion_pausa_manual_total"),
+        CheckConstraint("calorias_quemadas > 0 AND calorias_quemadas <= 10000", name="ck_actividades_calorias_range"),
+        CheckConstraint("ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600", name="ck_actividades_ritmo_medio_movimiento_range"),
+        CheckConstraint("ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600", name="ck_actividades_ritmo_medio_total_range"),
+        CheckConstraint("velocidad_media_x100 >= 0 AND velocidad_media_x100 <= 10000", name="ck_actividades_velocidad_media_range"),
+        CheckConstraint("velocidad_max_x100 >= 0 AND velocidad_max_x100 <= 10000", name="ck_actividades_velocidad_max_range"),
+        CheckConstraint("velocidad_max_x100 >= velocidad_media_x100", name="ck_actividades_velocidad_max_ge_media"),
+        CheckConstraint("auto_pausas >= 0 AND auto_pausas <= 500", name="ck_actividades_auto_pausas_range"),
+        CheckConstraint("pausas_manuales >= 0 AND pausas_manuales <= 500", name="ck_actividades_pausas_manuales_range"),
+        CheckConstraint("alertas_velocidad >= 0 AND alertas_velocidad <= 500", name="ck_actividades_alertas_velocidad_range"),
+        CheckConstraint("ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5", name="ck_actividades_ruta_polilinea_len"),
+        CheckConstraint("ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048", name="ck_actividades_ruta_mapa_url_len"),
+        CheckConstraint(r"ruta_mapa_url IS NULL OR ruta_mapa_url ~* '^https?://'", name="ck_actividades_ruta_mapa_url_http"),
         Index("ix_actividades_usuario_fecha", "usuario_id", "fecha_ruta", "id"),
     )
 
@@ -927,81 +940,98 @@ class Actividad(Base):
 
     @validates("tipo")
     def validar_tipo(self, key: str, valor: Optional[Any]) -> str:
-        resultado = _validar_enum_str(
+        """Valida y normaliza el tipo de actividad persistido como texto."""
+        tipo_normalizado = _validar_enum_str(
             valor,
             VALID_TIPOS_ACTIVIDAD,
-            "El tipo de actividad",
-            must_be_text_code="ACTIVITY_TYPE_MUST_BE_TEXT",
+            "tipo",
+            must_be_text_code="ACTIVITY_TYPE_MUST_BE_STRING",
             invalid_code="ACTIVITY_TYPE_INVALID",
         )
-        if resultado is None:
+        if tipo_normalizado is None:
             raise AppValidationError(
-                "Error: El tipo de actividad es obligatorio", "ACTIVITY_TYPE_REQUIRED"
+                "Error: tipo es obligatorio",
+                "ACTIVITY_TYPE_REQUIRED",
             )
-        return resultado
+        return tipo_normalizado
 
     @validates("distancia")
     def validar_distancia(self, key: str, valor: int) -> int:
-        if not isinstance(valor, int):
-            raise AppValidationError(
-                "Error: La distancia debe ser un número entero",
-                "DISTANCE_MUST_BE_INTEGER",
-            )
         return validators.validar_distancia_logica(valor)
 
-    @validates("duracion")
-    def validar_duracion(self, key: str, valor: int) -> int:
-        if not isinstance(valor, int):
-            raise AppValidationError(
-                "Error: La duración debe ser un número entero",
-                "DURATION_MUST_BE_INTEGER",
-            )
+    @validates("duracion_total")
+    def validar_duracion_total(self, key: str, valor: int) -> int:
         return validators.validar_duracion_logica(valor)
+
+    @validates("duracion_movimiento")
+    def validar_duracion_movimiento(self, key: str, valor: int) -> int:
+        return validators.validar_duracion_logica(valor)
+
+    @validates("duracion_parado")
+    def validar_duracion_parado(self, key: str, valor: int) -> int:
+        return validators.validar_duracion_no_negativa_logica(valor, "la duración parada", "STOPPED_DURATION")
+
+    @validates("duracion_pausa_manual")
+    def validar_duracion_pausa_manual(self, key: str, valor: int) -> int:
+        return validators.validar_duracion_no_negativa_logica(valor, "la duración de pausa manual", "MANUAL_PAUSE_DURATION")
 
     @validates("calorias_quemadas")
     def validar_calorias(self, key: str, valor: int) -> int:
-        if not isinstance(valor, int):
-            raise AppValidationError(
-                "Error: Las calorías deben ser un número entero",
-                "CALORIES_MUST_BE_INTEGER",
-            )
         return validators.validar_calorias_logica(valor)
+
+    @validates("ritmo_medio_movimiento")
+    def validar_ritmo_medio_movimiento(self, key: str, valor: int) -> int:
+        return validators.validar_ritmo_segundos_km_logica(valor, "el ritmo medio en movimiento", "MOVING_PACE")
+
+    @validates("ritmo_medio_total")
+    def validar_ritmo_medio_total(self, key: str, valor: int) -> int:
+        return validators.validar_ritmo_segundos_km_logica(valor, "el ritmo medio total", "TOTAL_PACE")
+
+    @validates("velocidad_media_x100")
+    def validar_velocidad_media(self, key: str, valor: int) -> int:
+        return validators.validar_velocidad_x100_logica(valor, "la velocidad media", "AVERAGE_SPEED")
+
+    @validates("velocidad_max_x100")
+    def validar_velocidad_max(self, key: str, valor: int) -> int:
+        return validators.validar_velocidad_x100_logica(valor, "la velocidad máxima", "MAX_SPEED")
+
+    @validates("auto_pausas")
+    def validar_auto_pausas(self, key: str, valor: int) -> int:
+        return validators.validar_contador_tracking_logica(valor, "las auto pausas", "AUTO_PAUSE_COUNT")
+
+    @validates("pausas_manuales")
+    def validar_pausas_manuales(self, key: str, valor: int) -> int:
+        return validators.validar_contador_tracking_logica(valor, "las pausas manuales", "MANUAL_PAUSE_COUNT")
+
+    @validates("alertas_velocidad")
+    def validar_alertas_velocidad(self, key: str, valor: int) -> int:
+        return validators.validar_contador_tracking_logica(valor, "las alertas de velocidad", "SPEED_ALERT_COUNT")
 
     @validates("ruta_polilinea")
     def validar_ruta_polilinea(self, key: str, valor: Optional[str]) -> Optional[str]:
-        if valor == "":
-            return None
+        """Valida la polilínea solo cuando existe, manteniendo el campo opcional."""
         if valor is None:
             return None
-        if not isinstance(valor, str):
-            raise AppValidationError(
-                "Error: La polilínea debe ser un texto", "POLYLINE_MUST_BE_TEXT"
-            )
         return validators.validar_polilinea_logica(valor)
 
     @validates("ruta_mapa_url")
     def validar_ruta_mapa_url(self, key: str, valor: Optional[str]) -> Optional[str]:
-        return _validar_url_http_opcional(
-            valor,
-            "La URL del mapa",
-            2048,
-            must_be_text_code="MAP_URL_MUST_BE_TEXT",
-            too_long_code="MAP_URL_TOO_LONG",
-            invalid_code="MAP_URL_INVALID",
-        )
+        if valor is None:
+            return None
+        if len(valor) > 2048:
+            raise AppValidationError(
+                "Error: La URL del mapa es demasiado larga", "MAP_URL_TOO_LONG"
+            )
+        if not valor.lower().startswith(("http://", "https://")):
+            raise AppValidationError(
+                "Error: La URL del mapa debe empezar por http:// o https://",
+                "MAP_URL_INVALID_SCHEME",
+            )
+        return valor
 
     @validates("fecha_ruta")
     def validar_fecha_ruta(self, key: str, valor: datetime) -> datetime:
-        if not isinstance(valor, datetime):
-            raise AppValidationError(
-                "Error: fecha_ruta debe ser una fecha-hora válida", "ROUTE_DATE_INVALID"
-            )
         return validators.validar_fecha_ruta_logica(valor)
-
-
-# =========================================================
-# Modelo SesionRefresh
-# =========================================================
 
 
 class SesionRefresh(Base):
@@ -1201,3 +1231,5 @@ async def obtener_db() -> AsyncGenerator[AsyncSession, None]:
 
     async with AsyncSessionLocal() as db:
         yield db
+
+
