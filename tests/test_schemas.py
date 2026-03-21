@@ -1,8 +1,7 @@
-
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import HTTPException
+from pydantic import ValidationError
 
 import schemas
 from schemas import TipoActividad
@@ -42,18 +41,31 @@ class TestGuardarActividadSchema:
         assert data.duracion_parado == 120
 
     def test_duracion_breakdown_invalido(self):
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(
+            ValidationError,
+            match="La suma de duración en movimiento y parada debe coincidir con la duración total",
+        ):
             schemas.GuardarActividad(**_payload(duracion_parado=100))
-        assert exc.value.status_code == 422
 
     def test_velocidad_max_no_puede_ser_menor_que_media(self):
-        with pytest.raises(HTTPException):
-            schemas.GuardarActividad(**_payload(velocidad_media_x100=1200, velocidad_max_x100=1100))
+        with pytest.raises(
+            ValidationError,
+            match="La velocidad máxima no puede ser menor que la velocidad media",
+        ):
+            schemas.GuardarActividad(
+                **_payload(velocidad_media_x100=1200, velocidad_max_x100=1100)
+            )
 
     def test_ritmo_medio_movimiento_es_obligatorio_si_hay_movimiento(self):
-        with pytest.raises(HTTPException):
+        with pytest.raises(
+            ValidationError,
+            match="Falta el ritmo medio en movimiento",
+        ):
             schemas.GuardarActividad(**_payload(ritmo_medio_movimiento=0))
 
     def test_fecha_futura_invalida(self):
-        with pytest.raises(HTTPException):
+        with pytest.raises(
+            ValidationError,
+            match="La fecha de la actividad no puede ser en el futuro",
+        ):
             schemas.GuardarActividad(**_payload(fecha_ruta=_ahora() + timedelta(days=1)))

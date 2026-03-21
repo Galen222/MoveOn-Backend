@@ -790,11 +790,17 @@ class TestBuscarPerfil:
 class TestRankingObtener:
     def _ranking_fake(self):
         return [
-            {"nombre_usuario": "pepe", "foto_perfil": None, "total_puntos": 10},
+            {
+                "nombre_usuario": "pepe",
+                "foto_perfil": None,
+                "total_puntos": 10,
+                "total_metros": 10_000,
+            },
             {
                 "nombre_usuario": "ana",
                 "foto_perfil": "https://cdn.example.com/ana.jpg",
                 "total_puntos": 8,
+                "total_metros": 8_000,
             },
         ]
 
@@ -825,6 +831,7 @@ class TestRankingObtener:
         for item in body:
             assert "nombre_usuario" in item
             assert "foto_perfil" in item
+            assert "foto_version" in item
             assert "total_puntos" in item
 
     def test_ranking_con_provincia_valida_pasa_filtro(self, monkeypatch):
@@ -854,7 +861,12 @@ class TestRankingObtener:
 
         async def fake_ranking(db, provincia=None):
             return [
-                {"nombre_usuario": "pepe", "foto_perfil": "foto.jpg", "total_puntos": 5}
+                {
+                    "nombre_usuario": "pepe",
+                    "foto_perfil": "foto.jpg",
+                    "total_puntos": 5,
+                    "total_metros": 5_000,
+                }
             ]
 
         def fake_construir(foto, req):
