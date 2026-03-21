@@ -147,7 +147,7 @@ RUTAS_GALEN = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": "ot~uFrx`U{Jo_@wG_b@?_b@vGg^nNo\vWmRj_@uDj_@eCz]mGhZoNpSsUhLgYfEaZqC{Y}J{ViQyQqWwIe\?w\vGqZrNoVnWoQl_@cDz^?~HgYf@{TsI",
+        "ruta_polilinea": "ot~uFrx`U{Jo_@wG_b@?_b@vGg^nNo\\vWmRj_@uDj_@eCz]mGhZoNpSsUhLgYfEaZqC{Y}J{ViQyQqWwIe\\?w\\vGqZrNoVnWoQl_@cDz^?~HgYf@{TsI",
         "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.45890&mlon=-3.59890#map=15/40.45890/-3.59890",
         "dias_atras": 16,
         "horas_atras": 7,
