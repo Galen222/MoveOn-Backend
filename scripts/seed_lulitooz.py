@@ -19,13 +19,13 @@ from domain.enums import TipoActividad
 from services import activities_service, user_service
 
 """
-Seeder de 57 rutas completas para un usuario de pruebas llamado Galen.
+Seeder de 57 rutas completas para un usuario de pruebas llamado Lulitooz.
 
 Objetivo:
-- Crear el usuario "Galen" si no existe todavía.
-- Email: galen2@gmx.net
-- Fecha de nacimiento: 1978-11-27
-- Contraseña: Prueba123
+- Crear el usuario "Lulitooz" si no existe todavía.
+- Email: luisafernandaormaza6@gmail.com
+- Fecha de nacimiento: 2001-05-15
+- Contraseña: tiabuena
 
 Importante:
 - El script NO guarda la contraseña en claro en la base de datos.
@@ -40,16 +40,21 @@ Comportamiento:
 - Está pensado para desarrollo y pruebas manuales.
 
 Uso:
-    python scripts/seed_galen_real_routes.py
+    python scripts/seed_lulitooz_real_routes.py
 """
 
-TARGET_USERNAME = "Galen"
-TARGET_EMAIL = "galen2@gmx.net"
-TARGET_PASSWORD = "Prueba123"
-TARGET_BIRTH_DATE = date(1978, 11, 27)
+TARGET_USERNAME = "Lulitooz"
+TARGET_EMAIL = "luisafernandaormaza6@gmail.com"
+TARGET_PASSWORD = "Tiabuena123"
+TARGET_BIRTH_DATE = date(2001, 5, 15)
+TARGET_REAL_NAME = "Luisa Fernanda Ormaza Zapata"
+TARGET_GENDER = "Mujer"
+TARGET_HEIGHT_CM = 158
+TARGET_WEIGHT_KG = 65
+TARGET_CITY = "Madrid"
 VERSION_TERMINOS = "1.0"
 
-RUTAS_GALEN_BASE = [
+RUTAS_LULITOOZ_BASE = [
     {
         "nombre": "Retiro 3.8K",
         "tipo": TipoActividad.CORRER,
@@ -220,29 +225,38 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
     extras: list[dict] = []
 
     for i in range(total_extra):
-        base = dict(RUTAS_GALEN_BASE[i % len(RUTAS_GALEN_BASE)])
-        ciclo = i // len(RUTAS_GALEN_BASE)
+        base = dict(RUTAS_LULITOOZ_BASE[i % len(RUTAS_LULITOOZ_BASE)])
+        ciclo = i // len(RUTAS_LULITOOZ_BASE)
         factor = 0.92 + ((i % 9) * 0.03)
 
-        distancia = int(round(base["distancia"] * factor + (ciclo * 115) + ((i % 5) * 37)))
+        distancia = int(
+            round(base["distancia"] * factor + (ciclo * 115) + ((i % 5) * 37))
+        )
         distancia = max(distancia, 2500)
 
-        duracion_movimiento = int(round(base["duracion_movimiento"] * (distancia / base["distancia"])))
+        duracion_movimiento = int(
+            round(base["duracion_movimiento"] * (distancia / base["distancia"]))
+        )
         duracion_movimiento += (i % 4) * 9 + ciclo * 11
 
-        duracion_parado = max(20, int(round(base["duracion_parado"] * (0.85 + (i % 4) * 0.12))))
+        duracion_parado = max(
+            20, int(round(base["duracion_parado"] * (0.85 + (i % 4) * 0.12)))
+        )
         duracion_pausa_manual = max(
-            0,
-            int(round(base["duracion_pausa_manual"] * (0.75 + (i % 3) * 0.2)))
+            0, int(round(base["duracion_pausa_manual"] * (0.75 + (i % 3) * 0.2)))
         )
 
         calorias_por_metro = base["calorias_quemadas"] / base["distancia"]
         calorias_quemadas = max(110, int(round(calorias_por_metro * distancia)))
 
         ritmo_medio_movimiento = int(round((duracion_movimiento / distancia) * 1000))
-        ritmo_medio_total = int(round(((duracion_movimiento + duracion_parado) / distancia) * 1000))
+        ritmo_medio_total = int(
+            round(((duracion_movimiento + duracion_parado) / distancia) * 1000)
+        )
         velocidad_media_x100 = int(round((distancia / duracion_movimiento) * 360))
-        velocidad_max_x100 = int(round(velocidad_media_x100 * (1.18 + ((i % 5) * 0.025))))
+        velocidad_max_x100 = int(
+            round(velocidad_media_x100 * (1.18 + ((i % 5) * 0.025)))
+        )
 
         auto_pausas = min(3, 1 if duracion_parado >= 70 else 0)
         if base["tipo"] == TipoActividad.CAMINAR and duracion_parado >= 100:
@@ -252,7 +266,9 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
         if duracion_pausa_manual >= 75:
             pausas_manuales = 2
 
-        alertas_velocidad = 1 if base["tipo"] == TipoActividad.CORRER and (i % 4 == 0) else 0
+        alertas_velocidad = (
+            1 if base["tipo"] == TipoActividad.CORRER and (i % 4 == 0) else 0
+        )
         zona = NOMBRES_ZONA_EXTRA[i % len(NOMBRES_ZONA_EXTRA)]
         km = f"{distancia / 1000:.1f}K"
 
@@ -281,7 +297,7 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
     return extras
 
 
-RUTAS_GALEN = RUTAS_GALEN_BASE + generar_rutas_extra(50)
+RUTAS_LULITOOZ = RUTAS_LULITOOZ_BASE + generar_rutas_extra(50)
 
 
 def ahora_utc() -> datetime:
@@ -305,22 +321,107 @@ async def obtener_usuario_existente(db):
     return result.scalar_one_or_none()
 
 
-async def obtener_o_crear_usuario_galen(db):
+def _resolver_valor_enum(modulos, nombre_enum: str, valor_texto: str):
+    """Intenta convertir un texto a un enum conocido; si no puede, devuelve el texto."""
+    candidatos = [
+        valor_texto,
+        valor_texto.lower(),
+        valor_texto.upper(),
+        valor_texto.capitalize(),
+    ]
+
+    for modulo in modulos:
+        enum_cls = getattr(modulo, nombre_enum, None)
+        if enum_cls is None:
+            continue
+
+        miembros = getattr(enum_cls, "__members__", {})
+        for clave in (valor_texto, valor_texto.upper(), valor_texto.capitalize()):
+            if clave in miembros:
+                return miembros[clave]
+
+        for candidato in candidatos:
+            try:
+                return enum_cls(candidato)
+            except Exception:
+                pass
+
+    return valor_texto
+
+
+def _set_attr_si_existe(obj, attr: str, value) -> bool:
+    if not hasattr(obj, attr):
+        return False
+    setattr(obj, attr, value)
+    return True
+
+
+async def actualizar_perfil_lulitooz(db, usuario) -> None:
+    """Rellena campos extra del perfil si existen en el modelo."""
+    cambios = 0
+
+    cambios += int(_set_attr_si_existe(usuario, "nombre_real", TARGET_REAL_NAME))
+    cambios += int(_set_attr_si_existe(usuario, "fecha_nacimiento", TARGET_BIRTH_DATE))
+
+    genero_valor = _resolver_valor_enum((database, schemas), "Genero", TARGET_GENDER)
+    for attr in ("genero", "sexo"):
+        if _set_attr_si_existe(usuario, attr, genero_valor):
+            cambios += 1
+            break
+
+    for attr in ("altura_cm", "altura"):
+        if _set_attr_si_existe(usuario, attr, TARGET_HEIGHT_CM):
+            cambios += 1
+            break
+
+    for attr in ("peso_kg", "peso"):
+        if _set_attr_si_existe(usuario, attr, TARGET_WEIGHT_KG):
+            cambios += 1
+            break
+
+    cambios += int(_set_attr_si_existe(usuario, "ciudad", TARGET_CITY))
+
+    if not cambios:
+        print(
+            "[WARN] No se encontraron campos extra de perfil para actualizar en el modelo Usuario."
+        )
+        return
+
+    try:
+        db.add(usuario)
+        await db.commit()
+        await db.refresh(usuario)
+        print(
+            "[USER] Perfil sincronizado: "
+            f"nombre_real={TARGET_REAL_NAME!r}, genero={TARGET_GENDER!r}, "
+            f"altura={TARGET_HEIGHT_CM}cm, peso={TARGET_WEIGHT_KG}kg, ciudad={TARGET_CITY!r}"
+        )
+    except Exception as exc:
+        await db.rollback()
+        print(
+            f"[WARN] No se pudo actualizar el perfil extendido de {TARGET_USERNAME}: {exc}"
+        )
+
+
+async def obtener_o_crear_usuario_lulitooz(db):
     """
-    Obtiene el usuario Galen si ya existe; si no, lo crea usando el
+    Obtiene el usuario Lulitooz si ya existe; si no, lo crea usando el
     servicio real de registro para que el hash de contraseña se genere
     igual que en producción.
     """
     usuario = await obtener_usuario_existente(db)
     if usuario:
-        print(f"[USER] Reutilizando usuario existente: {usuario.nombre_usuario} <{usuario.email}>")
+        print(
+            f"[USER] Reutilizando usuario existente: {usuario.nombre_usuario} <{usuario.email}>"
+        )
+        await actualizar_perfil_lulitooz(db, usuario)
         return usuario
 
     datos_registro = schemas.Registro(
         nombre_usuario=TARGET_USERNAME,
         email=TARGET_EMAIL,
         password=TARGET_PASSWORD,
-        nombre_real="Galen",
+        nombre_real=TARGET_REAL_NAME,
         fecha_nacimiento=TARGET_BIRTH_DATE,
         perfil_visible=True,
         acepta_terminos=True,
@@ -333,8 +434,11 @@ async def obtener_o_crear_usuario_galen(db):
 
     usuario = await obtener_usuario_existente(db)
     if not usuario:
-        raise RuntimeError("El usuario se registró pero no se pudo recuperar desde la base de datos.")
+        raise RuntimeError(
+            "El usuario se registró pero no se pudo recuperar desde la base de datos."
+        )
 
+    await actualizar_perfil_lulitooz(db, usuario)
     return usuario
 
 
@@ -369,8 +473,8 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
     )
 
 
-async def crear_rutas_galen() -> None:
-    """Inicializa la BD, garantiza el usuario Galen y crea las 57 rutas de prueba."""
+async def crear_rutas_lulitooz() -> None:
+    """Inicializa la BD, garantiza el usuario Lulitooz y crea las 57 rutas de prueba."""
     await database.init_db()
 
     if database.AsyncSessionLocal is None:
@@ -380,12 +484,14 @@ async def crear_rutas_galen() -> None:
     total_creadas = 0
 
     async with database.AsyncSessionLocal() as db:
-        usuario = await obtener_o_crear_usuario_galen(db)
+        usuario = await obtener_o_crear_usuario_lulitooz(db)
 
-        for indice, ruta in enumerate(RUTAS_GALEN, start=1):
+        for indice, ruta in enumerate(RUTAS_LULITOOZ, start=1):
             try:
                 datos = construir_actividad(ruta)
-                respuesta = await activities_service.crear_actividad(db, usuario.id, datos)
+                respuesta = await activities_service.crear_actividad(
+                    db, usuario.id, datos
+                )
                 total_creadas += 1
                 print(
                     f"[OK] {usuario.nombre_usuario}: actividad {respuesta['id']} "
@@ -399,11 +505,16 @@ async def crear_rutas_galen() -> None:
 
     print()
     print(f"Usuario objetivo: {TARGET_USERNAME} <{TARGET_EMAIL}>")
+    print(f"Nombre real: {TARGET_REAL_NAME}")
     print(f"Fecha de nacimiento: {TARGET_BIRTH_DATE.isoformat()}")
+    print(f"Género: {TARGET_GENDER}")
+    print(f"Altura (cm): {TARGET_HEIGHT_CM}")
+    print(f"Peso (kg): {TARGET_WEIGHT_KG}")
+    print(f"Ciudad: {TARGET_CITY}")
     print(f"Contraseña de pruebas: {TARGET_PASSWORD}")
     print(f"Total de rutas creadas: {total_creadas}")
-    print(f"Total configuradas en el seed: {len(RUTAS_GALEN)}")
+    print(f"Total configuradas en el seed: {len(RUTAS_LULITOOZ)}")
 
 
 if __name__ == "__main__":
-    asyncio.run(crear_rutas_galen())
+    asyncio.run(crear_rutas_lulitooz())
