@@ -179,7 +179,7 @@ def reporte_perfil_inapropiado_template(
             </div>
 
             <div class="content">
-                <h2 style="margin-top: 0;">Nuevo reporte de perfil</h2>
+                <h2 style="margin-top: 0;">Reporte de perfil</h2>
                 <p>Se ha recibido un reporte de contenido potencialmente inapropiado en MoveOn.</p>
 
                 <div class="card">
@@ -206,7 +206,6 @@ def reporte_perfil_inapropiado_template(
             </div>
 
             <div class="footer">
-                <p>Correo generado automáticamente por MoveOn App.</p>
                 <p>&copy; MoveOn App</p>
             </div>
         </div>

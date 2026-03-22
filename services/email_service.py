@@ -101,7 +101,7 @@ def _construir_mensaje_recuperacion(
     smtp_username: str,
 ) -> EmailMessage:
     msg = EmailMessage()
-    msg["Subject"] = "Código de recuperación - MoveOn"
+    msg["Subject"] = "Código de recuperación"
     msg["From"] = formataddr(("MoveOn App", smtp_username))
     msg["To"] = email_destino
 
@@ -124,7 +124,7 @@ def _construir_mensaje_reporte_perfil(
     smtp_username: str,
 ) -> EmailMessage:
     msg = EmailMessage()
-    msg["Subject"] = "Reporte de perfil inapropiado - MoveOn"
+    msg["Subject"] = "Reporte de perfil inapropiado"
     msg["From"] = formataddr(("MoveOn App", smtp_username))
     msg["To"] = ", ".join(REPORTES_DESTINO)
 
