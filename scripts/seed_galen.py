@@ -8,15 +8,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import asyncio
-from datetime import date, datetime, timedelta, timezone
+import asyncio  # noqa: E402
+from datetime import date, datetime, timedelta, timezone  # noqa: E402
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select  # noqa: E402
 
-import database
-import schemas
-from domain.enums import TipoActividad
-from services import activities_service, user_service
+import database  # noqa: E402
+import schemas  # noqa: E402
+from domain.enums import TipoActividad  # noqa: E402
+from services import activities_service, user_service  # noqa: E402
 
 """
 Seeder de 57 rutas completas para un usuario de pruebas llamado Galen.
@@ -224,25 +224,34 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
         ciclo = i // len(RUTAS_GALEN_BASE)
         factor = 0.92 + ((i % 9) * 0.03)
 
-        distancia = int(round(base["distancia"] * factor + (ciclo * 115) + ((i % 5) * 37)))
+        distancia = int(
+            round(base["distancia"] * factor + (ciclo * 115) + ((i % 5) * 37))
+        )
         distancia = max(distancia, 2500)
 
-        duracion_movimiento = int(round(base["duracion_movimiento"] * (distancia / base["distancia"])))
+        duracion_movimiento = int(
+            round(base["duracion_movimiento"] * (distancia / base["distancia"]))
+        )
         duracion_movimiento += (i % 4) * 9 + ciclo * 11
 
-        duracion_parado = max(20, int(round(base["duracion_parado"] * (0.85 + (i % 4) * 0.12))))
+        duracion_parado = max(
+            20, int(round(base["duracion_parado"] * (0.85 + (i % 4) * 0.12)))
+        )
         duracion_pausa_manual = max(
-            0,
-            int(round(base["duracion_pausa_manual"] * (0.75 + (i % 3) * 0.2)))
+            0, int(round(base["duracion_pausa_manual"] * (0.75 + (i % 3) * 0.2)))
         )
 
         calorias_por_metro = base["calorias_quemadas"] / base["distancia"]
         calorias_quemadas = max(110, int(round(calorias_por_metro * distancia)))
 
         ritmo_medio_movimiento = int(round((duracion_movimiento / distancia) * 1000))
-        ritmo_medio_total = int(round(((duracion_movimiento + duracion_parado) / distancia) * 1000))
+        ritmo_medio_total = int(
+            round(((duracion_movimiento + duracion_parado) / distancia) * 1000)
+        )
         velocidad_media_x100 = int(round((distancia / duracion_movimiento) * 360))
-        velocidad_max_x100 = int(round(velocidad_media_x100 * (1.18 + ((i % 5) * 0.025))))
+        velocidad_max_x100 = int(
+            round(velocidad_media_x100 * (1.18 + ((i % 5) * 0.025)))
+        )
 
         auto_pausas = min(3, 1 if duracion_parado >= 70 else 0)
         if base["tipo"] == TipoActividad.CAMINAR and duracion_parado >= 100:
@@ -252,7 +261,9 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
         if duracion_pausa_manual >= 75:
             pausas_manuales = 2
 
-        alertas_velocidad = 1 if base["tipo"] == TipoActividad.CORRER and (i % 4 == 0) else 0
+        alertas_velocidad = (
+            1 if base["tipo"] == TipoActividad.CORRER and (i % 4 == 0) else 0
+        )
         zona = NOMBRES_ZONA_EXTRA[i % len(NOMBRES_ZONA_EXTRA)]
         km = f"{distancia / 1000:.1f}K"
 
@@ -313,7 +324,9 @@ async def obtener_o_crear_usuario_galen(db):
     """
     usuario = await obtener_usuario_existente(db)
     if usuario:
-        print(f"[USER] Reutilizando usuario existente: {usuario.nombre_usuario} <{usuario.email}>")
+        print(
+            f"[USER] Reutilizando usuario existente: {usuario.nombre_usuario} <{usuario.email}>"
+        )
         return usuario
 
     datos_registro = schemas.Registro(
@@ -333,7 +346,9 @@ async def obtener_o_crear_usuario_galen(db):
 
     usuario = await obtener_usuario_existente(db)
     if not usuario:
-        raise RuntimeError("El usuario se registró pero no se pudo recuperar desde la base de datos.")
+        raise RuntimeError(
+            "El usuario se registró pero no se pudo recuperar desde la base de datos."
+        )
 
     return usuario
 
@@ -385,7 +400,9 @@ async def crear_rutas_galen() -> None:
         for indice, ruta in enumerate(RUTAS_GALEN, start=1):
             try:
                 datos = construir_actividad(ruta)
-                respuesta = await activities_service.crear_actividad(db, usuario.id, datos)
+                respuesta = await activities_service.crear_actividad(
+                    db, usuario.id, datos
+                )
                 total_creadas += 1
                 print(
                     f"[OK] {usuario.nombre_usuario}: actividad {respuesta['id']} "

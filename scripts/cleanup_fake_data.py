@@ -9,10 +9,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import asyncio
-from sqlalchemy import delete, func, select
+import asyncio  # noqa: E402
+from sqlalchemy import delete, func, select  # noqa: E402
 
-import database
+import database  # noqa: E402
 
 """
 Script para borrar los datos creados por el seed unificado de prueba.

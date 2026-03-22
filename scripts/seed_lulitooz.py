@@ -8,15 +8,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import asyncio
-from datetime import date, datetime, timedelta, timezone
+import asyncio  # noqa: E402
+from datetime import date, datetime, timedelta, timezone  # noqa: E402
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select  # noqa: E402
 
-import database
-import schemas
-from domain.enums import TipoActividad
-from services import activities_service, user_service
+import database  # noqa: E402
+import schemas  # noqa: E402
+from domain.enums import TipoActividad  # noqa: E402
+from services import activities_service, user_service  # noqa: E402
 
 """
 Seeder de 57 rutas completas para un usuario de pruebas llamado Lulitooz.

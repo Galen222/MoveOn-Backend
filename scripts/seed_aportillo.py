@@ -8,15 +8,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import asyncio
-from datetime import datetime, timezone
+import asyncio  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select  # noqa: E402
 
-import database
-import schemas
-from domain.enums import TipoActividad
-from services import activities_service
+import database  # noqa: E402
+import schemas  # noqa: E402
+from domain.enums import TipoActividad  # noqa: E402
+from services import activities_service  # noqa: E402
 
 """
 Seeder de 30 actividades completas para el usuario existente "aportillo".
@@ -198,28 +198,80 @@ def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
     distancia = int(base["distancia"] + (offset * 55) + (ciclo * 35))
 
     if base["tipo"] == TipoActividad.CORRER:
-        ritmo_mov = max(300, int(base["ritmo_medio_movimiento"] + offset * 6 + ciclo * 3))
-        ritmo_total = max(ritmo_mov + 6, int(base["ritmo_medio_total"] + offset * 6 + ciclo * 3))
+        ritmo_mov = max(
+            300, int(base["ritmo_medio_movimiento"] + offset * 6 + ciclo * 3)
+        )
+        ritmo_total = max(
+            ritmo_mov + 6, int(base["ritmo_medio_total"] + offset * 6 + ciclo * 3)
+        )
         velocidad_media = max(800, int(360000 / ritmo_mov))
-        velocidad_max = max(velocidad_media + 180, int(base["velocidad_max_x100"] + offset * 12 + ciclo * 10))
+        velocidad_max = max(
+            velocidad_media + 180,
+            int(base["velocidad_max_x100"] + offset * 12 + ciclo * 10),
+        )
         pausas = max(0, int(base["pausas_manuales"] + (1 if offset > 1 else 0)))
-        auto_pausas = max(0, int(base["auto_pausas"] + (1 if ciclo >= 3 and offset < 0 else 0)))
+        auto_pausas = max(
+            0, int(base["auto_pausas"] + (1 if ciclo >= 3 and offset < 0 else 0))
+        )
         duracion_mov = max(900, int(round(distancia * ritmo_mov / 1000)))
-        duracion_parado = max(20, int(base["duracion_parado"] + (offset * 8) + (ciclo * 5)))
-        duracion_pausa_manual = max(0, int(base["duracion_pausa_manual"] + (10 if pausas > base["pausas_manuales"] else 0)))
-        calorias = max(180, int(base["calorias_quemadas"] + (distancia - base["distancia"]) * 0.06 + ciclo * 8))
-        alertas = 1 if velocidad_max >= 1350 and (indice % 3 == 0) else int(base["alertas_velocidad"])
+        duracion_parado = max(
+            20, int(base["duracion_parado"] + (offset * 8) + (ciclo * 5))
+        )
+        duracion_pausa_manual = max(
+            0,
+            int(
+                base["duracion_pausa_manual"]
+                + (10 if pausas > base["pausas_manuales"] else 0)
+            ),
+        )
+        calorias = max(
+            180,
+            int(
+                base["calorias_quemadas"]
+                + (distancia - base["distancia"]) * 0.06
+                + ciclo * 8
+            ),
+        )
+        alertas = (
+            1
+            if velocidad_max >= 1350 and (indice % 3 == 0)
+            else int(base["alertas_velocidad"])
+        )
     else:
-        ritmo_mov = max(540, int(base["ritmo_medio_movimiento"] + offset * 10 + ciclo * 8))
-        ritmo_total = max(ritmo_mov + 10, int(base["ritmo_medio_total"] + offset * 11 + ciclo * 8))
+        ritmo_mov = max(
+            540, int(base["ritmo_medio_movimiento"] + offset * 10 + ciclo * 8)
+        )
+        ritmo_total = max(
+            ritmo_mov + 10, int(base["ritmo_medio_total"] + offset * 11 + ciclo * 8)
+        )
         velocidad_media = max(420, int(360000 / ritmo_mov))
-        velocidad_max = max(velocidad_media + 60, int(base["velocidad_max_x100"] + offset * 8 + ciclo * 6))
+        velocidad_max = max(
+            velocidad_media + 60,
+            int(base["velocidad_max_x100"] + offset * 8 + ciclo * 6),
+        )
         pausas = max(1, int(base["pausas_manuales"] + (1 if indice % 4 == 0 else 0)))
-        auto_pausas = max(1, int(base["auto_pausas"] + (1 if ciclo >= 2 and indice % 5 == 0 else 0)))
+        auto_pausas = max(
+            1, int(base["auto_pausas"] + (1 if ciclo >= 2 and indice % 5 == 0 else 0))
+        )
         duracion_mov = max(1800, int(round(distancia * ritmo_mov / 1000)))
-        duracion_parado = max(60, int(base["duracion_parado"] + (offset * 12) + (ciclo * 7)))
-        duracion_pausa_manual = max(30, int(base["duracion_pausa_manual"] + (15 if pausas > base["pausas_manuales"] else 0)))
-        calorias = max(150, int(base["calorias_quemadas"] + (distancia - base["distancia"]) * 0.04 + ciclo * 6))
+        duracion_parado = max(
+            60, int(base["duracion_parado"] + (offset * 12) + (ciclo * 7))
+        )
+        duracion_pausa_manual = max(
+            30,
+            int(
+                base["duracion_pausa_manual"]
+                + (15 if pausas > base["pausas_manuales"] else 0)
+            ),
+        )
+        calorias = max(
+            150,
+            int(
+                base["calorias_quemadas"]
+                + (distancia - base["distancia"]) * 0.04
+                + ciclo * 6
+            ),
+        )
         alertas = 0
 
     return {
@@ -327,7 +379,9 @@ async def crear_actividades_aportillo() -> None:
                     continue
 
                 datos = construir_actividad(ruta)
-                respuesta = await activities_service.crear_actividad(db, usuario.id, datos)
+                respuesta = await activities_service.crear_actividad(
+                    db, usuario.id, datos
+                )
                 total_creadas += 1
                 print(
                     f"[OK] {usuario.nombre_usuario}: actividad {respuesta['id']} "
@@ -343,7 +397,9 @@ async def crear_actividades_aportillo() -> None:
 
     print()
     print(f"Usuario objetivo: {TARGET_USERNAME}")
-    print(f"Rango de fechas: {FECHAS_SEED[0].date().isoformat()} -> {FECHAS_SEED[-1].date().isoformat()}")
+    print(
+        f"Rango de fechas: {FECHAS_SEED[0].date().isoformat()} -> {FECHAS_SEED[-1].date().isoformat()}"
+    )
     print(f"Actividades planificadas: {TOTAL_ACTIVIDADES}")
     print(f"Actividades creadas: {total_creadas}")
     print(f"Actividades omitidas: {total_omitidas}")

@@ -9,16 +9,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import asyncio
-from datetime import date, datetime, timedelta, timezone
-from typing import Iterable
+import asyncio  # noqa: E402
+from datetime import date, datetime, timedelta, timezone  # noqa: E402
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select  # noqa: E402
 
-import database
-import schemas
-from domain.enums import GeneroUsuario, ProvinciaEspaña, TipoActividad
-from services import activities_service, user_service
+import database  # noqa: E402
+import schemas  # noqa: E402
+from domain.enums import GeneroUsuario, ProvinciaEspaña, TipoActividad  # noqa: E402
+from services import activities_service, user_service  # noqa: E402
 
 """
 Seeder unificado de datos fake para MoveOn.
@@ -43,26 +42,146 @@ TOTAL_USUARIOS = 20
 ACTIVIDADES_POR_USUARIO = 6
 
 USUARIOS = [
-    ("usuario1", "Carlos Martin", "usuario1@prueba.com", ProvinciaEspaña.MADRID, GeneroUsuario.HOMBRE),
-    ("usuario2", "Laura Garcia", "usuario2@prueba.com", ProvinciaEspaña.BARCELONA, GeneroUsuario.MUJER),
-    ("usuario3", "Diego Perez", "usuario3@prueba.com", ProvinciaEspaña.VALENCIA, GeneroUsuario.HOMBRE),
-    ("usuario4", "Marta Lopez", "usuario4@prueba.com", ProvinciaEspaña.SEVILLA, GeneroUsuario.MUJER),
-    ("usuario5", "Pablo Sanchez", "usuario5@prueba.com", ProvinciaEspaña.MALAGA, GeneroUsuario.HOMBRE),
-    ("usuario6", "Elena Romero", "usuario6@prueba.com", ProvinciaEspaña.MURCIA, GeneroUsuario.MUJER),
-    ("usuario7", "Javier Torres", "usuario7@prueba.com", ProvinciaEspaña.ZARAGOZA, GeneroUsuario.HOMBRE),
-    ("usuario8", "Sara Navarro", "usuario8@prueba.com", ProvinciaEspaña.A_CORUNA, GeneroUsuario.MUJER),
-    ("usuario9", "Hugo Diaz", "usuario9@prueba.com", ProvinciaEspaña.VALLADOLID, GeneroUsuario.HOMBRE),
-    ("usuario10", "Paula Moreno", "usuario10@prueba.com", ProvinciaEspaña.ALICANTE, GeneroUsuario.MUJER),
-    ("usuario11", "Mario Ruiz", "usuario11@prueba.com", ProvinciaEspaña.GRANADA, GeneroUsuario.HOMBRE),
-    ("usuario12", "Nora Jimenez", "usuario12@prueba.com", ProvinciaEspaña.TARRAGONA, GeneroUsuario.MUJER),
-    ("usuario13", "Victor Gil", "usuario13@prueba.com", ProvinciaEspaña.BURGOS, GeneroUsuario.HOMBRE),
-    ("usuario14", "Lucia Ramos", "usuario14@prueba.com", ProvinciaEspaña.GIRONA, GeneroUsuario.MUJER),
-    ("usuario15", "Raul Dominguez", "usuario15@prueba.com", ProvinciaEspaña.LEON, GeneroUsuario.HOMBRE),
-    ("usuario16", "Irene Alvarez", "usuario16@prueba.com", ProvinciaEspaña.CADIZ, GeneroUsuario.MUJER),
-    ("usuario17", "Tomas Hernandez", "usuario17@prueba.com", ProvinciaEspaña.NAVARRA, GeneroUsuario.HOMBRE),
-    ("usuario18", "Sonia Gomez", "usuario18@prueba.com", ProvinciaEspaña.SALAMANCA, GeneroUsuario.MUJER),
-    ("usuario19", "Alex Vazquez", "usuario19@prueba.com", ProvinciaEspaña.CANTABRIA, GeneroUsuario.OTRO),
-    ("usuario20", "Eva Martin", "usuario20@prueba.com", ProvinciaEspaña.ASTURIAS, GeneroUsuario.MUJER),
+    (
+        "usuario1",
+        "Carlos Martin",
+        "usuario1@prueba.com",
+        ProvinciaEspaña.MADRID,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario2",
+        "Laura Garcia",
+        "usuario2@prueba.com",
+        ProvinciaEspaña.BARCELONA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario3",
+        "Diego Perez",
+        "usuario3@prueba.com",
+        ProvinciaEspaña.VALENCIA,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario4",
+        "Marta Lopez",
+        "usuario4@prueba.com",
+        ProvinciaEspaña.SEVILLA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario5",
+        "Pablo Sanchez",
+        "usuario5@prueba.com",
+        ProvinciaEspaña.MALAGA,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario6",
+        "Elena Romero",
+        "usuario6@prueba.com",
+        ProvinciaEspaña.MURCIA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario7",
+        "Javier Torres",
+        "usuario7@prueba.com",
+        ProvinciaEspaña.ZARAGOZA,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario8",
+        "Sara Navarro",
+        "usuario8@prueba.com",
+        ProvinciaEspaña.A_CORUNA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario9",
+        "Hugo Diaz",
+        "usuario9@prueba.com",
+        ProvinciaEspaña.VALLADOLID,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario10",
+        "Paula Moreno",
+        "usuario10@prueba.com",
+        ProvinciaEspaña.ALICANTE,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario11",
+        "Mario Ruiz",
+        "usuario11@prueba.com",
+        ProvinciaEspaña.GRANADA,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario12",
+        "Nora Jimenez",
+        "usuario12@prueba.com",
+        ProvinciaEspaña.TARRAGONA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario13",
+        "Victor Gil",
+        "usuario13@prueba.com",
+        ProvinciaEspaña.BURGOS,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario14",
+        "Lucia Ramos",
+        "usuario14@prueba.com",
+        ProvinciaEspaña.GIRONA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario15",
+        "Raul Dominguez",
+        "usuario15@prueba.com",
+        ProvinciaEspaña.LEON,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario16",
+        "Irene Alvarez",
+        "usuario16@prueba.com",
+        ProvinciaEspaña.CADIZ,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario17",
+        "Tomas Hernandez",
+        "usuario17@prueba.com",
+        ProvinciaEspaña.NAVARRA,
+        GeneroUsuario.HOMBRE,
+    ),
+    (
+        "usuario18",
+        "Sonia Gomez",
+        "usuario18@prueba.com",
+        ProvinciaEspaña.SALAMANCA,
+        GeneroUsuario.MUJER,
+    ),
+    (
+        "usuario19",
+        "Alex Vazquez",
+        "usuario19@prueba.com",
+        ProvinciaEspaña.CANTABRIA,
+        GeneroUsuario.OTRO,
+    ),
+    (
+        "usuario20",
+        "Eva Martin",
+        "usuario20@prueba.com",
+        ProvinciaEspaña.ASTURIAS,
+        GeneroUsuario.MUJER,
+    ),
 ]
 
 # Plantillas completas y válidas de actividades.
@@ -260,7 +379,9 @@ async def obtener_o_crear_usuario(
         return existente, False
 
     fecha_aceptacion = ahora_utc() - timedelta(minutes=5 + indice)
-    fecha_nacimiento = date(1982 + (indice % 12), ((indice % 12) + 1), min(10 + indice, 28))
+    fecha_nacimiento = date(
+        1982 + (indice % 12), ((indice % 12) + 1), min(10 + indice, 28)
+    )
 
     datos = schemas.Registro(
         nombre_usuario=nombre_usuario,
@@ -300,7 +421,9 @@ def construir_actividad(
     deterministas para que no todos los usuarios tengan exactamente
     las mismas métricas.
     """
-    base = dict(RUTA_TEMPLATES[(indice_usuario + indice_actividad - 2) % len(RUTA_TEMPLATES)])
+    base = dict(
+        RUTA_TEMPLATES[(indice_usuario + indice_actividad - 2) % len(RUTA_TEMPLATES)]
+    )
 
     # Ajustes pequeños y deterministas por usuario/actividad.
     delta_distancia = ((indice_usuario * 37 + indice_actividad * 19) % 241) - 120
@@ -308,21 +431,31 @@ def construir_actividad(
     delta_stop = ((indice_usuario + indice_actividad * 3) % 31) - 10
 
     distancia = _clamp(int(base["distancia"]) + delta_distancia, 1200, 25000)
-    duracion_movimiento = _clamp(int(base["duracion_movimiento"]) + delta_mov, 600, 20000)
+    duracion_movimiento = _clamp(
+        int(base["duracion_movimiento"]) + delta_mov, 600, 20000
+    )
     duracion_parado = _clamp(int(base["duracion_parado"]) + delta_stop, 0, 2400)
     duracion_total = duracion_movimiento + duracion_parado
 
     tipo = base["tipo"]
     if tipo == TipoActividad.CORRER:
         # Mantiene ritmos de running realistas.
-        ritmo_medio_movimiento = _clamp(round(duracion_movimiento / (distancia / 1000)), 240, 480)
+        ritmo_medio_movimiento = _clamp(
+            round(duracion_movimiento / (distancia / 1000)), 240, 480
+        )
         ritmo_medio_total = _clamp(round(duracion_total / (distancia / 1000)), 250, 520)
     else:
         # Mantiene ritmos de caminata realistas.
-        ritmo_medio_movimiento = _clamp(round(duracion_movimiento / (distancia / 1000)), 520, 950)
-        ritmo_medio_total = _clamp(round(duracion_total / (distancia / 1000)), 540, 1000)
+        ritmo_medio_movimiento = _clamp(
+            round(duracion_movimiento / (distancia / 1000)), 520, 950
+        )
+        ritmo_medio_total = _clamp(
+            round(duracion_total / (distancia / 1000)), 540, 1000
+        )
 
-    velocidad_media_x100 = _clamp(round((distancia / duracion_movimiento) * 360), 300, 1800)
+    velocidad_media_x100 = _clamp(
+        round((distancia / duracion_movimiento) * 360), 300, 1800
+    )
     velocidad_max_x100 = _clamp(
         velocidad_media_x100 + 120 + ((indice_usuario + indice_actividad) % 180),
         velocidad_media_x100,
@@ -356,7 +489,7 @@ def construir_actividad(
     )
 
     prefijo = NOMBRE_PREFIJO_PROVINCIA.get(provincia, provincia.value)
-    nombre_ruta = f"{prefijo} · {base['nombre']}"
+    f"{prefijo} · {base['nombre']}"
 
     return schemas.GuardarActividad(
         tipo=tipo,
@@ -394,9 +527,7 @@ async def crear_actividades_faltantes(
     """Crea solo las actividades necesarias hasta llegar al objetivo."""
     existentes = await contar_actividades_usuario(db, usuario.id)
     if existentes >= ACTIVIDADES_POR_USUARIO:
-        print(
-            f"[SKIP] {usuario.nombre_usuario}: ya tiene {existentes} actividades"
-        )
+        print(f"[SKIP] {usuario.nombre_usuario}: ya tiene {existentes} actividades")
         return 0
 
     creadas = 0
@@ -429,9 +560,13 @@ async def seed_fake_data() -> None:
     actividades_creadas = 0
 
     async with database.AsyncSessionLocal() as db:
-        for indice, (nombre_usuario, nombre_real, email, provincia, genero) in enumerate(
-            USUARIOS, start=1
-        ):
+        for indice, (
+            nombre_usuario,
+            nombre_real,
+            email,
+            provincia,
+            genero,
+        ) in enumerate(USUARIOS, start=1):
             usuario, creado = await obtener_o_crear_usuario(
                 db=db,
                 indice=indice,
