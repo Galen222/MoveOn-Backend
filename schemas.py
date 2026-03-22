@@ -561,6 +561,59 @@ class RespuestaBusquedaUsuariosPaginada(BaseModel):
     has_more: bool
 
 
+class ReportePerfilInapropiado(BaseModel):
+    nombre_usuario_reportado: str = Field(..., min_length=1, max_length=50)
+    reportar_nombre: bool = False
+    reportar_foto: bool = False
+    observaciones: Optional[str] = Field(default=None, max_length=500)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validar_campos_requeridos(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            if (
+                "nombre_usuario_reportado" not in values
+                or values["nombre_usuario_reportado"] is None
+            ):
+                raise AppValidationError(
+                    "Error: El nombre de usuario reportado es obligatorio",
+                    "REPORT_TARGET_USERNAME_REQUIRED",
+                )
+        return values
+
+    @field_validator("nombre_usuario_reportado", mode="before")
+    @classmethod
+    def limpiar_nombre_usuario_reportado(cls, valor: Any) -> Any:
+        if isinstance(valor, str):
+            valor_limpio = valor.strip()
+            if not valor_limpio:
+                raise AppValidationError(
+                    "Error: El nombre de usuario reportado no puede estar vacío",
+                    "REPORT_TARGET_USERNAME_EMPTY",
+                )
+            return valor_limpio
+        return valor
+
+    @field_validator("observaciones", mode="before")
+    @classmethod
+    def limpiar_observaciones(cls, valor: Any) -> Any:
+        if valor is None:
+            return None
+        if isinstance(valor, str):
+            valor_limpio = valor.strip()
+            return valor_limpio or None
+        return valor
+
+    @model_validator(mode="after")
+    def validar_motivos(self):
+        if not self.reportar_nombre and not self.reportar_foto:
+            raise AppValidationError(
+                "Error: Debes marcar al menos una opción de reporte",
+                "AT_LEAST_ONE_REPORT_REASON_REQUIRED",
+            )
+        return self
+
+
 class SolicitarPassword(BaseModel):
     """Esquema para pedir el código enviando solo el email."""
 
@@ -697,9 +750,18 @@ class GuardarActividad(BaseModel):
     def validar_campos_requeridos_actividad(cls, values: Any) -> Any:
         if isinstance(values, dict):
             required_fields = {
-                "tipo": ("Error: El tipo de actividad es obligatorio", "ACTIVITY_TYPE_REQUIRED"),
-                "distancia": ("Error: La distancia es obligatoria", "DISTANCE_REQUIRED"),
-                "duracion_total": ("Error: La duración total es obligatoria", "TOTAL_DURATION_REQUIRED"),
+                "tipo": (
+                    "Error: El tipo de actividad es obligatorio",
+                    "ACTIVITY_TYPE_REQUIRED",
+                ),
+                "distancia": (
+                    "Error: La distancia es obligatoria",
+                    "DISTANCE_REQUIRED",
+                ),
+                "duracion_total": (
+                    "Error: La duración total es obligatoria",
+                    "TOTAL_DURATION_REQUIRED",
+                ),
                 "duracion_movimiento": (
                     "Error: La duración en movimiento es obligatoria",
                     "MOVING_DURATION_REQUIRED",
@@ -708,7 +770,10 @@ class GuardarActividad(BaseModel):
                     "Error: Las calorías quemadas son obligatorias",
                     "BURNED_CALORIES_REQUIRED",
                 ),
-                "fecha_ruta": ("Error: La fecha de la actividad es obligatoria", "ACTIVITY_DATE_REQUIRED"),
+                "fecha_ruta": (
+                    "Error: La fecha de la actividad es obligatoria",
+                    "ACTIVITY_DATE_REQUIRED",
+                ),
             }
             for field_name, (message, code) in required_fields.items():
                 if field_name not in values:
@@ -766,12 +831,16 @@ class GuardarActividad(BaseModel):
     @field_validator("duracion_parado")
     @classmethod
     def validar_duracion_parado(cls, v):
-        return validators.validar_duracion_no_negativa_logica(v, "la duración parada", "STOPPED_DURATION")
+        return validators.validar_duracion_no_negativa_logica(
+            v, "la duración parada", "STOPPED_DURATION"
+        )
 
     @field_validator("duracion_pausa_manual")
     @classmethod
     def validar_duracion_pausa_manual(cls, v):
-        return validators.validar_duracion_no_negativa_logica(v, "la duración de pausa manual", "MANUAL_PAUSE_DURATION")
+        return validators.validar_duracion_no_negativa_logica(
+            v, "la duración de pausa manual", "MANUAL_PAUSE_DURATION"
+        )
 
     @field_validator("calorias_quemadas", mode="wrap")
     @classmethod
@@ -801,12 +870,16 @@ class GuardarActividad(BaseModel):
     @field_validator("ritmo_medio_movimiento")
     @classmethod
     def validar_ritmo_medio_movimiento(cls, v):
-        return validators.validar_ritmo_segundos_km_logica(v, "el ritmo medio en movimiento", "MOVING_PACE")
+        return validators.validar_ritmo_segundos_km_logica(
+            v, "el ritmo medio en movimiento", "MOVING_PACE"
+        )
 
     @field_validator("ritmo_medio_total")
     @classmethod
     def validar_ritmo_medio_total(cls, v):
-        return validators.validar_ritmo_segundos_km_logica(v, "el ritmo medio total", "TOTAL_PACE")
+        return validators.validar_ritmo_segundos_km_logica(
+            v, "el ritmo medio total", "TOTAL_PACE"
+        )
 
     @field_validator("velocidad_media_x100", "velocidad_max_x100", mode="wrap")
     @classmethod
@@ -821,12 +894,16 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_media_x100")
     @classmethod
     def validar_velocidad_media(cls, v):
-        return validators.validar_velocidad_x100_logica(v, "la velocidad media", "AVERAGE_SPEED")
+        return validators.validar_velocidad_x100_logica(
+            v, "la velocidad media", "AVERAGE_SPEED"
+        )
 
     @field_validator("velocidad_max_x100")
     @classmethod
     def validar_velocidad_max(cls, v):
-        return validators.validar_velocidad_x100_logica(v, "la velocidad máxima", "MAX_SPEED")
+        return validators.validar_velocidad_x100_logica(
+            v, "la velocidad máxima", "MAX_SPEED"
+        )
 
     @field_validator("auto_pausas", "pausas_manuales", "alertas_velocidad", mode="wrap")
     @classmethod
@@ -841,17 +918,23 @@ class GuardarActividad(BaseModel):
     @field_validator("auto_pausas")
     @classmethod
     def validar_auto_pausas(cls, v):
-        return validators.validar_contador_tracking_logica(v, "las auto pausas", "AUTO_PAUSE_COUNT")
+        return validators.validar_contador_tracking_logica(
+            v, "las auto pausas", "AUTO_PAUSE_COUNT"
+        )
 
     @field_validator("pausas_manuales")
     @classmethod
     def validar_pausas_manuales(cls, v):
-        return validators.validar_contador_tracking_logica(v, "las pausas manuales", "MANUAL_PAUSE_COUNT")
+        return validators.validar_contador_tracking_logica(
+            v, "las pausas manuales", "MANUAL_PAUSE_COUNT"
+        )
 
     @field_validator("alertas_velocidad")
     @classmethod
     def validar_alertas_velocidad(cls, v):
-        return validators.validar_contador_tracking_logica(v, "las alertas de velocidad", "SPEED_ALERT_COUNT")
+        return validators.validar_contador_tracking_logica(
+            v, "las alertas de velocidad", "SPEED_ALERT_COUNT"
+        )
 
     @field_validator("fecha_ruta", mode="wrap")
     @classmethod

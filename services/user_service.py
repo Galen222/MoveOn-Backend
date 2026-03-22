@@ -20,7 +20,7 @@ from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
-from services import text_moderation_service
+from services import text_moderation_service, email_service
 from exceptions import app_http_exception
 from fastapi import HTTPException
 import auth
@@ -174,8 +174,7 @@ async def obtener_perfil(
     db: AsyncSession, usuario_actual_id: int, for_update: bool = False
 ):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
-    query = select(database.Usuario).where(
-        database.Usuario.id == usuario_actual_id)
+    query = select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
 
     if for_update:
         query = query.with_for_update()
@@ -470,8 +469,7 @@ async def buscar_usuario(
 
     filtros = (
         database.Usuario.perfil_visible.is_(True),
-        database.Usuario.nombre_usuario.ilike(
-            f"%{termino_seguro}%", escape="\\"),
+        database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
         database.Usuario.id != usuario_actual_id,
     )
 
@@ -517,6 +515,70 @@ async def buscar_usuario(
         "skip": skip,
         "limit": limit,
         "has_more": (skip + limit) < total,
+    }
+
+
+async def reportar_perfil_inapropiado(
+    db: AsyncSession,
+    usuario_actual_id: int,
+    datos: schemas.ReportePerfilInapropiado,
+):
+    usuario_reportante = await obtener_perfil(db, usuario_actual_id)
+
+    nombre_objetivo = datos.nombre_usuario_reportado.strip().lower()
+    usuario_reportado = (
+        await db.execute(
+            select(database.Usuario).where(
+                func.lower(database.Usuario.nombre_usuario) == nombre_objetivo
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not usuario_reportado:
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
+
+    if usuario_reportado.id == usuario_reportante.id:
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: No puedes reportarte a ti mismo",
+            error_code="CANNOT_REPORT_YOURSELF",
+        )
+
+    enviado = await email_service.enviar_reporte_perfil_inapropiado(
+        usuario_reportante=usuario_reportante.nombre_usuario,
+        usuario_reportado=usuario_reportado.nombre_usuario,
+        reportar_nombre=datos.reportar_nombre,
+        reportar_foto=datos.reportar_foto,
+        observaciones=datos.observaciones,
+    )
+
+    if not enviado:
+        raise app_http_exception(
+            status_code=503,
+            mensaje="Error: No se ha podido enviar el reporte",
+            error_code="REPORT_EMAIL_SEND_FAILED",
+        )
+
+    logger.info(
+        "perfil_reportado",
+        extra={
+            "usuario_reportante_id": usuario_reportante.id,
+            "usuario_reportante": usuario_reportante.nombre_usuario,
+            "usuario_reportado_id": usuario_reportado.id,
+            "usuario_reportado": usuario_reportado.nombre_usuario,
+            "reportar_nombre": datos.reportar_nombre,
+            "reportar_foto": datos.reportar_foto,
+            "con_observaciones": bool(datos.observaciones),
+        },
+    )
+
+    return {
+        "estatus": "success",
+        "mensaje": "Reporte enviado correctamente",
     }
 
 

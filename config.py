@@ -127,6 +127,7 @@ class Settings(BaseSettings):
     RL_PERFIL_BORRAR: str = "10/hour"
     RL_PERFIL_BUSCAR: str = "240/minute"
     RL_RANKING: str = "240/minute"
+    RL_PERFIL_REPORTE: str = "30/hour"
 
     # IP Actividades (autenticados)
     RL_ACTIVIDAD_GUARDAR: str = "60/minute"

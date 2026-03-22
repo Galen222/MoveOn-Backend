@@ -269,8 +269,7 @@ async def borrar_perfil(
 
     # Solo si commit OK (eliminar_cuenta hace commit), borramos la foto.
     # En background para no bloquear el endpoint con IO (disco / cloud).
-    background_tasks.add_task(file_service.borrar_foto,
-                              foto_perfil, usuario_actual_id)
+    background_tasks.add_task(file_service.borrar_foto, foto_perfil, usuario_actual_id)
 
     return respuesta
 
@@ -301,8 +300,7 @@ async def buscar_perfil(
 
     lista_final = []
     for usuario in resultados["items"]:
-        url_foto = file_service.construir_url_foto(
-            usuario.foto_perfil, request)
+        url_foto = file_service.construir_url_foto(usuario.foto_perfil, request)
         foto_version = (
             int(usuario.foto_fecha_actualizacion.timestamp())
             if usuario.foto_fecha_actualizacion
@@ -323,6 +321,21 @@ async def buscar_perfil(
         "limit": resultados["limit"],
         "has_more": resultados["has_more"],
     }
+
+
+@router.post("/perfil/reporte", response_model=schemas.RespuestaGenerica)
+@rate_limit(settings.RL_PERFIL_REPORTE)
+async def reportar_perfil(
+    request: Request,
+    datos: schemas.ReportePerfilInapropiado,
+    db: AsyncSession = Depends(obtener_db),
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
+):
+    """
+    Reporta un nombre o una foto de perfil inapropiados.
+    Envía un correo a moderación con el reportante, el reportado y el motivo.
+    """
+    return await user_service.reportar_perfil_inapropiado(db, usuario_actual_id, datos)
 
 
 @router.get("/ranking/obtener", response_model=List[schemas.ObtenerRanking])
@@ -346,12 +359,12 @@ async def obtener_ranking(
     ranking_final = []
     for item in ranking:
         # Usar el servicio existente para crear la URL correcta.
-        url_foto = file_service.construir_url_foto(
-            item["foto_perfil"], request)
+        url_foto = file_service.construir_url_foto(item["foto_perfil"], request)
         ranking_final.append(
             {
                 "nombre_usuario": item["nombre_usuario"],
                 "foto_perfil": url_foto,
+                "foto_version": item["foto_version"],
                 "total_puntos": item["total_puntos"],
                 "total_metros": item["total_metros"],
             }
