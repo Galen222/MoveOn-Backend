@@ -46,7 +46,7 @@ Uso:
 TARGET_USERNAME = "Lulitooz"
 TARGET_EMAIL = "luisafernandaormaza6@gmail.com"
 TARGET_PASSWORD = "Tiabuena123"
-TARGET_BIRTH_DATE = date(2001, 5, 15)
+TARGET_BIRTH_DATE = date(2001, 4, 15)
 TARGET_REAL_NAME = "Luisa Fernanda Ormaza Zapata"
 TARGET_GENDER = "Mujer"
 TARGET_HEIGHT_CM = 158
