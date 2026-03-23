@@ -140,6 +140,13 @@ def reporte_perfil_inapropiado_template(
             .content {{
                 padding: 24px 10px 10px;
             }}
+            .intro-title {{
+                margin-top: 0;
+                text-align: center;
+            }}
+            .intro-text {{
+                text-align: center;
+            }}
             .card {{
                 margin: 18px 0;
                 padding: 16px;
@@ -179,8 +186,8 @@ def reporte_perfil_inapropiado_template(
             </div>
 
             <div class="content">
-                <h2 style="margin-top: 0;">Reporte de perfil</h2>
-                <p>Se ha recibido un reporte de contenido potencialmente inapropiado en MoveOn.</p>
+                <h2 class="intro-title">Reporte de perfil</h2>
+                <p class="intro-text">Se ha recibido un reporte de contenido potencialmente inapropiado en MoveOn.</p>
 
                 <div class="card">
                     <div class="label">Usuario que reporta</div>
