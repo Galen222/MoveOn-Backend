@@ -20,7 +20,7 @@ import logging
 import auth
 import schemas
 from typing import List, Optional
-from services import user_service, file_service
+from services import user_service, file_service, social_auth_service
 from services.identity_rate_limit import check_identity_limit
 from database import obtener_db
 from schemas import ProvinciaEspaña
@@ -49,6 +49,26 @@ async def registro(
     check_identity_limit("registro", str(datos.email), settings.RL_REGISTRO_ID)
 
     return await user_service.registrar_nuevo_usuario(db, datos)
+
+
+@router.post("/registro/social", response_model=schemas.RespuestaLogin)
+@rate_limit(settings.RL_REGISTRO)
+async def registro_social(
+    request: Request,
+    datos: schemas.RegistroSocial,
+    db: AsyncSession = Depends(obtener_db),
+):
+    """Registro o inicio de sesión con proveedor social verificado por backend."""
+    identidad = await social_auth_service.verificar_token_social(
+        datos.provider, datos.token
+    )
+
+    identity_key = (
+        identidad.email or f"{identidad.provider}:{identidad.provider_user_id}"
+    )
+    check_identity_limit("registro", identity_key, settings.RL_REGISTRO_ID)
+
+    return await user_service.registrar_usuario_social(db, datos, identidad)
 
 
 @router.get("/perfil/informacion", response_model=schemas.RespuestaInformacionPerfil)

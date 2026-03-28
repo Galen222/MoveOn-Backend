@@ -146,6 +146,7 @@ _HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 VALID_GENEROS = {item.value for item in GeneroUsuario}
 VALID_PROVINCIAS = {item.value for item in ProvinciaEspaña}
 VALID_TIPOS_ACTIVIDAD = {item.value for item in TipoActividad}
+VALID_SOCIAL_PROVIDERS = {"google"}
 
 
 def _ahora_utc() -> datetime:
@@ -355,14 +356,12 @@ class Usuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre_usuario: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
-    password_encriptada: Mapped[str] = mapped_column(
-        String(255), nullable=False)
+    password_encriptada: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # -------------------------
     # Datos de perfil
     # -------------------------
-    nombre_real: Mapped[Optional[str]] = mapped_column(
-        String(80), nullable=True)
+    nombre_real: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
     genero: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     altura: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -495,8 +494,7 @@ class Usuario(Base):
         CheckConstraint(
             "email = lower(btrim(email))", name="ck_usuarios_email_normalized_lower"
         ),
-        CheckConstraint("email !~ '[[:space:]]'",
-                        name="ck_usuarios_email_no_spaces"),
+        CheckConstraint("email !~ '[[:space:]]'", name="ck_usuarios_email_no_spaces"),
         CheckConstraint(
             r"email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'",
             name="ck_usuarios_email_basic_format",
@@ -526,8 +524,7 @@ class Usuario(Base):
             name="ck_usuarios_genero_values",
         ),
         CheckConstraint(
-            _build_enum_check_sql(
-                "provincia", VALID_PROVINCIAS, allow_null=True),
+            _build_enum_check_sql("provincia", VALID_PROVINCIAS, allow_null=True),
             name="ck_usuarios_provincia_values",
         ),
         # Rangos físicos razonables
@@ -637,8 +634,7 @@ class Usuario(Base):
 
         valor = valor.strip().lower()
         if not valor:
-            raise AppValidationError(
-                "Error: El email es obligatorio", "EMAIL_REQUIRED")
+            raise AppValidationError("Error: El email es obligatorio", "EMAIL_REQUIRED")
 
         try:
             email_info = validate_email(valor, check_deliverability=False)
@@ -932,28 +928,36 @@ class Actividad(Base):
     duracion_total: Mapped[int] = mapped_column(Integer, nullable=False)
     duracion_movimiento: Mapped[int] = mapped_column(Integer, nullable=False)
     duracion_parado: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     duracion_pausa_manual: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     calorias_quemadas: Mapped[int] = mapped_column(Integer, nullable=False)
     ritmo_medio_movimiento: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     ritmo_medio_total: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     velocidad_media_x100: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     velocidad_max_x100: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     auto_pausas: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     pausas_manuales: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     alertas_velocidad: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0"))
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     ruta_polilinea: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    ruta_mapa_url: Mapped[Optional[str]] = mapped_column(
-        String(2048), nullable=True)
+    ruta_mapa_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     fecha_ruta: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -964,50 +968,86 @@ class Actividad(Base):
 
     __table_args__ = (
         CheckConstraint(
-            _build_enum_check_sql(
-                "tipo", VALID_TIPOS_ACTIVIDAD, allow_null=False),
+            _build_enum_check_sql("tipo", VALID_TIPOS_ACTIVIDAD, allow_null=False),
             name="ck_actividades_tipo_values",
         ),
-        CheckConstraint("distancia > 0 AND distancia <= 300000",
-                        name="ck_actividades_distancia_range"),
-        CheckConstraint("duracion_total > 0 AND duracion_total <= 86400",
-                        name="ck_actividades_duracion_total_range"),
-        CheckConstraint("duracion_movimiento > 0 AND duracion_movimiento <= 86400",
-                        name="ck_actividades_duracion_movimiento_range"),
-        CheckConstraint("duracion_parado >= 0 AND duracion_parado <= 86400",
-                        name="ck_actividades_duracion_parado_range"),
-        CheckConstraint("duracion_pausa_manual >= 0 AND duracion_pausa_manual <= 86400",
-                        name="ck_actividades_duracion_pausa_manual_range"),
-        CheckConstraint("duracion_movimiento + duracion_parado = duracion_total",
-                        name="ck_actividades_duracion_breakdown_match"),
-        CheckConstraint("duracion_pausa_manual <= duracion_total",
-                        name="ck_actividades_duracion_pausa_manual_total"),
-        CheckConstraint("calorias_quemadas > 0 AND calorias_quemadas <= 10000",
-                        name="ck_actividades_calorias_range"),
-        CheckConstraint("ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600",
-                        name="ck_actividades_ritmo_medio_movimiento_range"),
-        CheckConstraint("ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600",
-                        name="ck_actividades_ritmo_medio_total_range"),
-        CheckConstraint("velocidad_media_x100 >= 0 AND velocidad_media_x100 <= 10000",
-                        name="ck_actividades_velocidad_media_range"),
-        CheckConstraint("velocidad_max_x100 >= 0 AND velocidad_max_x100 <= 10000",
-                        name="ck_actividades_velocidad_max_range"),
-        CheckConstraint("velocidad_max_x100 >= velocidad_media_x100",
-                        name="ck_actividades_velocidad_max_ge_media"),
-        CheckConstraint("auto_pausas >= 0 AND auto_pausas <= 500",
-                        name="ck_actividades_auto_pausas_range"),
-        CheckConstraint("pausas_manuales >= 0 AND pausas_manuales <= 500",
-                        name="ck_actividades_pausas_manuales_range"),
-        CheckConstraint("alertas_velocidad >= 0 AND alertas_velocidad <= 500",
-                        name="ck_actividades_alertas_velocidad_range"),
-        CheckConstraint("ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5",
-                        name="ck_actividades_ruta_polilinea_len"),
-        CheckConstraint("ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048",
-                        name="ck_actividades_ruta_mapa_url_len"),
-        CheckConstraint(r"ruta_mapa_url IS NULL OR ruta_mapa_url ~* '^https?://'",
-                        name="ck_actividades_ruta_mapa_url_http"),
-        Index("ix_actividades_usuario_fecha",
-              "usuario_id", "fecha_ruta", "id"),
+        CheckConstraint(
+            "distancia > 0 AND distancia <= 300000",
+            name="ck_actividades_distancia_range",
+        ),
+        CheckConstraint(
+            "duracion_total > 0 AND duracion_total <= 86400",
+            name="ck_actividades_duracion_total_range",
+        ),
+        CheckConstraint(
+            "duracion_movimiento > 0 AND duracion_movimiento <= 86400",
+            name="ck_actividades_duracion_movimiento_range",
+        ),
+        CheckConstraint(
+            "duracion_parado >= 0 AND duracion_parado <= 86400",
+            name="ck_actividades_duracion_parado_range",
+        ),
+        CheckConstraint(
+            "duracion_pausa_manual >= 0 AND duracion_pausa_manual <= 86400",
+            name="ck_actividades_duracion_pausa_manual_range",
+        ),
+        CheckConstraint(
+            "duracion_movimiento + duracion_parado = duracion_total",
+            name="ck_actividades_duracion_breakdown_match",
+        ),
+        CheckConstraint(
+            "duracion_pausa_manual <= duracion_total",
+            name="ck_actividades_duracion_pausa_manual_total",
+        ),
+        CheckConstraint(
+            "calorias_quemadas > 0 AND calorias_quemadas <= 10000",
+            name="ck_actividades_calorias_range",
+        ),
+        CheckConstraint(
+            "ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600",
+            name="ck_actividades_ritmo_medio_movimiento_range",
+        ),
+        CheckConstraint(
+            "ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600",
+            name="ck_actividades_ritmo_medio_total_range",
+        ),
+        CheckConstraint(
+            "velocidad_media_x100 >= 0 AND velocidad_media_x100 <= 10000",
+            name="ck_actividades_velocidad_media_range",
+        ),
+        CheckConstraint(
+            "velocidad_max_x100 >= 0 AND velocidad_max_x100 <= 10000",
+            name="ck_actividades_velocidad_max_range",
+        ),
+        CheckConstraint(
+            "velocidad_max_x100 >= velocidad_media_x100",
+            name="ck_actividades_velocidad_max_ge_media",
+        ),
+        CheckConstraint(
+            "auto_pausas >= 0 AND auto_pausas <= 500",
+            name="ck_actividades_auto_pausas_range",
+        ),
+        CheckConstraint(
+            "pausas_manuales >= 0 AND pausas_manuales <= 500",
+            name="ck_actividades_pausas_manuales_range",
+        ),
+        CheckConstraint(
+            "alertas_velocidad >= 0 AND alertas_velocidad <= 500",
+            name="ck_actividades_alertas_velocidad_range",
+        ),
+        CheckConstraint(
+            "ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5",
+            name="ck_actividades_ruta_polilinea_len",
+        ),
+        CheckConstraint(
+            "ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048",
+            name="ck_actividades_ruta_mapa_url_len",
+        ),
+        CheckConstraint(
+            r"ruta_mapa_url IS NULL OR ruta_mapa_url ~* '^https?://'",
+            name="ck_actividades_ruta_mapa_url_http",
+        ),
+        Index("ix_actividades_usuario_fecha", "usuario_id", "fecha_ruta", "id"),
     )
 
     @validates("usuario_id")
@@ -1053,11 +1093,15 @@ class Actividad(Base):
 
     @validates("duracion_parado")
     def validar_duracion_parado(self, key: str, valor: int) -> int:
-        return validators.validar_duracion_no_negativa_logica(valor, "la duración parada", "STOPPED_DURATION")
+        return validators.validar_duracion_no_negativa_logica(
+            valor, "la duración parada", "STOPPED_DURATION"
+        )
 
     @validates("duracion_pausa_manual")
     def validar_duracion_pausa_manual(self, key: str, valor: int) -> int:
-        return validators.validar_duracion_no_negativa_logica(valor, "la duración de pausa manual", "MANUAL_PAUSE_DURATION")
+        return validators.validar_duracion_no_negativa_logica(
+            valor, "la duración de pausa manual", "MANUAL_PAUSE_DURATION"
+        )
 
     @validates("calorias_quemadas")
     def validar_calorias(self, key: str, valor: int) -> int:
@@ -1065,31 +1109,45 @@ class Actividad(Base):
 
     @validates("ritmo_medio_movimiento")
     def validar_ritmo_medio_movimiento(self, key: str, valor: int) -> int:
-        return validators.validar_ritmo_segundos_km_logica(valor, "el ritmo medio en movimiento", "MOVING_PACE")
+        return validators.validar_ritmo_segundos_km_logica(
+            valor, "el ritmo medio en movimiento", "MOVING_PACE"
+        )
 
     @validates("ritmo_medio_total")
     def validar_ritmo_medio_total(self, key: str, valor: int) -> int:
-        return validators.validar_ritmo_segundos_km_logica(valor, "el ritmo medio total", "TOTAL_PACE")
+        return validators.validar_ritmo_segundos_km_logica(
+            valor, "el ritmo medio total", "TOTAL_PACE"
+        )
 
     @validates("velocidad_media_x100")
     def validar_velocidad_media(self, key: str, valor: int) -> int:
-        return validators.validar_velocidad_x100_logica(valor, "la velocidad media", "AVERAGE_SPEED")
+        return validators.validar_velocidad_x100_logica(
+            valor, "la velocidad media", "AVERAGE_SPEED"
+        )
 
     @validates("velocidad_max_x100")
     def validar_velocidad_max(self, key: str, valor: int) -> int:
-        return validators.validar_velocidad_x100_logica(valor, "la velocidad máxima", "MAX_SPEED")
+        return validators.validar_velocidad_x100_logica(
+            valor, "la velocidad máxima", "MAX_SPEED"
+        )
 
     @validates("auto_pausas")
     def validar_auto_pausas(self, key: str, valor: int) -> int:
-        return validators.validar_contador_tracking_logica(valor, "las auto pausas", "AUTO_PAUSE_COUNT")
+        return validators.validar_contador_tracking_logica(
+            valor, "las auto pausas", "AUTO_PAUSE_COUNT"
+        )
 
     @validates("pausas_manuales")
     def validar_pausas_manuales(self, key: str, valor: int) -> int:
-        return validators.validar_contador_tracking_logica(valor, "las pausas manuales", "MANUAL_PAUSE_COUNT")
+        return validators.validar_contador_tracking_logica(
+            valor, "las pausas manuales", "MANUAL_PAUSE_COUNT"
+        )
 
     @validates("alertas_velocidad")
     def validar_alertas_velocidad(self, key: str, valor: int) -> int:
-        return validators.validar_contador_tracking_logica(valor, "las alertas de velocidad", "SPEED_ALERT_COUNT")
+        return validators.validar_contador_tracking_logica(
+            valor, "las alertas de velocidad", "SPEED_ALERT_COUNT"
+        )
 
     @validates("ruta_polilinea")
     def validar_ruta_polilinea(self, key: str, valor: Optional[str]) -> Optional[str]:
@@ -1118,6 +1176,177 @@ class Actividad(Base):
         return validators.validar_fecha_ruta_logica(valor)
 
 
+class UsuarioAuthSocial(Base):
+    """
+    Vincula una cuenta interna con un proveedor de autenticación social.
+
+    Permite soportar múltiples proveedores por usuario sin mezclar la lógica
+    del login tradicional con la identidad externa.
+    """
+
+    __tablename__ = "usuarios_auth_social"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    usuario_id: Mapped[int] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    email_social: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    nombre_social: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_ahora_utc,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    ultimo_login_en: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "provider",
+            "provider_user_id",
+            name="uq_usuarios_auth_social_provider_user",
+        ),
+        sa.UniqueConstraint(
+            "usuario_id",
+            "provider",
+            name="uq_usuarios_auth_social_usuario_provider",
+        ),
+        CheckConstraint(
+            _build_enum_check_sql("provider", VALID_SOCIAL_PROVIDERS, allow_null=False),
+            name="ck_usuarios_auth_social_provider_values",
+        ),
+        CheckConstraint(
+            "char_length(btrim(provider_user_id)) BETWEEN 1 AND 255",
+            name="ck_usuarios_auth_social_provider_user_id_len",
+        ),
+        CheckConstraint(
+            "email_social IS NULL OR char_length(email_social) BETWEEN 3 AND 320",
+            name="ck_usuarios_auth_social_email_len",
+        ),
+        CheckConstraint(
+            "email_social IS NULL OR email_social = lower(btrim(email_social))",
+            name="ck_usuarios_auth_social_email_normalized_lower",
+        ),
+        CheckConstraint(
+            "email_social IS NULL OR email_social !~ '[[:space:]]'",
+            name="ck_usuarios_auth_social_email_no_spaces",
+        ),
+        CheckConstraint(
+            "nombre_social IS NULL OR char_length(btrim(nombre_social)) BETWEEN 1 AND 120",
+            name="ck_usuarios_auth_social_nombre_social_len",
+        ),
+        CheckConstraint(
+            "avatar_url IS NULL OR char_length(avatar_url) <= 2048",
+            name="ck_usuarios_auth_social_avatar_url_len",
+        ),
+        CheckConstraint(
+            r"avatar_url IS NULL OR avatar_url ~* '^https?://'",
+            name="ck_usuarios_auth_social_avatar_url_http",
+        ),
+        CheckConstraint(
+            "ultimo_login_en IS NULL OR ultimo_login_en >= creada_en",
+            name="ck_usuarios_auth_social_ultimo_login_ge_creada",
+        ),
+    )
+
+    @validates("usuario_id")
+    def validar_usuario_id(self, key: str, valor: int) -> int:
+        if not isinstance(valor, int):
+            raise AppValidationError(
+                "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
+            )
+        if valor <= 0:
+            raise AppValidationError(
+                "Error: usuario_id debe ser mayor a 0", "USER_ID_MUST_BE_POSITIVE"
+            )
+        return valor
+
+    @validates("provider")
+    def validar_provider(self, key: str, valor: str) -> str:
+        resultado = _validar_enum_str(
+            valor,
+            VALID_SOCIAL_PROVIDERS,
+            "provider",
+            must_be_text_code="SOCIAL_PROVIDER_MUST_BE_TEXT",
+            invalid_code="SOCIAL_PROVIDER_INVALID",
+        )
+        assert resultado is not None
+        return resultado
+
+    @validates("provider_user_id")
+    def validar_provider_user_id(self, key: str, valor: str) -> str:
+        return _validar_texto_no_vacio(
+            valor,
+            "provider_user_id",
+            255,
+            must_be_string_code="SOCIAL_PROVIDER_USER_ID_MUST_BE_STRING",
+            empty_code="SOCIAL_PROVIDER_USER_ID_EMPTY",
+            too_long_code="SOCIAL_PROVIDER_USER_ID_TOO_LONG",
+        )
+
+    @validates("email_social")
+    def validar_email_social(self, key: str, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
+
+        if not isinstance(valor, str):
+            raise AppValidationError(
+                "Error: El email social debe ser un texto",
+                "SOCIAL_EMAIL_MUST_BE_TEXT",
+            )
+
+        valor = valor.strip().lower()
+        if not valor:
+            return None
+
+        try:
+            email_info = validate_email(valor, check_deliverability=False)
+            return email_info.normalized.lower()
+        except EmailNotValidError:
+            raise AppValidationError(
+                "Error: El formato del correo electrónico social no es válido",
+                "SOCIAL_EMAIL_FORMAT_INVALID",
+            )
+
+    @validates("nombre_social")
+    def validar_nombre_social(self, key: str, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
+        return _validar_texto_no_vacio(
+            valor,
+            "nombre_social",
+            120,
+            must_be_string_code="SOCIAL_NAME_MUST_BE_STRING",
+            empty_code="SOCIAL_NAME_EMPTY",
+            too_long_code="SOCIAL_NAME_TOO_LONG",
+        )
+
+    @validates("avatar_url")
+    def validar_avatar_url(self, key: str, valor: Optional[str]) -> Optional[str]:
+        return _validar_url_http_opcional(
+            valor,
+            "avatar_url",
+            2048,
+            must_be_text_code="SOCIAL_AVATAR_URL_MUST_BE_TEXT",
+            too_long_code="SOCIAL_AVATAR_URL_TOO_LONG",
+            invalid_code="SOCIAL_AVATAR_URL_INVALID",
+        )
+
+    @validates("creada_en", "ultimo_login_en")
+    def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
+        return _normalizar_datetime_utc(valor)
+
+
 class SesionRefresh(Base):
     """
     Tabla para refresh tokens rotativos.
@@ -1140,8 +1369,7 @@ class SesionRefresh(Base):
     jti: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=True, index=True
     )
-    familia_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True)
+    familia_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     # hash HMAC-SHA256 del refresh token
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)

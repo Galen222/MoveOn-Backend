@@ -17,6 +17,7 @@ from pydantic import (
     AnyHttpUrl,
 )
 from datetime import date, datetime
+from enum import Enum
 from typing import Optional, Any, List
 import re
 from utils import validators
@@ -258,6 +259,185 @@ class RespuestaRegistro(BaseModel):
     estatus: str
     mensaje: str
     nombre_usuario: str
+
+
+class ProveedorAuthSocial(str, Enum):
+    GOOGLE = "google"
+
+
+class LoginSocial(BaseModel):
+    provider: ProveedorAuthSocial
+    token: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def validar_campos_requeridos_login_social(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            if "provider" not in values or not values["provider"]:
+                raise AppValidationError(
+                    "Error: El proveedor social es obligatorio",
+                    "SOCIAL_PROVIDER_REQUIRED",
+                )
+            if "token" not in values or not values["token"]:
+                raise AppValidationError(
+                    "Error: El token social es obligatorio",
+                    "SOCIAL_TOKEN_REQUIRED",
+                )
+        return values
+
+    @field_validator("token", mode="before")
+    @classmethod
+    def limpiar_token_social(cls, valor: Any) -> Any:
+        if isinstance(valor, str):
+            valor_limpio = valor.strip()
+            if not valor_limpio:
+                raise AppValidationError(
+                    "Error: El token social no puede estar vacío",
+                    "SOCIAL_TOKEN_EMPTY",
+                )
+            return valor_limpio
+        return valor
+
+
+class RegistroSocial(BaseModel):
+    provider: ProveedorAuthSocial
+    token: str
+    nombre_usuario: str = Field(..., min_length=5, max_length=50)
+    fecha_nacimiento: date
+    perfil_visible: bool = Field(default=True)
+    acepta_terminos: bool = Field(...)
+    fecha_aceptacion_terminos: datetime = Field(...)
+    version_terminos: str = Field(..., max_length=10)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validar_campos_requeridos_registro_social(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            if "provider" not in values or not values["provider"]:
+                raise AppValidationError(
+                    "Error: El proveedor social es obligatorio",
+                    "SOCIAL_PROVIDER_REQUIRED",
+                )
+            if "token" not in values or not values["token"]:
+                raise AppValidationError(
+                    "Error: El token social es obligatorio",
+                    "SOCIAL_TOKEN_REQUIRED",
+                )
+            if "nombre_usuario" not in values or not values["nombre_usuario"]:
+                raise AppValidationError(
+                    "Error: El nombre de usuario es obligatorio",
+                    "USERNAME_REQUIRED",
+                )
+            if "fecha_nacimiento" not in values:
+                raise AppValidationError(
+                    "Error: La fecha de nacimiento es obligatoria",
+                    "BIRTH_DATE_REQUIRED",
+                )
+        return values
+
+    @field_validator("token", mode="before")
+    @classmethod
+    def limpiar_token_registro_social(cls, valor: Any) -> Any:
+        if isinstance(valor, str):
+            valor_limpio = valor.strip()
+            if not valor_limpio:
+                raise AppValidationError(
+                    "Error: El token social no puede estar vacío",
+                    "SOCIAL_TOKEN_EMPTY",
+                )
+            return valor_limpio
+        return valor
+
+    @field_validator("nombre_usuario")
+    @classmethod
+    def validar_nombre_usuario_social(cls, valor: str) -> str:
+        valor = valor.strip()
+        if len(valor) < 5:
+            raise AppValidationError(
+                "Error: El nombre de usuario debe tener al menos 5 caracteres",
+                "USERNAME_TOO_SHORT",
+            )
+        if len(valor) > 50:
+            raise AppValidationError(
+                "Error: El nombre de usuario no puede superar los 50 caracteres",
+                "USERNAME_TOO_LONG",
+            )
+        if not re.match("^[a-zA-Z0-9]*$", valor):
+            raise AppValidationError(
+                "Error: El nombre de usuario solo puede contener letras y números",
+                "USERNAME_INVALID_FORMAT",
+            )
+        return valor
+
+    @field_validator("fecha_nacimiento", mode="wrap")
+    @classmethod
+    def validar_fecha_nacimiento_social_custom(cls, v, handler):
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La fecha debe tener formato AAAA-MM-DD",
+        )
+
+    @field_validator("fecha_nacimiento")
+    @classmethod
+    def validar_fecha_nacimiento_social(cls, v):
+        return validators.validar_fecha_nacimiento_logica(v)
+
+    @field_validator("perfil_visible", mode="wrap")
+    @classmethod
+    def validar_perfil_visible_social_custom(cls, v, handler):
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: El formato de perfil visible no es válido",
+        )
+
+    @field_validator("acepta_terminos")
+    @classmethod
+    def validar_acepta_terminos_social(cls, v: bool) -> bool:
+        if not v:
+            raise AppValidationError(
+                "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte",
+                "REGISTRATION_CONSENTS_REQUIRED",
+            )
+        return v
+
+    @field_validator("fecha_aceptacion_terminos", mode="wrap")
+    @classmethod
+    def validar_fecha_aceptacion_terminos_social_custom(cls, v, handler):
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "VALIDATION_ERROR",
+            "Error: La fecha de aceptación debe tener formato ISO-8601",
+        )
+
+    @field_validator("fecha_aceptacion_terminos")
+    @classmethod
+    def validar_fecha_aceptacion_terminos_social(cls, v: datetime) -> datetime:
+        from datetime import timedelta, timezone
+
+        ahora = datetime.now(timezone.utc)
+        v_utc = v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+        if v_utc > ahora + timedelta(minutes=5):
+            raise AppValidationError(
+                "Error: La fecha de aceptación no puede ser futura",
+                "TERMS_ACCEPTED_AT_IN_FUTURE",
+            )
+        return v_utc
+
+    @field_validator("version_terminos")
+    @classmethod
+    def validar_version_terminos_social(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise AppValidationError(
+                "Error: La versión de los términos es obligatoria",
+                "TERMS_VERSION_REQUIRED",
+            )
+        return v
 
 
 class Login(BaseModel):

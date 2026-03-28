@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     MAX_IMAGE_BYTES: int = 2 * 1024 * 1024  # 2MB por defecto
     IMAGE_JPEG_QUALITY: int = 85  # calidad del re-encode JPEG
 
+    # Autenticación social
+    GOOGLE_WEB_CLIENT_ID: str = ""
+
     # Email
     EMAIL_HOST: str
     EMAIL_PORT: int = 587

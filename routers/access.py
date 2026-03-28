@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 import auth
 import schemas
 from database import obtener_db
-from services import access_service
+from services import access_service, social_auth_service
 from config import settings
 from exceptions import app_http_exception
 from ip_rate_limit import rate_limit
@@ -118,6 +118,61 @@ async def login(
         },
     )
     return await access_service.crear_sesion_login(db, usuario_encontrado)
+
+
+@router.post("/login/social", response_model=schemas.RespuestaLogin)
+@rate_limit(settings.RL_LOGIN)
+async def login_social(
+    request: Request,
+    datos: schemas.LoginSocial,
+    db: AsyncSession = Depends(obtener_db),
+    _auth_app=Depends(auth.verificar_sesion_aplicacion),
+):
+    identidad = await social_auth_service.verificar_token_social(
+        datos.provider, datos.token
+    )
+
+    check_identity_limit(
+        "login",
+        f"{identidad.provider}:{identidad.provider_user_id}",
+        settings.RL_LOGIN_ID,
+    )
+
+    vinculo = await social_auth_service.buscar_vinculo_social(
+        db, identidad.provider, identidad.provider_user_id
+    )
+    if not vinculo:
+        logger.info(
+            "inicio_sesion_social_fallido",
+            extra={
+                "provider": identidad.provider,
+                "provider_user_id": identidad.provider_user_id,
+                "motivo": "cuenta_social_no_registrada",
+            },
+        )
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Esta cuenta social todavía no está registrada en MoveOn",
+            error_code="SOCIAL_ACCOUNT_NOT_REGISTERED",
+        )
+
+    usuario = await access_service.buscar_usuario_por_id(db, vinculo.usuario_id)
+    social_auth_service.actualizar_metadata_vinculo(vinculo, identidad)
+
+    if not usuario.foto_perfil and identidad.avatar_url:
+        usuario.foto_perfil = identidad.avatar_url
+        await db.commit()
+        await db.refresh(usuario)
+
+    logger.info(
+        "inicio_sesion_social_correcto",
+        extra={
+            "usuario_id": usuario.id,
+            "usuario": usuario.nombre_usuario,
+            "provider": identidad.provider,
+        },
+    )
+    return await access_service.crear_sesion_login(db, usuario)
 
 
 # Renueva la sesión usando refresh token con rotación.

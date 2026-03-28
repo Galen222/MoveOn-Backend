@@ -14,13 +14,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+import secrets
 from typing import Optional
 
 from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
-from services import text_moderation_service, email_service
+from services import (
+    text_moderation_service,
+    email_service,
+    access_service,
+    social_auth_service,
+)
 from exceptions import app_http_exception
 from fastapi import HTTPException
 import auth
@@ -168,6 +174,152 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         "mensaje": "Usuario registrado correctamente",
         "nombre_usuario": nuevo_usuario.nombre_usuario,
     }
+
+
+async def registrar_usuario_social(
+    db: AsyncSession,
+    datos: schemas.RegistroSocial,
+    identidad: social_auth_service.SocialIdentity,
+):
+    """Registra o reutiliza un usuario autenticado con proveedor social."""
+
+    nombre_usuario = datos.nombre_usuario.strip()
+    if not nombre_usuario:
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El nombre de usuario no puede estar vacío",
+            error_code="USERNAME_EMPTY",
+        )
+
+    await text_moderation_service.validar_nombre_usuario(nombre_usuario)
+
+    email = identidad.email.strip().lower() if identidad.email else None
+    if not email:
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: La cuenta social debe proporcionar un email válido",
+            error_code="SOCIAL_EMAIL_REQUIRED",
+        )
+
+    vinculo_existente = await social_auth_service.buscar_vinculo_social(
+        db, identidad.provider, identidad.provider_user_id
+    )
+    if vinculo_existente:
+        usuario_existente = await obtener_perfil(db, vinculo_existente.usuario_id)
+        social_auth_service.actualizar_metadata_vinculo(vinculo_existente, identidad)
+        if not usuario_existente.foto_perfil and identidad.avatar_url:
+            usuario_existente.foto_perfil = identidad.avatar_url
+            await db.commit()
+            await db.refresh(usuario_existente)
+        return await access_service.crear_sesion_login(db, usuario_existente)
+
+    nombre_key = nombre_usuario.lower()
+
+    existente = (
+        await db.execute(
+            select(database.Usuario).where(
+                (func.lower(database.Usuario.nombre_usuario) == nombre_key)
+                | (database.Usuario.email == email)
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existente:
+        if str(existente.nombre_usuario).lower() == nombre_key:
+            logger.warning(
+                "registro_social_nombre_duplicado",
+                extra={
+                    "provider": identidad.provider,
+                    "provider_user_id": identidad.provider_user_id,
+                    "nombre_usuario": nombre_usuario,
+                    "email": email,
+                },
+            )
+            raise app_http_exception(
+                status_code=400,
+                mensaje="Error: El nombre de usuario ya está en uso",
+                error_code="USERNAME_ALREADY_IN_USE",
+            )
+
+        logger.warning(
+            "registro_social_email_duplicado",
+            extra={
+                "provider": identidad.provider,
+                "provider_user_id": identidad.provider_user_id,
+                "nombre_usuario": nombre_usuario,
+                "email": email,
+            },
+        )
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El email ya está en uso",
+            error_code="EMAIL_ALREADY_IN_USE",
+        )
+
+    password_aleatoria = secrets.token_urlsafe(32)
+    password_hash = await run_in_threadpool(auth.encriptar_password, password_aleatoria)
+
+    nuevo_usuario = database.Usuario(
+        nombre_usuario=nombre_usuario,
+        email=email,
+        password_encriptada=password_hash,
+        nombre_real=identidad.nombre,
+        fecha_nacimiento=datos.fecha_nacimiento,
+        genero=None,
+        altura=None,
+        peso=None,
+        provincia=None,
+        foto_perfil=identidad.avatar_url,
+        perfil_visible=datos.perfil_visible,
+        acepta_terminos=datos.acepta_terminos,
+        fecha_eula=datos.fecha_aceptacion_terminos,
+        version_terminos=datos.version_terminos,
+    )
+
+    try:
+        db.add(nuevo_usuario)
+        await db.flush()
+
+        vinculo = social_auth_service.crear_vinculo_social(
+            usuario_id=int(nuevo_usuario.id),
+            identidad=identidad,
+        )
+        db.add(vinculo)
+
+        await db.commit()
+        await db.refresh(nuevo_usuario)
+    except IntegrityError:
+        await db.rollback()
+        logger.warning(
+            "registro_social_error_integridad",
+            extra={
+                "provider": identidad.provider,
+                "provider_user_id": identidad.provider_user_id,
+                "nombre_usuario": nombre_usuario,
+                "email": email,
+            },
+            exc_info=True,
+        )
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: El nombre de usuario, el email o la cuenta social ya están en uso",
+            error_code="SOCIAL_ACCOUNT_OR_USER_ALREADY_IN_USE",
+        )
+    except Exception:
+        await db.rollback()
+        raise
+
+    logger.info(
+        "usuario_registrado_social",
+        extra={
+            "usuario": nuevo_usuario.nombre_usuario,
+            "usuario_id": nuevo_usuario.id,
+            "provider": identidad.provider,
+            "provider_user_id": identidad.provider_user_id,
+        },
+    )
+
+    return await access_service.crear_sesion_login(db, nuevo_usuario)
 
 
 async def obtener_perfil(

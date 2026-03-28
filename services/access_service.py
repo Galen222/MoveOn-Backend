@@ -73,6 +73,23 @@ async def buscar_por_identificador(db: AsyncSession, identificador: str):
     ).scalar_one_or_none()
 
 
+async def buscar_usuario_por_id(db: AsyncSession, usuario_id: int):
+    usuario = (
+        await db.execute(
+            select(database.Usuario).where(database.Usuario.id == usuario_id)
+        )
+    ).scalar_one_or_none()
+
+    if not usuario:
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
+
+    return usuario
+
+
 async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
     """
     Crea una sesión de login completa:
