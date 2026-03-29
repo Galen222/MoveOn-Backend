@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -33,6 +32,7 @@ def _make_datos() -> schemas.GuardarActividad:
         calorias_quemadas=300,
         ritmo_medio_movimiento=336,
         ritmo_medio_total=360,
+        ritmo_maximo=290,
         velocidad_media_x100=1071,
         velocidad_max_x100=1840,
         auto_pausas=1,
@@ -72,7 +72,10 @@ class TestCrearActividad:
         assert actividad.duracion_movimiento == 1680
         assert actividad.duracion_parado == 120
         assert actividad.ritmo_medio_movimiento == 336
+        assert actividad.ritmo_medio_total == 360
+        assert actividad.ritmo_maximo == 290
         assert resultado['velocidad_max_x100'] == 1840
+        assert resultado['ritmo_maximo'] == 290
         assert resultado['nuevo_total_puntos'] == 15
         assert usuario.total_metros == 6000
         assert usuario.total_calorias == 350

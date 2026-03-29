@@ -22,6 +22,7 @@ def _payload(**kwargs):
         "calorias_quemadas": 350,
         "ritmo_medio_movimiento": 336,
         "ritmo_medio_total": 360,
+        "ritmo_maximo": 290,
         "velocidad_media_x100": 1071,
         "velocidad_max_x100": 1840,
         "auto_pausas": 1,
@@ -39,6 +40,7 @@ class TestGuardarActividadSchema:
         assert data.duracion_total == 1800
         assert data.duracion_movimiento == 1680
         assert data.duracion_parado == 120
+        assert data.ritmo_maximo == 290
 
     def test_duracion_breakdown_invalido(self):
         with pytest.raises(

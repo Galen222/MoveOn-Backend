@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -51,6 +50,7 @@ def _payload(**kwargs):
         'calorias_quemadas': 350,
         'ritmo_medio_movimiento': 336,
         'ritmo_medio_total': 360,
+        'ritmo_maximo': 290,
         'velocidad_media_x100': 1071,
         'velocidad_max_x100': 1840,
         'auto_pausas': 1,
@@ -74,6 +74,7 @@ def _actividad_fake(**kwargs):
         'calorias_quemadas': 350,
         'ritmo_medio_movimiento': 336,
         'ritmo_medio_total': 360,
+        'ritmo_maximo': 290,
         'velocidad_media_x100': 1071,
         'velocidad_max_x100': 1840,
         'auto_pausas': 1,
@@ -97,6 +98,7 @@ class TestGuardarActividadRouter:
     def test_guardar_ok_expone_nuevos_campos(self, monkeypatch):
         async def _fake_guardar(db, usuario_id, datos):
             return _actividad_fake().__dict__
+
         monkeypatch.setattr(activities_service, 'crear_actividad', _fake_guardar)
         client = TestClient(_app())
         response = client.post('/actividad/guardar', json=_payload())
@@ -104,4 +106,6 @@ class TestGuardarActividadRouter:
         body = response.json()
         assert body['duracion_total'] == 1800
         assert body['duracion_movimiento'] == 1680
+        assert body['ritmo_medio_total'] == 360
+        assert body['ritmo_maximo'] == 290
         assert body['velocidad_max_x100'] == 1840

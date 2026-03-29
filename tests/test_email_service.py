@@ -92,7 +92,7 @@ class TestEsErrorTransitorio:
         assert email_service._es_error_transitorio(exc) is False
 
 
-class TestConstruirMensaje:
+class TestConstruirMensajeRecuperacion:
     def test_construye_subject_from_to_y_cuerpos(self, monkeypatch):
         _configurar_settings(monkeypatch)
 
@@ -103,14 +103,14 @@ class TestConstruirMensaje:
             "recuperacion_password_template",
             return_value="<html><body>HTML TEST</body></html>",
         ):
-            msg = email_service._construir_mensaje(
+            msg = email_service._construir_mensaje_recuperacion(
                 "pepe@test.com",
                 "123456",
                 15,
                 "test@example.com",
             )
 
-        assert msg["Subject"] == "Código de recuperación - MoveOn"
+        assert msg["Subject"] == "Código de recuperación"
         assert msg["From"] is not None
         assert "MoveOn App" in msg["From"]
         assert "test@example.com" in msg["From"]
@@ -135,7 +135,7 @@ class TestConstruirMensaje:
             "recuperacion_password_template",
             return_value="<html><body><img src='cid:moveon_logo'></body></html>",
         ):
-            msg = email_service._construir_mensaje(
+            msg = email_service._construir_mensaje_recuperacion(
                 "pepe@test.com",
                 "123456",
                 15,
@@ -165,7 +165,7 @@ class TestConstruirMensaje:
                 "recuperacion_password_template",
                 return_value="<html><body>sin logo</body></html>",
             ):
-                msg = email_service._construir_mensaje(
+                msg = email_service._construir_mensaje_recuperacion(
                     "pepe@test.com",
                     "123456",
                     15,
@@ -187,7 +187,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ) as mock_build, patch.object(
             email_service.aiosmtplib,
@@ -234,7 +234,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ), patch.object(
             email_service.aiosmtplib,
@@ -272,7 +272,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ), patch.object(
             email_service.aiosmtplib,
@@ -304,7 +304,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ), patch.object(
             email_service.aiosmtplib,
@@ -339,7 +339,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ), patch.object(
             email_service.aiosmtplib,
@@ -371,7 +371,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ), patch.object(
             email_service.aiosmtplib,
@@ -401,7 +401,7 @@ class TestEnviarCodigoRecuperacion:
 
         with patch.object(
             email_service,
-            "_construir_mensaje",
+            "_construir_mensaje_recuperacion",
             return_value=EmailMessage(),
         ), patch.object(
             email_service.aiosmtplib,

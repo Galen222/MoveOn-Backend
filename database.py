@@ -940,6 +940,9 @@ class Actividad(Base):
     ritmo_medio_total: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+    ritmo_maximo: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     velocidad_media_x100: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
@@ -1010,6 +1013,10 @@ class Actividad(Base):
         CheckConstraint(
             "ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600",
             name="ck_actividades_ritmo_medio_total_range",
+        ),
+        CheckConstraint(
+            "ritmo_maximo >= 0 AND ritmo_maximo <= 3600",
+            name="ck_actividades_ritmo_maximo_range",
         ),
         CheckConstraint(
             "velocidad_media_x100 >= 0 AND velocidad_media_x100 <= 10000",
@@ -1117,6 +1124,12 @@ class Actividad(Base):
     def validar_ritmo_medio_total(self, key: str, valor: int) -> int:
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo medio total", "TOTAL_PACE"
+        )
+
+    @validates("ritmo_maximo")
+    def validar_ritmo_maximo(self, key: str, valor: int) -> int:
+        return validators.validar_ritmo_segundos_km_logica(
+            valor, "el ritmo máximo", "MAX_PACE"
         )
 
     @validates("velocidad_media_x100")

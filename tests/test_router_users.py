@@ -1,3 +1,4 @@
+
 #
 # Tests de integración para routers/users.py usando TestClient.
 # Cubre: /registro, /perfil/informacion, /perfil/informacion/{nombre},
@@ -793,12 +794,14 @@ class TestRankingObtener:
             {
                 "nombre_usuario": "pepe",
                 "foto_perfil": None,
+                "foto_version": 0,
                 "total_puntos": 10,
                 "total_metros": 10_000,
             },
             {
                 "nombre_usuario": "ana",
                 "foto_perfil": "https://cdn.example.com/ana.jpg",
+                "foto_version": 1717236000,
                 "total_puntos": 8,
                 "total_metros": 8_000,
             },
@@ -864,6 +867,7 @@ class TestRankingObtener:
                 {
                     "nombre_usuario": "pepe",
                     "foto_perfil": "foto.jpg",
+                    "foto_version": 1717236000,
                     "total_puntos": 5,
                     "total_metros": 5_000,
                 }
@@ -888,3 +892,5 @@ class TestRankingObtener:
         monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
         response = TestClient(app).get("/ranking/obtener")
         assert response.json() == []
+
+

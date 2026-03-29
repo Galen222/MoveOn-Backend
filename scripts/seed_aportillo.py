@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -295,6 +296,35 @@ def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
     }
 
 
+
+
+def derivar_ritmo_maximo(
+    ritmo_medio_movimiento: int,
+    velocidad_max_x100: int,
+    tipo: TipoActividad,
+) -> int:
+    """Deriva un ritmo máximo razonable para datos seed.
+
+    El backend persistente ahora guarda ritmo máximo además del ritmo medio.
+    En los seeds evitamos valores imposibles partiendo de la velocidad máxima
+    y acotando el resultado para que sea mejor que el ritmo medio en movimiento,
+    pero sin producir picos absurdos por ruido.
+    """
+    ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
+    velocidad_max_x100 = max(1, int(velocidad_max_x100))
+
+    velocidad_max_kmh = velocidad_max_x100 / 100.0
+    pace_desde_velocidad_max = max(1, int(round(3600.0 / velocidad_max_kmh)))
+
+    es_correr = tipo == TipoActividad.CORRER
+    mejora_maxima = 60 if es_correr else 90
+    ratio_minimo = 0.72 if es_correr else 0.80
+    suelo = max(int(round(ritmo_medio_movimiento * ratio_minimo)), ritmo_medio_movimiento - mejora_maxima)
+    techo = max(1, ritmo_medio_movimiento - (15 if es_correr else 10))
+
+    candidato = min(pace_desde_velocidad_max, techo)
+    return max(1, min(candidato, techo) if candidato >= suelo else suelo)
+
 def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
     """Convierte el diccionario del seed en un payload validado."""
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
@@ -309,6 +339,11 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
         calorias_quemadas=int(ruta["calorias_quemadas"]),
         ritmo_medio_movimiento=int(ruta["ritmo_medio_movimiento"]),
         ritmo_medio_total=int(ruta["ritmo_medio_total"]),
+        ritmo_maximo=int(ruta.get("ritmo_maximo") or derivar_ritmo_maximo(
+            int(ruta["ritmo_medio_movimiento"]),
+            int(ruta["velocidad_max_x100"]),
+            ruta["tipo"],
+        )),
         velocidad_media_x100=int(ruta["velocidad_media_x100"]),
         velocidad_max_x100=int(ruta["velocidad_max_x100"]),
         auto_pausas=int(ruta["auto_pausas"]),
@@ -407,3 +442,5 @@ async def crear_actividades_aportillo() -> None:
 
 if __name__ == "__main__":
     asyncio.run(crear_actividades_aportillo())
+
+

@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -409,6 +410,35 @@ def _clamp(value: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+
+
+def derivar_ritmo_maximo(
+    ritmo_medio_movimiento: int,
+    velocidad_max_x100: int,
+    tipo: TipoActividad,
+) -> int:
+    """Deriva un ritmo máximo razonable para datos seed.
+
+    El backend persistente ahora guarda ritmo máximo además del ritmo medio.
+    En los seeds evitamos valores imposibles partiendo de la velocidad máxima
+    y acotando el resultado para que sea mejor que el ritmo medio en movimiento,
+    pero sin producir picos absurdos por ruido.
+    """
+    ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
+    velocidad_max_x100 = max(1, int(velocidad_max_x100))
+
+    velocidad_max_kmh = velocidad_max_x100 / 100.0
+    pace_desde_velocidad_max = max(1, int(round(3600.0 / velocidad_max_kmh)))
+
+    es_correr = tipo == TipoActividad.CORRER
+    mejora_maxima = 60 if es_correr else 90
+    ratio_minimo = 0.72 if es_correr else 0.80
+    suelo = max(int(round(ritmo_medio_movimiento * ratio_minimo)), ritmo_medio_movimiento - mejora_maxima)
+    techo = max(1, ritmo_medio_movimiento - (15 if es_correr else 10))
+
+    candidato = min(pace_desde_velocidad_max, techo)
+    return max(1, min(candidato, techo) if candidato >= suelo else suelo)
+
 def construir_actividad(
     indice_usuario: int,
     indice_actividad: int,
@@ -501,6 +531,11 @@ def construir_actividad(
         calorias_quemadas=calorias,
         ritmo_medio_movimiento=ritmo_medio_movimiento,
         ritmo_medio_total=ritmo_medio_total,
+        ritmo_maximo=derivar_ritmo_maximo(
+            ritmo_medio_movimiento,
+            velocidad_max_x100,
+            tipo,
+        ),
         velocidad_media_x100=velocidad_media_x100,
         velocidad_max_x100=velocidad_max_x100,
         auto_pausas=auto_pausas,
@@ -602,3 +637,5 @@ async def seed_fake_data() -> None:
 
 if __name__ == "__main__":
     asyncio.run(seed_fake_data())
+
+

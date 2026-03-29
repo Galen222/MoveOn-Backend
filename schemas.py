@@ -916,6 +916,7 @@ class GuardarActividad(BaseModel):
     calorias_quemadas: StrictInt = Field(...)
     ritmo_medio_movimiento: StrictInt = Field(default=0)
     ritmo_medio_total: StrictInt = Field(default=0)
+    ritmo_maximo: StrictInt = Field(default=0)
     velocidad_media_x100: StrictInt = Field(default=0)
     velocidad_max_x100: StrictInt = Field(default=0)
     auto_pausas: StrictInt = Field(default=0)
@@ -1177,6 +1178,11 @@ class GuardarActividad(BaseModel):
                 "Error: Falta el ritmo medio total",
                 "TOTAL_PACE_REQUIRED",
             )
+        if self.ritmo_maximo < 0:
+            raise AppValidationError(
+                "Error: El ritmo máximo no puede ser negativo",
+                "MAX_PACE_NEGATIVE",
+            )
         return self
 
 
@@ -1193,6 +1199,7 @@ class RespuestaObtenerActividad(BaseModel):
     calorias_quemadas: int
     ritmo_medio_movimiento: int
     ritmo_medio_total: int
+    ritmo_maximo: int
     velocidad_media_x100: int
     velocidad_max_x100: int
     auto_pausas: int

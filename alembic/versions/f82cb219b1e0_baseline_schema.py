@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: e27818d84cf5
+Revision ID: f82cb219b1e0
 Revises: 
-Create Date: 2026-03-28 22:28:07.027914
+Create Date: 2026-03-29 14:56:30.921291
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e27818d84cf5'
+revision: str = 'f82cb219b1e0'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -89,6 +89,7 @@ def upgrade() -> None:
     sa.Column('calorias_quemadas', sa.Integer(), nullable=False),
     sa.Column('ritmo_medio_movimiento', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('ritmo_medio_total', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('ritmo_maximo', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('velocidad_media_x100', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('velocidad_max_x100', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('auto_pausas', sa.Integer(), server_default=sa.text('0'), nullable=False),
@@ -110,6 +111,7 @@ def upgrade() -> None:
     sa.CheckConstraint('duracion_pausa_manual >= 0 AND duracion_pausa_manual <= 86400', name='ck_actividades_duracion_pausa_manual_range'),
     sa.CheckConstraint('duracion_total > 0 AND duracion_total <= 86400', name='ck_actividades_duracion_total_range'),
     sa.CheckConstraint('pausas_manuales >= 0 AND pausas_manuales <= 500', name='ck_actividades_pausas_manuales_range'),
+    sa.CheckConstraint('ritmo_maximo >= 0 AND ritmo_maximo <= 3600', name='ck_actividades_ritmo_maximo_range'),
     sa.CheckConstraint('ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600', name='ck_actividades_ritmo_medio_movimiento_range'),
     sa.CheckConstraint('ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600', name='ck_actividades_ritmo_medio_total_range'),
     sa.CheckConstraint('ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048', name='ck_actividades_ruta_mapa_url_len'),
