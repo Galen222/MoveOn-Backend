@@ -1,4 +1,3 @@
-
 #
 # Tests de integración para routers/users.py usando TestClient.
 # Cubre: /registro, /perfil/informacion, /perfil/informacion/{nombre},
@@ -792,6 +791,7 @@ class TestRankingObtener:
     def _ranking_fake(self):
         return [
             {
+                "posicion": 1,
                 "nombre_usuario": "pepe",
                 "foto_perfil": None,
                 "foto_version": 0,
@@ -799,6 +799,7 @@ class TestRankingObtener:
                 "total_metros": 10_000,
             },
             {
+                "posicion": 2,
                 "nombre_usuario": "ana",
                 "foto_perfil": "https://cdn.example.com/ana.jpg",
                 "foto_version": 1717236000,
@@ -832,10 +833,25 @@ class TestRankingObtener:
 
         body = TestClient(app).get("/ranking/obtener").json()
         for item in body:
+            assert "posicion" in item
             assert "nombre_usuario" in item
             assert "foto_perfil" in item
             assert "foto_version" in item
             assert "total_puntos" in item
+
+
+def test_ranking_devuelve_posicion_calculada(self, monkeypatch):
+    app = _app_con_overrides()
+
+    async def fake_ranking(db, provincia=None):
+        return self._ranking_fake()
+
+    monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
+    monkeypatch.setattr(file_service, "construir_url_foto", lambda foto, req: foto)
+
+    body = TestClient(app).get("/ranking/obtener").json()
+    assert body[0]["posicion"] == 1
+    assert body[1]["posicion"] == 2
 
     def test_ranking_con_provincia_valida_pasa_filtro(self, monkeypatch):
         app = _app_con_overrides()
@@ -865,6 +881,7 @@ class TestRankingObtener:
         async def fake_ranking(db, provincia=None):
             return [
                 {
+                    "posicion": 1,
                     "nombre_usuario": "pepe",
                     "foto_perfil": "foto.jpg",
                     "foto_version": 1717236000,
@@ -892,5 +909,3 @@ class TestRankingObtener:
         monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
         response = TestClient(app).get("/ranking/obtener")
         assert response.json() == []
-
-

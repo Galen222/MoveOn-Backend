@@ -382,6 +382,7 @@ async def obtener_ranking(
         url_foto = file_service.construir_url_foto(item["foto_perfil"], request)
         ranking_final.append(
             {
+                "posicion": item["posicion"],
                 "nombre_usuario": item["nombre_usuario"],
                 "foto_perfil": url_foto,
                 "foto_version": item["foto_version"],

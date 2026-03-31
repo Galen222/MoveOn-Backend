@@ -1227,6 +1227,7 @@ class RespuestaBorrarActividad(BaseModel):
 
 
 class ObtenerRanking(BaseModel):
+    posicion: int
     nombre_usuario: str
     foto_perfil: Optional[str] = None
     foto_version: int = 0

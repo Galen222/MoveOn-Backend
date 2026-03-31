@@ -773,7 +773,13 @@ async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
 
 
 async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
-    """Obtiene el Ranking de los usuarios con más kilometros recorridos."""
+    """Obtiene el ranking de usuarios con posición explícita dentro del ámbito consultado.
+
+    La posición se calcula siempre después de aplicar el filtro de provincia
+    (si existe) y tras ordenar por metros descendentes. De este modo, el mismo
+    usuario puede tener una posición nacional y otra provincial distintas sin
+    que la app tenga que inferirlas a partir del índice visual de la lista.
+    """
     query = select(
         database.Usuario.nombre_usuario,
         database.Usuario.foto_perfil,
@@ -789,11 +795,15 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     resultados = (await db.execute(query)).all()
 
     ranking = []
-    for nombre_usuario, foto_perfil, total_metros, foto_fecha in resultados:
+    for posicion, (nombre_usuario, foto_perfil, total_metros, foto_fecha) in enumerate(
+        resultados,
+        start=1,
+    ):
         puntos = calculos.calcular_puntos_nivel(total_metros)
         foto_version = int(foto_fecha.timestamp()) if foto_fecha else 0
         ranking.append(
             {
+                "posicion": posicion,
                 "nombre_usuario": nombre_usuario,
                 "foto_perfil": foto_perfil,
                 "foto_version": foto_version,
