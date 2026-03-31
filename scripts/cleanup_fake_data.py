@@ -3,46 +3,64 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-# Permite importar módulos internos al ejecutar:
-# python scripts/cleanup_fake_data.py
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import asyncio  # noqa: E402
-from sqlalchemy import delete, func, select  # noqa: E402
+from sqlalchemy import delete, func, or_, select  # noqa: E402
 
 import database  # noqa: E402
 
+
 """
-Script para borrar los datos creados por el seed unificado de prueba.
+Script para borrar exclusivamente los datos creados por scripts/seed_fake_data.py.
 
 Qué elimina:
-- Actividades de los usuarios fake.
-- Sesiones refresh de esos usuarios.
-- Los propios usuarios fake.
+- Actividades de los usuarios fake
+- Sesiones refresh de esos usuarios
+- Los propios usuarios fake
 
-Usuarios objetivo del seed:
-- usuario1 .. usuario20
-- usuario1@prueba.com .. usuario20@prueba.com
+Usuarios objetivo:
+- Emails: prueba01@prueba.com ... prueba20@prueba.com
+- Usernames: los 20 usernames definidos en el seed actual
 
+No toca ningún otro usuario ni ningún otro dato fuera de ese conjunto.
 Uso:
     python scripts/cleanup_fake_data.py
-
-Notas:
-- Pensado para desarrollo.
-- Hace commit real en la base de datos configurada en tu .env.
-- Si algún usuario no existe, simplemente se omite.
 """
 
 TOTAL_USUARIOS = 20
-EMAILS_FAKE = [f"usuario{i}@prueba.com" for i in range(1, TOTAL_USUARIOS + 1)]
-USERNAMES_FAKE = [f"usuario{i}" for i in range(1, TOTAL_USUARIOS + 1)]
+
+EMAILS_FAKE = [f"prueba{i:02d}@prueba.com" for i in range(1, TOTAL_USUARIOS + 1)]
+
+USERNAMES_FAKE = [
+    "carlosmartin01",
+    "luciafernandez02",
+    "javiersanchez03",
+    "martalopez04",
+    "alejandroruiz05",
+    "paulagomez06",
+    "danieltorres07",
+    "elenanavarro08",
+    "sergioromero09",
+    "claudiacastro10",
+    "adrianortega11",
+    "nereamolina12",
+    "ivandelgado13",
+    "lauravega14",
+    "pablogil15",
+    "saraherrera16",
+    "rubenleon17",
+    "andreapena18",
+    "davidcruz19",
+    "noeliacano20",
+]
 
 
 async def cleanup_fake_data() -> None:
-    """Borra actividades, sesiones refresh y usuarios creados por el seed fake."""
-    await database.init_db()
+    if database.AsyncSessionLocal is None:
+        database._init_db_objects()
 
     if database.AsyncSessionLocal is None:
         print("No se ha podido inicializar AsyncSessionLocal.")
@@ -55,8 +73,10 @@ async def cleanup_fake_data() -> None:
                 database.Usuario.nombre_usuario,
                 database.Usuario.email,
             ).where(
-                database.Usuario.nombre_usuario.in_(USERNAMES_FAKE),
-                database.Usuario.email.in_(EMAILS_FAKE),
+                or_(
+                    database.Usuario.email.in_(EMAILS_FAKE),
+                    database.Usuario.nombre_usuario.in_(USERNAMES_FAKE),
+                )
             )
         )
         filas = result.all()
@@ -66,12 +86,10 @@ async def cleanup_fake_data() -> None:
             return
 
         user_ids = [fila.id for fila in filas]
-        usernames = [fila.nombre_usuario for fila in filas]
-        emails = [fila.email for fila in filas]
 
         print("Usuarios encontrados para borrar:")
-        for nombre_usuario, email in zip(usernames, emails):
-            print(f"- {nombre_usuario} ({email})")
+        for fila in filas:
+            print(f"- {fila.nombre_usuario} ({fila.email})")
 
         try:
             actividades_borradas = (
@@ -94,11 +112,7 @@ async def cleanup_fake_data() -> None:
                 await db.execute(
                     select(func.count())
                     .select_from(database.Usuario)
-                    .where(
-                        database.Usuario.id.in_(user_ids),
-                        database.Usuario.nombre_usuario.in_(USERNAMES_FAKE),
-                        database.Usuario.email.in_(EMAILS_FAKE),
-                    )
+                    .where(database.Usuario.id.in_(user_ids))
                 )
             ).scalar_one()
 
@@ -116,9 +130,7 @@ async def cleanup_fake_data() -> None:
 
             await db.execute(
                 delete(database.Usuario).where(
-                    database.Usuario.id.in_(user_ids),
-                    database.Usuario.nombre_usuario.in_(USERNAMES_FAKE),
-                    database.Usuario.email.in_(EMAILS_FAKE),
+                    database.Usuario.id.in_(user_ids)
                 )
             )
 
@@ -136,7 +148,6 @@ async def cleanup_fake_data() -> None:
 
 
 async def main() -> None:
-    """Punto de entrada del script."""
     await cleanup_fake_data()
 
 
