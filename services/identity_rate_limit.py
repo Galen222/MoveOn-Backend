@@ -26,7 +26,7 @@ _MAX_TTL_SECONDS = 24 * 3600
 _BUCKETS: TTLCache[tuple[str, str], tuple[float, int]] = TTLCache(
     maxsize=_MAX_BUCKETS,
     ttl=_MAX_TTL_SECONDS,
-    timer=time.time,  # ← clave para que cuadre con tus timestamps y tests
+    timer=time.time,  # clave para que cuadre con timestamps y tests
 )
 
 _BUCKETS_LOCK = RLock()
@@ -84,6 +84,8 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
     now = time.time()
     key = (scope, ident)
 
+    # leer + reset de ventana + incrementar + persistir + validar
+    # ocurre dentro de la misma sección crítica.
     with _BUCKETS_LOCK:
         _purge_old(now)
 
@@ -95,15 +97,15 @@ def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
         count += 1
         _BUCKETS[key] = (window_start, count)
 
-    if count > max_hits:
-        logger.warning(
-            "limite_por_identidad_superado",
-            extra={
-                "scope": scope,
-                "identidad": ident,
-                "max_hits": max_hits,
-                "window_seconds": window_seconds,
-                "hits_actuales": count,
-            },
-        )
-        raise IdentityRateLimitExceeded()
+        if count > max_hits:
+            logger.warning(
+                "limite_por_identidad_superado",
+                extra={
+                    "scope": scope,
+                    "identidad": ident,
+                    "max_hits": max_hits,
+                    "window_seconds": window_seconds,
+                    "hits_actuales": count,
+                },
+            )
+            raise IdentityRateLimitExceeded()
