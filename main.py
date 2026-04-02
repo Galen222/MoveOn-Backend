@@ -2,11 +2,11 @@
 
 """
 Punto de Entrada Principal - MoveOn API.
+CORS no se implementa pues el backend se consume por una app Android y no una web.
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from sqlalchemy import text
@@ -73,7 +73,6 @@ async def lifespan(app: FastAPI):
         extra={
             "storage_type": settings.STORAGE_TYPE,
             "enable_docs": settings.ENABLE_DOCS,
-            "enable_cors": settings.ENABLE_CORS,
             "enable_rate_limit_ip": settings.ENABLE_RATE_LIMIT_IP,
             "enable_rate_limit_id": settings.ENABLE_RATE_LIMIT_ID,
             "enable_security_headers": settings.ENABLE_SECURITY_HEADERS,
@@ -119,7 +118,7 @@ if settings.ENABLE_RATE_LIMIT_IP:
 
 # Middleware de tamaño del body para rutas JSON sensibles.
 # Se añade aquí para que las respuestas 413 sigan pasando por
-# request_id, cabeceras de seguridad y CORS.
+# request_id y cabeceras de seguridad.
 app.add_middleware(
     RequestSizeLimitMiddleware,
     route_limits=REQUEST_SIZE_LIMITS,
@@ -163,16 +162,6 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 async def identity_rate_limit_handler(request: Request, exc: IdentityRateLimitExceeded):
     return error_response(status_code=429, mensaje=exc.mensaje)
 
-
-# Configuración de CORS para permitir peticiones externas.
-if settings.ENABLE_CORS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
 # Registro de excepciones.
 # Para mostrar los errores de las validaciones de Pydantic

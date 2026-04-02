@@ -61,47 +61,6 @@ def _fake_info(field_name: str) -> ValidationInfo:
 
 
 # ─────────────────────────────────────────────
-# parse_cors_origins (validator directo)
-# ─────────────────────────────────────────────
-
-
-class TestParseCorsOrigins:
-    def test_string_csv_se_parsea_a_lista(self):
-        resultado = Settings.parse_cors_origins("https://a.com, https://b.com")
-        assert resultado == ["https://a.com", "https://b.com"]
-
-    def test_string_vacio_devuelve_lista_vacia(self):
-        resultado = Settings.parse_cors_origins("")
-        assert resultado == []
-
-    def test_none_devuelve_lista_vacia(self):
-        resultado = Settings.parse_cors_origins(None)
-        assert resultado == []
-
-    def test_lista_pasa_tal_cual(self):
-        resultado = Settings.parse_cors_origins(["https://x.com"])
-        assert resultado == ["https://x.com"]
-
-    def test_ignora_entradas_vacias_entre_comas(self):
-        resultado = Settings.parse_cors_origins("https://a.com,,, ,https://b.com")
-        assert resultado == ["https://a.com", "https://b.com"]
-
-    def test_tipo_invalido_lanza_error(self):
-        with pytest.raises(ValueError, match="CORS_ORIGINS"):
-            Settings.parse_cors_origins(12345)
-
-    def test_lista_con_espacios_se_limpia(self):
-        resultado = Settings.parse_cors_origins(
-            ["  https://a.com  ", " https://b.com "]
-        )
-        assert resultado == ["https://a.com", "https://b.com"]
-
-    def test_string_un_solo_origen(self):
-        resultado = Settings.parse_cors_origins("https://miapp.com")
-        assert resultado == ["https://miapp.com"]
-
-
-# ─────────────────────────────────────────────
 # validar_public_base_url (validator directo)
 # ─────────────────────────────────────────────
 

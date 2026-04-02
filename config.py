@@ -76,10 +76,6 @@ class Settings(BaseSettings):
     JWT_ISSUER: str = "moveon_api"
     JWT_AUDIENCE: str = "moveon_app"
 
-    # CORS
-    ENABLE_CORS: bool = False
-    CORS_ORIGINS: list[str] = ["https://miapp.com", "http://localhost:3000"]
-
     # SWAGGER
     ENABLE_DOCS: bool = False
 
@@ -189,22 +185,6 @@ class Settings(BaseSettings):
         "pull requests,security,skip to content,terms,training"
     )
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if v in (None, ""):
-            return []
-
-        if isinstance(v, str):
-            return [o.strip() for o in v.split(",") if o.strip()]
-
-        if isinstance(v, list):
-            return [str(o).strip() for o in v if str(o).strip()]
-
-        raise ValueError(
-            "CORS_ORIGINS debe ser una lista o un string separado por comas"
-        )
-
     @field_validator("PUBLIC_BASE_URL", mode="before")
     @classmethod
     def validar_public_base_url(cls, v: object) -> str:
@@ -288,3 +268,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
+
+
