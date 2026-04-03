@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: f82cb219b1e0
+Revision ID: f766f87eb47d
 Revises: 
-Create Date: 2026-03-29 14:56:30.921291
+Create Date: 2026-04-03 02:48:55.878339
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'f82cb219b1e0'
+revision: str = 'f766f87eb47d'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -176,12 +176,79 @@ def upgrade() -> None:
     sa.UniqueConstraint('usuario_id', 'provider', name='uq_usuarios_auth_social_usuario_provider')
     )
     op.create_index(op.f('ix_usuarios_auth_social_usuario_id'), 'usuarios_auth_social', ['usuario_id'], unique=False)
+    op.create_table('actividades_diagnostico',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('usuario_id', sa.Integer(), nullable=False),
+    sa.Column('actividad_id', sa.Integer(), nullable=True),
+    sa.Column('actividad_local_id', sa.String(length=64), nullable=True),
+    sa.Column('session_started_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('session_finished_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('last_timer_tick_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('service_created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('service_destroyed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('elapsed_seconds', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('moving_seconds', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('stopped_seconds', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('manual_pause_seconds', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('distance_meters', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('average_pace_total', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('average_pace_moving', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('max_pace', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('auto_pauses', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('manual_pauses', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('speed_alerts', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('running_classified_seconds', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('walking_classified_seconds', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('service_restart_count', sa.Integer(), server_default=sa.text('0'), nullable=False),
+    sa.Column('current_status', sa.String(length=40), nullable=True),
+    sa.Column('app_version', sa.String(length=64), nullable=True),
+    sa.Column('os_version', sa.String(length=64), nullable=True),
+    sa.Column('manufacturer', sa.String(length=64), nullable=True),
+    sa.Column('model', sa.String(length=128), nullable=True),
+    sa.Column('event_log_json', sa.Text(), nullable=True),
+    sa.Column('device_info_json', sa.Text(), nullable=True),
+    sa.Column('creada_en', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.CheckConstraint('actividad_local_id IS NULL OR char_length(btrim(actividad_local_id)) BETWEEN 1 AND 64', name='ck_act_diag_local_id_len'),
+    sa.CheckConstraint('app_version IS NULL OR char_length(btrim(app_version)) <= 64', name='ck_act_diag_app_version_len'),
+    sa.CheckConstraint('auto_pauses >= 0', name='ck_act_diag_auto_pauses_non_negative'),
+    sa.CheckConstraint('average_pace_moving >= 0', name='ck_act_diag_avg_moving_non_negative'),
+    sa.CheckConstraint('average_pace_total >= 0', name='ck_act_diag_avg_total_non_negative'),
+    sa.CheckConstraint('current_status IS NULL OR char_length(btrim(current_status)) BETWEEN 1 AND 40', name='ck_act_diag_status_len'),
+    sa.CheckConstraint('distance_meters >= 0', name='ck_act_diag_distance_non_negative'),
+    sa.CheckConstraint('elapsed_seconds >= 0', name='ck_act_diag_elapsed_non_negative'),
+    sa.CheckConstraint('manual_pause_seconds >= 0', name='ck_act_diag_manual_pause_non_negative'),
+    sa.CheckConstraint('manual_pauses >= 0', name='ck_act_diag_manual_pauses_non_negative'),
+    sa.CheckConstraint('manufacturer IS NULL OR char_length(btrim(manufacturer)) <= 64', name='ck_act_diag_manufacturer_len'),
+    sa.CheckConstraint('max_pace >= 0', name='ck_act_diag_max_pace_non_negative'),
+    sa.CheckConstraint('model IS NULL OR char_length(btrim(model)) <= 128', name='ck_act_diag_model_len'),
+    sa.CheckConstraint('moving_seconds >= 0', name='ck_act_diag_moving_non_negative'),
+    sa.CheckConstraint('os_version IS NULL OR char_length(btrim(os_version)) <= 64', name='ck_act_diag_os_version_len'),
+    sa.CheckConstraint('running_classified_seconds >= 0', name='ck_act_diag_running_non_negative'),
+    sa.CheckConstraint('service_restart_count >= 0', name='ck_act_diag_restart_non_negative'),
+    sa.CheckConstraint('speed_alerts >= 0', name='ck_act_diag_speed_alerts_non_negative'),
+    sa.CheckConstraint('stopped_seconds >= 0', name='ck_act_diag_stopped_non_negative'),
+    sa.CheckConstraint('walking_classified_seconds >= 0', name='ck_act_diag_walking_non_negative'),
+    sa.ForeignKeyConstraint(['actividad_id'], ['actividades.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['usuario_id'], ['usuarios.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_actividades_diagnostico_actividad_id'), 'actividades_diagnostico', ['actividad_id'], unique=False)
+    op.create_index(op.f('ix_actividades_diagnostico_actividad_local_id'), 'actividades_diagnostico', ['actividad_local_id'], unique=False)
+    op.create_index(op.f('ix_actividades_diagnostico_creada_en'), 'actividades_diagnostico', ['creada_en'], unique=False)
+    op.create_index('ix_actividades_diagnostico_usuario_creada', 'actividades_diagnostico', ['usuario_id', 'creada_en', 'id'], unique=False)
+    op.create_index(op.f('ix_actividades_diagnostico_usuario_id'), 'actividades_diagnostico', ['usuario_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_actividades_diagnostico_usuario_id'), table_name='actividades_diagnostico')
+    op.drop_index('ix_actividades_diagnostico_usuario_creada', table_name='actividades_diagnostico')
+    op.drop_index(op.f('ix_actividades_diagnostico_creada_en'), table_name='actividades_diagnostico')
+    op.drop_index(op.f('ix_actividades_diagnostico_actividad_local_id'), table_name='actividades_diagnostico')
+    op.drop_index(op.f('ix_actividades_diagnostico_actividad_id'), table_name='actividades_diagnostico')
+    op.drop_table('actividades_diagnostico')
     op.drop_index(op.f('ix_usuarios_auth_social_usuario_id'), table_name='usuarios_auth_social')
     op.drop_table('usuarios_auth_social')
     op.drop_index(op.f('ix_sesiones_refresh_usuario_id'), table_name='sesiones_refresh')
