@@ -1,3 +1,4 @@
+
 #
 # Tests de integración para routers/users.py usando TestClient.
 # Cubre: /registro, /perfil/informacion, /perfil/informacion/{nombre},
@@ -840,18 +841,18 @@ class TestRankingObtener:
             assert "total_puntos" in item
 
 
-def test_ranking_devuelve_posicion_calculada(self, monkeypatch):
-    app = _app_con_overrides()
+    def test_ranking_devuelve_posicion_calculada(self, monkeypatch):
+        app = _app_con_overrides()
 
-    async def fake_ranking(db, provincia=None):
-        return self._ranking_fake()
+        async def fake_ranking(db, provincia=None):
+            return self._ranking_fake()
 
-    monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
-    monkeypatch.setattr(file_service, "construir_url_foto", lambda foto, req: foto)
+        monkeypatch.setattr(user_service, "obtener_ranking", fake_ranking)
+        monkeypatch.setattr(file_service, "construir_url_foto", lambda foto, req: foto)
 
-    body = TestClient(app).get("/ranking/obtener").json()
-    assert body[0]["posicion"] == 1
-    assert body[1]["posicion"] == 2
+        body = TestClient(app).get("/ranking/obtener").json()
+        assert body[0]["posicion"] == 1
+        assert body[1]["posicion"] == 2
 
     def test_ranking_con_provincia_valida_pasa_filtro(self, monkeypatch):
         app = _app_con_overrides()
