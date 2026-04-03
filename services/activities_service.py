@@ -1,5 +1,6 @@
 # services/activities_service.py
 
+import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, delete as sa_delete, and_
 from exceptions import app_http_exception
@@ -54,8 +55,7 @@ async def crear_actividad(
         pausas_manuales=datos.pausas_manuales,
         alertas_velocidad=datos.alertas_velocidad,
         ruta_polilinea=datos.ruta_polilinea,
-        ruta_mapa_url=str(
-            datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
+        ruta_mapa_url=str(datos.ruta_mapa_url) if datos.ruta_mapa_url else None,
         fecha_ruta=datos.fecha_ruta,
     )
 
@@ -63,12 +63,10 @@ async def crear_actividad(
     usuario.total_metros = total_actual + int(datos.distancia)
 
     total_calorias_actual = int(usuario.total_calorias or 0)
-    usuario.total_calorias = total_calorias_actual + \
-        int(datos.calorias_quemadas)
+    usuario.total_calorias = total_calorias_actual + int(datos.calorias_quemadas)
 
     total_duracion_actual = int(usuario.total_duracion_segundos or 0)
-    usuario.total_duracion_segundos = total_duracion_actual + \
-        int(datos.duracion_total)
+    usuario.total_duracion_segundos = total_duracion_actual + int(datos.duracion_total)
 
     total_actividades_actual = int(usuario.total_actividades or 0)
     usuario.total_actividades = total_actividades_actual + 1
@@ -124,6 +122,134 @@ async def crear_actividad(
     }
 
     return respuesta
+
+
+def _serializar_json_seguro(valor) -> str | None:
+    """
+    Convierte estructuras Python del diagnóstico a texto JSON.
+
+    Se usa solo para persistir el bloque de telemetría auxiliar sin tocar la
+    lógica existente del resto de operaciones del servicio.
+    """
+    if valor in (None, {}, []):
+        return None
+    return json.dumps(valor, ensure_ascii=False, separators=(",", ":"))
+
+
+async def guardar_actividad_diagnostico(
+    db: AsyncSession,
+    usuario_actual_id: int,
+    datos: schemas.GuardarActividadDiagnostico,
+):
+    """
+    Guarda telemetría de diagnóstico enviada automáticamente por la app.
+
+    Este flujo es independiente del guardado normal de actividades:
+    - no recalcula puntos
+    - no altera acumulados del perfil
+    - no modifica ranking
+    """
+    usuario = (
+        await db.execute(
+            select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
+        )
+    ).scalar_one_or_none()
+
+    if not usuario:
+        logger.warning(
+            "guardar_diagnostico_usuario_no_encontrado",
+            extra={"usuario_id": usuario_actual_id},
+        )
+        raise app_http_exception(
+            status_code=404,
+            mensaje="Error: Usuario no encontrado",
+            error_code="USER_NOT_FOUND",
+        )
+
+    actividad_id_validada = None
+    if datos.actividad_id is not None:
+        actividad = (
+            await db.execute(
+                select(database.Actividad).where(
+                    database.Actividad.id == datos.actividad_id,
+                    database.Actividad.usuario_id == usuario.id,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not actividad:
+            logger.warning(
+                "guardar_diagnostico_actividad_no_encontrada",
+                extra={
+                    "usuario_id": usuario.id,
+                    "actividad_id": datos.actividad_id,
+                },
+            )
+            raise app_http_exception(
+                status_code=404,
+                mensaje="Error: Actividad no encontrada",
+                error_code="ACTIVITY_NOT_FOUND",
+            )
+
+        actividad_id_validada = actividad.id
+
+    diagnostico = database.ActividadDiagnostico(
+        usuario_id=usuario.id,
+        actividad_id=actividad_id_validada,
+        actividad_local_id=datos.actividad_local_id,
+        session_started_at=datos.session_started_at,
+        session_finished_at=datos.session_finished_at,
+        last_timer_tick_at=datos.last_timer_tick_at,
+        service_created_at=datos.service_created_at,
+        service_destroyed_at=datos.service_destroyed_at,
+        elapsed_seconds=datos.elapsed_seconds,
+        moving_seconds=datos.moving_seconds,
+        stopped_seconds=datos.stopped_seconds,
+        manual_pause_seconds=datos.manual_pause_seconds,
+        distance_meters=datos.distance_meters,
+        average_pace_total=datos.average_pace_total,
+        average_pace_moving=datos.average_pace_moving,
+        max_pace=datos.max_pace,
+        auto_pauses=datos.auto_pauses,
+        manual_pauses=datos.manual_pauses,
+        speed_alerts=datos.speed_alerts,
+        running_classified_seconds=datos.running_classified_seconds,
+        walking_classified_seconds=datos.walking_classified_seconds,
+        service_restart_count=datos.service_restart_count,
+        current_status=datos.current_status,
+        app_version=datos.app_version,
+        os_version=datos.os_version,
+        manufacturer=datos.manufacturer,
+        model=datos.model,
+        event_log_json=_serializar_json_seguro(
+            [item.model_dump(mode="json") for item in datos.event_log]
+        ),
+        device_info_json=_serializar_json_seguro(datos.device_info),
+    )
+
+    try:
+        db.add(diagnostico)
+        await db.commit()
+        await db.refresh(diagnostico)
+    except Exception:
+        await db.rollback()
+        raise
+
+    logger.info(
+        "actividad_diagnostico_guardado",
+        extra={
+            "usuario_id": usuario.id,
+            "diagnostico_id": diagnostico.id,
+            "actividad_id": diagnostico.actividad_id,
+            "actividad_local_id": diagnostico.actividad_local_id,
+        },
+    )
+
+    return {
+        "estatus": "success",
+        "mensaje": "Diagnóstico de actividad guardado correctamente",
+        "diagnostico_id": diagnostico.id,
+    }
 
 
 async def obtener_actividad(
@@ -189,8 +315,7 @@ async def obtener_actividades(
     """
     usuario_existe = (
         await db.execute(
-            select(database.Usuario.id).where(
-                database.Usuario.id == usuario_actual_id)
+            select(database.Usuario.id).where(database.Usuario.id == usuario_actual_id)
         )
     ).scalar_one_or_none()
 
@@ -312,13 +437,13 @@ async def eliminar_actividad(
 
         total_calorias_actual = int(usuario.total_calorias or 0)
         calorias_actividad = int(actividad.calorias_quemadas or 0)
-        usuario.total_calorias = max(
-            0, total_calorias_actual - calorias_actividad)
+        usuario.total_calorias = max(0, total_calorias_actual - calorias_actividad)
 
         total_duracion_actual = int(usuario.total_duracion_segundos or 0)
         duracion_actividad = int(actividad.duracion_total or 0)
         usuario.total_duracion_segundos = max(
-            0, total_duracion_actual - duracion_actividad)
+            0, total_duracion_actual - duracion_actividad
+        )
 
         total_actividades_actual = int(usuario.total_actividades or 0)
         usuario.total_actividades = max(0, total_actividades_actual - 1)

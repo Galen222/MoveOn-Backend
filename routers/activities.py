@@ -26,6 +26,29 @@ async def guardar_actividad(
     return await activities_service.crear_actividad(db, usuario_actual_id, datos)
 
 
+@router.post(
+    "/actividad/diagnostico",
+    response_model=schemas.RespuestaGuardarActividadDiagnostico,
+)
+@rate_limit(settings.RL_ACTIVIDAD_GUARDAR)
+async def guardar_actividad_diagnostico(
+    request: Request,
+    datos: schemas.GuardarActividadDiagnostico,
+    db: AsyncSession = Depends(obtener_db),
+    usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
+):
+    """
+    Recibe un bloque auxiliar de diagnóstico de tracking.
+
+    La app lo enviará solo en builds internas con telemetría activada.
+    Reutilizamos el mismo rate-limit que el guardado de actividad para no
+    introducir una política nueva innecesaria.
+    """
+    return await activities_service.guardar_actividad_diagnostico(
+        db, usuario_actual_id, datos
+    )
+
+
 @router.get(
     "/actividad/obtener/{id_actividad}",
     response_model=schemas.RespuestaObtenerActividad,

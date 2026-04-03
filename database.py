@@ -1189,6 +1189,289 @@ class Actividad(Base):
         return validators.validar_fecha_ruta_logica(valor)
 
 
+class ActividadDiagnostico(Base):
+    """
+    Persistencia de telemetría de tracking enviada automáticamente por builds internas.
+
+    Esta tabla NO sustituye a ``Actividad`` ni participa en los acumulados del perfil.
+    Su única finalidad es permitir depurar sesiones problemáticas reportadas por testers
+    remotos sin necesidad de tener físicamente el móvil.
+
+    Diseño:
+    - ``actividad_id`` es opcional para no bloquear el envío del diagnóstico si la
+      actividad todavía no existe en backend o si el guardado principal ha fallado.
+    - ``event_log_json`` y ``device_info_json`` se guardan como texto JSON para
+      mantener la migración sencilla y desacoplada del tipo JSONB.
+    """
+
+    __tablename__ = "actividades_diagnostico"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    usuario_id: Mapped[int] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actividad_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("actividades.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    actividad_local_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+
+    session_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    session_finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_timer_tick_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    service_created_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    service_destroyed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    elapsed_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    moving_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    stopped_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    manual_pause_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    distance_meters: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    average_pace_total: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    average_pace_moving: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    max_pace: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    auto_pauses: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    manual_pauses: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    speed_alerts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    running_classified_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    walking_classified_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    service_restart_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    current_status: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    app_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    os_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    manufacturer: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
+    event_log_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    device_info_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    creada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_ahora_utc,
+        server_default=text("CURRENT_TIMESTAMP"),
+        index=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "elapsed_seconds >= 0", name="ck_act_diag_elapsed_non_negative"
+        ),
+        CheckConstraint("moving_seconds >= 0", name="ck_act_diag_moving_non_negative"),
+        CheckConstraint(
+            "stopped_seconds >= 0", name="ck_act_diag_stopped_non_negative"
+        ),
+        CheckConstraint(
+            "manual_pause_seconds >= 0", name="ck_act_diag_manual_pause_non_negative"
+        ),
+        CheckConstraint(
+            "distance_meters >= 0", name="ck_act_diag_distance_non_negative"
+        ),
+        CheckConstraint(
+            "average_pace_total >= 0", name="ck_act_diag_avg_total_non_negative"
+        ),
+        CheckConstraint(
+            "average_pace_moving >= 0", name="ck_act_diag_avg_moving_non_negative"
+        ),
+        CheckConstraint("max_pace >= 0", name="ck_act_diag_max_pace_non_negative"),
+        CheckConstraint(
+            "auto_pauses >= 0", name="ck_act_diag_auto_pauses_non_negative"
+        ),
+        CheckConstraint(
+            "manual_pauses >= 0", name="ck_act_diag_manual_pauses_non_negative"
+        ),
+        CheckConstraint(
+            "speed_alerts >= 0", name="ck_act_diag_speed_alerts_non_negative"
+        ),
+        CheckConstraint(
+            "running_classified_seconds >= 0", name="ck_act_diag_running_non_negative"
+        ),
+        CheckConstraint(
+            "walking_classified_seconds >= 0", name="ck_act_diag_walking_non_negative"
+        ),
+        CheckConstraint(
+            "service_restart_count >= 0", name="ck_act_diag_restart_non_negative"
+        ),
+        CheckConstraint(
+            "actividad_local_id IS NULL OR char_length(btrim(actividad_local_id)) BETWEEN 1 AND 64",
+            name="ck_act_diag_local_id_len",
+        ),
+        CheckConstraint(
+            "current_status IS NULL OR char_length(btrim(current_status)) BETWEEN 1 AND 40",
+            name="ck_act_diag_status_len",
+        ),
+        CheckConstraint(
+            "app_version IS NULL OR char_length(btrim(app_version)) <= 64",
+            name="ck_act_diag_app_version_len",
+        ),
+        CheckConstraint(
+            "os_version IS NULL OR char_length(btrim(os_version)) <= 64",
+            name="ck_act_diag_os_version_len",
+        ),
+        CheckConstraint(
+            "manufacturer IS NULL OR char_length(btrim(manufacturer)) <= 64",
+            name="ck_act_diag_manufacturer_len",
+        ),
+        CheckConstraint(
+            "model IS NULL OR char_length(btrim(model)) <= 128",
+            name="ck_act_diag_model_len",
+        ),
+        Index(
+            "ix_actividades_diagnostico_usuario_creada", "usuario_id", "creada_en", "id"
+        ),
+    )
+
+    @validates("usuario_id")
+    def validar_usuario_id(self, key: str, valor: int) -> int:
+        if not isinstance(valor, int):
+            raise AppValidationError(
+                "Error: usuario_id debe ser un entero",
+                "DIAGNOSTIC_USER_ID_MUST_BE_INTEGER",
+            )
+        if valor <= 0:
+            raise AppValidationError(
+                "Error: usuario_id debe ser mayor a 0",
+                "DIAGNOSTIC_USER_ID_MUST_BE_POSITIVE",
+            )
+        return valor
+
+    @validates("actividad_id")
+    def validar_actividad_id(self, key: str, valor: Optional[int]) -> Optional[int]:
+        if valor is None:
+            return None
+        if not isinstance(valor, int):
+            raise AppValidationError(
+                "Error: actividad_id debe ser un entero",
+                "DIAGNOSTIC_ACTIVITY_ID_MUST_BE_INTEGER",
+            )
+        if valor <= 0:
+            raise AppValidationError(
+                "Error: actividad_id debe ser mayor a 0",
+                "DIAGNOSTIC_ACTIVITY_ID_MUST_BE_POSITIVE",
+            )
+        return valor
+
+    @validates(
+        "actividad_local_id",
+        "current_status",
+        "app_version",
+        "os_version",
+        "manufacturer",
+        "model",
+    )
+    def validar_textos_cortos(self, key: str, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
+        if not isinstance(valor, str):
+            raise AppValidationError(
+                "Error: el campo de diagnóstico debe ser texto",
+                "DIAGNOSTIC_TEXT_FIELD_MUST_BE_STRING",
+            )
+        valor = valor.strip()
+        return valor or None
+
+    @validates(
+        "session_started_at",
+        "session_finished_at",
+        "last_timer_tick_at",
+        "service_created_at",
+        "service_destroyed_at",
+        "creada_en",
+    )
+    def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
+        return _normalizar_datetime_utc(valor)
+
+    @validates(
+        "elapsed_seconds",
+        "moving_seconds",
+        "stopped_seconds",
+        "manual_pause_seconds",
+        "distance_meters",
+        "average_pace_total",
+        "average_pace_moving",
+        "max_pace",
+        "auto_pauses",
+        "manual_pauses",
+        "speed_alerts",
+        "running_classified_seconds",
+        "walking_classified_seconds",
+        "service_restart_count",
+    )
+    def validar_enteros_no_negativos(self, key: str, valor: int) -> int:
+        if not isinstance(valor, int):
+            raise AppValidationError(
+                "Error: el valor de diagnóstico debe ser un entero",
+                "DIAGNOSTIC_NUMERIC_FIELD_MUST_BE_INTEGER",
+            )
+        if valor < 0:
+            raise AppValidationError(
+                "Error: el valor de diagnóstico no puede ser negativo",
+                "DIAGNOSTIC_NUMERIC_FIELD_NEGATIVE",
+            )
+        return valor
+
+    @validates("event_log_json", "device_info_json")
+    def validar_json_serializado(self, key: str, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
+        if not isinstance(valor, str):
+            raise AppValidationError(
+                "Error: el JSON de diagnóstico debe ser texto",
+                "DIAGNOSTIC_JSON_FIELD_MUST_BE_STRING",
+            )
+        valor = valor.strip()
+        return valor or None
+
+
 class UsuarioAuthSocial(Base):
     """
     Vincula una cuenta interna con un proveedor de autenticación social.

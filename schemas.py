@@ -1186,6 +1186,148 @@ class GuardarActividad(BaseModel):
         return self
 
 
+class EventoDiagnosticoActividad(BaseModel):
+    """
+    Evento individual de la línea temporal de diagnóstico.
+
+    Cada evento representa un cambio relevante del tracking: creación del servicio,
+    auto-pausa, reanudación, guardado, destrucción, etc.
+    """
+
+    at: datetime
+    tipo: str = Field(..., min_length=1, max_length=64)
+    detalle: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("tipo")
+    @classmethod
+    def validar_tipo(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise AppValidationError(
+                "Error: El tipo de evento es obligatorio",
+                "DIAGNOSTIC_EVENT_TYPE_REQUIRED",
+            )
+        return valor
+
+    @field_validator("detalle")
+    @classmethod
+    def validar_detalle(cls, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
+        valor = valor.strip()
+        return valor or None
+
+
+class GuardarActividadDiagnostico(BaseModel):
+    """
+    Payload del endpoint de diagnóstico de actividad.
+
+    Se utiliza solo para builds internas con telemetría automática activada.
+    No sustituye al payload de ``GuardarActividad`` y no afecta al cálculo de
+    puntos, métricas agregadas ni ranking.
+    """
+
+    actividad_id: Optional[StrictInt] = Field(default=None)
+    actividad_local_id: Optional[str] = Field(default=None, max_length=64)
+
+    session_started_at: Optional[datetime] = None
+    session_finished_at: Optional[datetime] = None
+    last_timer_tick_at: Optional[datetime] = None
+    service_created_at: Optional[datetime] = None
+    service_destroyed_at: Optional[datetime] = None
+
+    elapsed_seconds: StrictInt = Field(default=0)
+    moving_seconds: StrictInt = Field(default=0)
+    stopped_seconds: StrictInt = Field(default=0)
+    manual_pause_seconds: StrictInt = Field(default=0)
+
+    distance_meters: StrictInt = Field(default=0)
+    average_pace_total: StrictInt = Field(default=0)
+    average_pace_moving: StrictInt = Field(default=0)
+    max_pace: StrictInt = Field(default=0)
+
+    auto_pauses: StrictInt = Field(default=0)
+    manual_pauses: StrictInt = Field(default=0)
+    speed_alerts: StrictInt = Field(default=0)
+
+    running_classified_seconds: StrictInt = Field(default=0)
+    walking_classified_seconds: StrictInt = Field(default=0)
+    service_restart_count: StrictInt = Field(default=0)
+
+    current_status: Optional[str] = Field(default=None, max_length=40)
+    app_version: Optional[str] = Field(default=None, max_length=64)
+    os_version: Optional[str] = Field(default=None, max_length=64)
+    manufacturer: Optional[str] = Field(default=None, max_length=64)
+    model: Optional[str] = Field(default=None, max_length=128)
+
+    # Bloques auxiliares serializados por backend como JSON textual.
+    device_info: Optional[dict[str, Any]] = None
+    event_log: List[EventoDiagnosticoActividad] = Field(default_factory=list)
+
+    @field_validator(
+        "actividad_local_id",
+        "current_status",
+        "app_version",
+        "os_version",
+        "manufacturer",
+        "model",
+    )
+    @classmethod
+    def limpiar_textos_opcionales(cls, valor: Optional[str]) -> Optional[str]:
+        if valor is None:
+            return None
+        valor = valor.strip()
+        return valor or None
+
+    @field_validator(
+        "elapsed_seconds",
+        "moving_seconds",
+        "stopped_seconds",
+        "manual_pause_seconds",
+        "distance_meters",
+        "average_pace_total",
+        "average_pace_moving",
+        "max_pace",
+        "auto_pauses",
+        "manual_pauses",
+        "speed_alerts",
+        "running_classified_seconds",
+        "walking_classified_seconds",
+        "service_restart_count",
+    )
+    @classmethod
+    def validar_no_negativos(cls, valor: int) -> int:
+        if valor < 0:
+            raise AppValidationError(
+                "Error: Los valores del diagnóstico no pueden ser negativos",
+                "DIAGNOSTIC_NEGATIVE_VALUE",
+            )
+        return valor
+
+    @model_validator(mode="after")
+    def validar_consistencia(self):
+        # Validación mínima para no persistir un breakdown temporal imposible.
+        if self.moving_seconds > self.elapsed_seconds:
+            raise AppValidationError(
+                "Error: El tiempo en movimiento no puede superar el tiempo total",
+                "DIAGNOSTIC_MOVING_EXCEEDS_ELAPSED",
+            )
+        if self.stopped_seconds > self.elapsed_seconds:
+            raise AppValidationError(
+                "Error: El tiempo parado no puede superar el tiempo total",
+                "DIAGNOSTIC_STOPPED_EXCEEDS_ELAPSED",
+            )
+        return self
+
+
+class RespuestaGuardarActividadDiagnostico(BaseModel):
+    """Respuesta simple del endpoint de diagnóstico de actividad."""
+
+    estatus: str
+    mensaje: str
+    diagnostico_id: int
+
+
 class RespuestaObtenerActividad(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
