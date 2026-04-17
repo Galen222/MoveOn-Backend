@@ -87,7 +87,6 @@ def crear_vinculo_social(
         email_social=identidad.email.lower().strip() if identidad.email else None,
         nombre_social=identidad.nombre.strip() if identidad.nombre else None,
         avatar_url=identidad.avatar_url.strip() if identidad.avatar_url else None,
-        ultimo_login_en=datetime.now(timezone.utc),
     )
 
 
@@ -161,7 +160,8 @@ async def _verificar_google(token: str) -> SocialIdentity:
             if isinstance(email, str) and email.strip()
             else None
         ),
-        nombre=str(name).strip() if isinstance(name, str) and name.strip() else None,
+        nombre=str(name).strip() if isinstance(
+            name, str) and name.strip() else None,
         avatar_url=(
             str(picture).strip()
             if isinstance(picture, str) and picture.strip()

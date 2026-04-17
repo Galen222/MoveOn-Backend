@@ -206,7 +206,8 @@ async def registrar_usuario_social(
     )
     if vinculo_existente:
         usuario_existente = await obtener_perfil(db, vinculo_existente.usuario_id)
-        social_auth_service.actualizar_metadata_vinculo(vinculo_existente, identidad)
+        social_auth_service.actualizar_metadata_vinculo(
+            vinculo_existente, identidad)
         if not usuario_existente.foto_perfil and identidad.avatar_url:
             usuario_existente.foto_perfil = identidad.avatar_url
             await db.commit()
@@ -285,6 +286,9 @@ async def registrar_usuario_social(
             identidad=identidad,
         )
         db.add(vinculo)
+        await db.flush()
+
+        vinculo.ultimo_login_en = vinculo.creada_en
 
         await db.commit()
         await db.refresh(nuevo_usuario)
@@ -326,7 +330,8 @@ async def obtener_perfil(
     db: AsyncSession, usuario_actual_id: int, for_update: bool = False
 ):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
-    query = select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
+    query = select(database.Usuario).where(
+        database.Usuario.id == usuario_actual_id)
 
     if for_update:
         query = query.with_for_update()
@@ -621,7 +626,8 @@ async def buscar_usuario(
 
     filtros = (
         database.Usuario.perfil_visible.is_(True),
-        database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
+        database.Usuario.nombre_usuario.ilike(
+            f"%{termino_seguro}%", escape="\\"),
         database.Usuario.id != usuario_actual_id,
     )
 
