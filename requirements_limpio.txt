@@ -12,6 +12,7 @@ alembic
 # --- Seguridad / Autenticación ---
 PyJWT
 bcrypt
+cryptography
 
 # --- Validación y Configuración ---
 pydantic[email]
