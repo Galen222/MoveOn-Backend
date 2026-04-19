@@ -795,9 +795,10 @@ class ReportePerfilInapropiado(BaseModel):
 
 
 class SolicitarPassword(BaseModel):
-    """Esquema para pedir el código enviando solo el email."""
+    """Esquema para solicitar recuperación indicando el idioma del correo."""
 
     email: EmailStr
+    locale: str
 
     @model_validator(mode="before")
     @classmethod
@@ -807,6 +808,10 @@ class SolicitarPassword(BaseModel):
             if "email" not in values or not values["email"]:
                 raise AppValidationError(
                     "Error: El email es obligatorio", "EMAIL_REQUIRED"
+                )
+            if "locale" not in values or not values["locale"]:
+                raise AppValidationError(
+                    "Error: El idioma es obligatorio", "LOCALE_REQUIRED"
                 )
         return values
 
@@ -827,6 +832,28 @@ class SolicitarPassword(BaseModel):
             handler,
             "EMAIL_FORMAT_INVALID",
             "Error: El formato del correo electrónico no es válido",
+        )
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def validar_locale_solicitar_recuperacion(cls, valor: Any) -> str:
+        if not isinstance(valor, str):
+            raise AppValidationError(
+                "Error: El idioma debe ser un texto", "LOCALE_MUST_BE_TEXT"
+            )
+
+        locale = valor.strip().lower().replace("_", "-")
+        if not locale:
+            raise AppValidationError(
+                "Error: El idioma es obligatorio", "LOCALE_REQUIRED"
+            )
+        if locale.startswith("es"):
+            return "es"
+        if locale.startswith("en"):
+            return "en"
+
+        raise AppValidationError(
+            "Error: El idioma no es compatible", "LOCALE_NOT_SUPPORTED"
         )
 
 

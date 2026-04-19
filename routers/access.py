@@ -216,7 +216,7 @@ async def solicitar_password(
     )
 
     return await access_service.generar_codigo_recuperacion(
-        db, datos.email, background_tasks
+        db, datos.email, background_tasks, datos.locale
     )
 
 

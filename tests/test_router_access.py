@@ -535,7 +535,9 @@ class TestLogoutLogica:
 class TestSolicitarPasswordAppSession:
     def test_sin_app_session_devuelve_403(self):
         client = TestClient(_build_app())
-        response = client.post("/password/solicitar", json={"email": "a@a.com"})
+        response = client.post(
+            "/password/solicitar", json={"email": "a@a.com", "locale": "es"}
+        )
         assert response.status_code == 403
         assert response.headers.get("x-app-session-expired") == "1"
 
@@ -555,13 +557,23 @@ class TestSolicitarPasswordValidacion:
     def test_email_formato_invalido_devuelve_422(self):
         app = _app_with_overrides()
         client = TestClient(app)
-        response = client.post("/password/solicitar", json={"email": "no-es-un-email"})
+        response = client.post(
+            "/password/solicitar", json={"email": "no-es-un-email", "locale": "es"}
+        )
         assert response.status_code == 422
 
     def test_email_vacio_devuelve_422(self):
         app = _app_with_overrides()
         client = TestClient(app)
-        response = client.post("/password/solicitar", json={"email": ""})
+        response = client.post(
+            "/password/solicitar", json={"email": "", "locale": "es"}
+        )
+        assert response.status_code == 422
+
+    def test_locale_obligatorio_devuelve_422(self):
+        app = _app_with_overrides()
+        client = TestClient(app)
+        response = client.post("/password/solicitar", json={"email": "a@a.com"})
         assert response.status_code == 422
 
 
@@ -574,16 +586,17 @@ class TestSolicitarPasswordLogica:
     def test_email_existente_devuelve_200_con_mensaje_generico(self, monkeypatch):
         app = _app_with_overrides()
 
-        async def fake_generar(db, email, bg):
+        async def fake_generar(db, email, bg, locale):
+            assert locale == "en"
             return {
                 "estatus": "success",
-                "mensaje": "Si el email corresponde a un usuario recibirá un código",
+                "mensaje": "If the account supports recovery, you will receive instructions by email.",
             }
 
         monkeypatch.setattr(access_service, "generar_codigo_recuperacion", fake_generar)
         client = TestClient(app)
         response = client.post(
-            "/password/solicitar", json={"email": "pepe@example.com"}
+            "/password/solicitar", json={"email": "pepe@example.com", "locale": "en"}
         )
 
         assert response.status_code == 200
@@ -596,17 +609,22 @@ class TestSolicitarPasswordLogica:
         """
         app = _app_with_overrides()
 
-        async def fake_generar(db, email, bg):
+        async def fake_generar(db, email, bg, locale):
             return {
                 "estatus": "success",
-                "mensaje": "Si el email corresponde a un usuario recibirá un código",
+                "mensaje": "Si la cuenta admite recuperación, recibirás instrucciones por correo.",
             }
 
         monkeypatch.setattr(access_service, "generar_codigo_recuperacion", fake_generar)
         client = TestClient(app)
 
-        r1 = client.post("/password/solicitar", json={"email": "existe@example.com"})
-        r2 = client.post("/password/solicitar", json={"email": "noexiste@example.com"})
+        r1 = client.post(
+            "/password/solicitar", json={"email": "existe@example.com", "locale": "es"}
+        )
+        r2 = client.post(
+            "/password/solicitar",
+            json={"email": "noexiste@example.com", "locale": "es"},
+        )
 
         assert r1.status_code == r2.status_code == 200
         assert r1.json()["mensaje"] == r2.json()["mensaje"]
@@ -623,7 +641,7 @@ class TestSolicitarPasswordLogica:
 
         client = TestClient(app)
         response = client.post(
-            "/password/solicitar", json={"email": "pepe@example.com"}
+            "/password/solicitar", json={"email": "pepe@example.com", "locale": "es"}
         )
         assert response.status_code == 429
 

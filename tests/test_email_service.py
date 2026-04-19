@@ -108,6 +108,7 @@ class TestConstruirMensajeRecuperacion:
                 "123456",
                 15,
                 "test@example.com",
+                "es",
             )
 
         assert msg["Subject"] == "Código de recuperación"
@@ -140,6 +141,7 @@ class TestConstruirMensajeRecuperacion:
                 "123456",
                 15,
                 "test@example.com",
+                "es",
             )
 
         html = _extraer_html(msg)
@@ -170,12 +172,38 @@ class TestConstruirMensajeRecuperacion:
                     "123456",
                     15,
                     "test@example.com",
+                    "es",
                 )
 
         assert msg["To"] == "pepe@test.com"
         record = next(r for r in caplog.records if r.name == "app.email")
         assert record.getMessage() == "logo_correo_no_encontrado"
         assert record.email_destino == "pepe@test.com"
+
+
+class TestConstruirMensajeAvisoGoogle:
+    def test_construye_subject_en_y_html(self, monkeypatch):
+        _configurar_settings(monkeypatch)
+
+        with patch.object(
+            email_service.Path, "exists", return_value=False
+        ), patch.object(
+            email_service.email_templates,
+            "aviso_recuperacion_google_template",
+            return_value="<html><body>GOOGLE NOTICE</body></html>",
+        ):
+            msg = email_service._construir_mensaje_aviso_google(
+                "pepe@test.com",
+                "test@example.com",
+                "en",
+            )
+
+        assert msg["Subject"] == "Access to your MoveOn account"
+        texto = msg.get_body(preferencelist=("plain",))
+        assert texto is not None
+        assert "Google" in texto.get_content()
+        html = _extraer_html(msg)
+        assert "GOOGLE NOTICE" in html
 
 
 class TestEnviarCodigoRecuperacion:
@@ -198,6 +226,7 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is True
@@ -206,6 +235,7 @@ class TestEnviarCodigoRecuperacion:
             "123456",
             15,
             "test@example.com",
+            "en",
         )
         assert mock_send.await_count == 1
 
@@ -249,6 +279,7 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is True
@@ -287,6 +318,7 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is False
@@ -319,6 +351,7 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is False
@@ -354,6 +387,7 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is True
@@ -386,6 +420,7 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is False
@@ -416,8 +451,39 @@ class TestEnviarCodigoRecuperacion:
                 "pepe@test.com",
                 "123456",
                 15,
+                "en",
             )
 
         assert ok is False
         assert mock_send.await_count == 1
         mock_sleep.assert_not_awaited()
+
+
+class TestEnviarAvisoRecuperacionGoogle:
+    @pytest.mark.asyncio
+    async def test_envio_ok(self, monkeypatch):
+        _configurar_settings(monkeypatch)
+
+        mock_send = AsyncMock(return_value=None)
+
+        with patch.object(
+            email_service,
+            "_construir_mensaje_aviso_google",
+            return_value=EmailMessage(),
+        ) as mock_build, patch.object(
+            email_service.aiosmtplib,
+            "send",
+            new=mock_send,
+        ):
+            ok = await email_service.enviar_aviso_recuperacion_google(
+                "pepe@test.com",
+                "en",
+            )
+
+        assert ok is True
+        mock_build.assert_called_once_with(
+            "pepe@test.com",
+            "test@example.com",
+            "en",
+        )
+        assert mock_send.await_count == 1

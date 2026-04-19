@@ -59,6 +59,13 @@ def _es_error_transitorio(exc: Exception) -> bool:
     return False
 
 
+def _normalizar_locale(locale: str) -> str:
+    normalizado = locale.strip().lower().replace("_", "-") if isinstance(locale, str) else ""
+    if normalizado.startswith("en"):
+        return "en"
+    return "es"
+
+
 def _adjuntar_logo_inline(msg: EmailMessage, email_destino: str) -> None:
     logo_path = Path(__file__).resolve().parents[1] / "assets" / "email" / "moveon.png"
 
@@ -99,17 +106,64 @@ def _construir_mensaje_recuperacion(
     codigo: str,
     minutos: int,
     smtp_username: str,
+    locale: str,
 ) -> EmailMessage:
+    locale_normalizado = _normalizar_locale(locale)
+
     msg = EmailMessage()
-    msg["Subject"] = "Código de recuperación"
+    msg["Subject"] = (
+        "Recovery code" if locale_normalizado == "en" else "Código de recuperación"
+    )
     msg["From"] = formataddr(("MoveOn App", smtp_username))
     msg["To"] = email_destino
 
-    msg.set_content(
-        f"Tu código de recuperación para MoveOn es: {codigo}. Expira en {minutos} minutos."
-    )
+    if locale_normalizado == "en":
+        msg.set_content(
+            f"Your MoveOn recovery code is: {codigo}. It expires in {minutos} minute{'s' if minutos != 1 else ''}."
+        )
+    else:
+        msg.set_content(
+            f"Tu código de recuperación para MoveOn es: {codigo}. Expira en {minutos} minuto{'s' if minutos != 1 else ''}."
+        )
 
-    html_content = email_templates.recuperacion_password_template(codigo, minutos)
+    html_content = email_templates.recuperacion_password_template(
+        codigo, minutos, locale_normalizado
+    )
+    msg.add_alternative(html_content, subtype="html")
+    _adjuntar_logo_inline(msg, email_destino)
+    return msg
+
+
+def _construir_mensaje_aviso_google(
+    email_destino: str,
+    smtp_username: str,
+    locale: str,
+) -> EmailMessage:
+    locale_normalizado = _normalizar_locale(locale)
+
+    msg = EmailMessage()
+    msg["Subject"] = (
+        "Access to your MoveOn account"
+        if locale_normalizado == "en"
+        else "Acceso a tu cuenta MoveOn"
+    )
+    msg["From"] = formataddr(("MoveOn App", smtp_username))
+    msg["To"] = email_destino
+
+    if locale_normalizado == "en":
+        msg.set_content(
+            "We received a password change request for this email address. "
+            "Your MoveOn account is linked to Google, so it does not use this password recovery flow. "
+            "Please return to the app and choose 'Continue with Google' to sign in."
+        )
+    else:
+        msg.set_content(
+            "Hemos recibido una solicitud para cambiar la contraseña de esta dirección de correo. "
+            "Tu cuenta MoveOn está vinculada a Google, por lo que no utiliza este flujo de recuperación de contraseña. "
+            "Vuelve a la app y pulsa 'Continuar con Google' para iniciar sesión."
+        )
+
+    html_content = email_templates.aviso_recuperacion_google_template(locale_normalizado)
     msg.add_alternative(html_content, subtype="html")
     _adjuntar_logo_inline(msg, email_destino)
     return msg
@@ -251,10 +305,17 @@ async def _enviar_mensaje(
 
 
 async def enviar_codigo_recuperacion(
-    email_destino: str, codigo: str, minutos: int
+    email_destino: str,
+    codigo: str,
+    minutos: int,
+    locale: str,
 ) -> bool:
     msg = _construir_mensaje_recuperacion(
-        email_destino, codigo, minutos, settings.EMAIL_USER
+        email_destino,
+        codigo,
+        minutos,
+        settings.EMAIL_USER,
+        locale,
     )
     return await _enviar_mensaje(
         msg=msg,
@@ -263,6 +324,25 @@ async def enviar_codigo_recuperacion(
         evento_error_permanente="error_permanente_envio_correo_recuperacion",
         evento_error_transitorio="error_transitorio_envio_correo_recuperacion",
         evento_agotado="intentos_envio_correo_recuperacion_agotados",
+    )
+
+
+async def enviar_aviso_recuperacion_google(
+    email_destino: str,
+    locale: str,
+) -> bool:
+    msg = _construir_mensaje_aviso_google(
+        email_destino,
+        settings.EMAIL_USER,
+        locale,
+    )
+    return await _enviar_mensaje(
+        msg=msg,
+        destino_log=email_destino,
+        evento_ok="correo_aviso_recuperacion_google_enviado",
+        evento_error_permanente="error_permanente_envio_correo_aviso_recuperacion_google",
+        evento_error_transitorio="error_transitorio_envio_correo_aviso_recuperacion_google",
+        evento_agotado="intentos_envio_correo_aviso_recuperacion_google_agotados",
     )
 
 

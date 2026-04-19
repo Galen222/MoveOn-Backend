@@ -3,11 +3,10 @@
 from html import escape
 
 
-def recuperacion_password_template(codigo: str, minutos: int) -> str:
-    """Genera la plantilla HTML para el código de recuperación de MoveOn."""
+def _base_email_template(*, lang: str, title: str, body_html: str, footer_html: str) -> str:
     return f"""
     <!DOCTYPE html>
-    <html lang="es">
+    <html lang="{lang}">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -43,7 +42,7 @@ def recuperacion_password_template(codigo: str, minutos: int) -> str:
                 padding: 30px 10px;
                 text-align: center;
             }}
-            .code-box {{
+            .card {{
                 margin: 25px 0;
                 padding: 20px;
                 background-color: #f8f9fa;
@@ -71,21 +70,81 @@ def recuperacion_password_template(codigo: str, minutos: int) -> str:
                 <img class="logo-image" src="cid:moveon_logo" alt="MoveOn App">
             </div>
             <div class="content">
-                <h2 style="margin-top: 0;">¿Olvidaste tu contraseña?</h2>
-                <p>Usa el siguiente código de verificación para establecer una nueva contraseña en tu cuenta. Este código es de un solo uso.</p>
-                <div class="code-box">
-                    <div class="code">{codigo}</div>
-                </div>
-                <p style="font-size: 0.9em; color: #666;">Este código <strong>expirará en {minutos} minuto{"s" if minutos != 1 else ""}</strong>.</p>
+                <h2 style="margin-top: 0;">{title}</h2>
+                {body_html}
             </div>
             <div class="footer">
-                <p>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>
+                {footer_html}
                 <p>&copy; MoveOn App</p>
             </div>
         </div>
     </body>
     </html>
     """
+
+
+def recuperacion_password_template(codigo: str, minutos: int, locale: str = "es") -> str:
+    """Genera la plantilla HTML para el código de recuperación de MoveOn."""
+    if locale == "en":
+        body_html = f"""
+                <p>Use the following verification code to set a new password for your account. This code is single-use.</p>
+                <div class=\"card\">
+                    <div class=\"code\">{codigo}</div>
+                </div>
+                <p style=\"font-size: 0.9em; color: #666;\">This code will <strong>expire in {minutos} minute{"s" if minutos != 1 else ""}</strong>.</p>
+        """
+        footer_html = "<p>If you did not request this change, you can safely ignore this email.</p>"
+        return _base_email_template(
+            lang="en",
+            title="Forgot your password?",
+            body_html=body_html,
+            footer_html=footer_html,
+        )
+
+    body_html = f"""
+                <p>Usa el siguiente código de verificación para establecer una nueva contraseña en tu cuenta. Este código es de un solo uso.</p>
+                <div class=\"card\">
+                    <div class=\"code\">{codigo}</div>
+                </div>
+                <p style=\"font-size: 0.9em; color: #666;\">Este código <strong>expirará en {minutos} minuto{"s" if minutos != 1 else ""}</strong>.</p>
+    """
+    footer_html = "<p>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>"
+    return _base_email_template(
+        lang="es",
+        title="¿Olvidaste tu contraseña?",
+        body_html=body_html,
+        footer_html=footer_html,
+    )
+
+
+def aviso_recuperacion_google_template(locale: str = "es") -> str:
+    """Genera la plantilla HTML para informar de que la cuenta usa Google."""
+    if locale == "en":
+        body_html = """
+                <p>We received a request to change the password for this email address.</p>
+                <p>Your MoveOn account is linked to Google, so it does not use this password recovery flow.</p>
+                <p>Please return to the app and choose <strong>Continue with Google</strong> to sign in.</p>
+        """
+        footer_html = "<p>If you did not request access to your account, you can safely ignore this email.</p>"
+        return _base_email_template(
+            lang="en",
+            title="Access to your MoveOn account",
+            body_html=body_html,
+            footer_html=footer_html,
+        )
+
+    body_html = """
+                <p>Hemos recibido una solicitud para cambiar la contraseña de esta dirección de correo.</p>
+                <p>Tu cuenta MoveOn está vinculada a Google, por lo que no utiliza este flujo de recuperación de contraseña.</p>
+                <p>Vuelve a la app y pulsa <strong>Continuar con Google</strong> para iniciar sesión.</p>
+        """
+    footer_html = "<p>Si no has solicitado acceso a tu cuenta, puedes ignorar este correo con seguridad.</p>"
+    return _base_email_template(
+        lang="es",
+        title="Acceso a tu cuenta MoveOn",
+        body_html=body_html,
+        footer_html=footer_html,
+    )
 
 
 def reporte_perfil_inapropiado_template(

@@ -486,6 +486,7 @@ class TestGenerarCodigoRecuperacion:
                 db,
                 "USER@Test.com",
                 background_tasks,
+                "en",
             )
 
         assert resultado["estatus"] == "success"
@@ -496,8 +497,9 @@ class TestGenerarCodigoRecuperacion:
         db.commit.assert_called_once()
         assert len(background_tasks.tasks) == 1
         tarea = background_tasks.tasks[0]
-        assert tarea.args[0] == "USER@Test.com"
+        assert tarea.args[0] == "user@test.com"
         assert tarea.args[1] == "100000"
+        assert tarea.args[3] == "en"
 
     @pytest.mark.asyncio
     async def test_email_inexistente_no_hace_commit_ni_programa_envio(self):
@@ -513,6 +515,7 @@ class TestGenerarCodigoRecuperacion:
             db,
             "nadie@test.com",
             background_tasks,
+            "es",
         )
 
         assert resultado["estatus"] == "success"
@@ -537,13 +540,47 @@ class TestGenerarCodigoRecuperacion:
 
         with patch("services.access_service.secrets.randbelow", return_value=0):
             r1 = await access_service.generar_codigo_recuperacion(
-                db_existe, "existe@test.com", BackgroundTasks()
+                db_existe, "existe@test.com", BackgroundTasks(), "es"
             )
         r2 = await access_service.generar_codigo_recuperacion(
-            db_no_existe, "noexiste@test.com", BackgroundTasks()
+            db_no_existe, "noexiste@test.com", BackgroundTasks(), "es"
         )
 
         assert r1["estatus"] == r2["estatus"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_cuenta_google_no_genera_codigo_y_programa_aviso(self):
+        usuario = MagicMock()
+        usuario.id = 12
+        usuario.codigo_recuperacion = None
+        usuario.codigo_expiracion = None
+
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=1)),
+            ]
+        )
+        db.commit = AsyncMock()
+
+        background_tasks = BackgroundTasks()
+
+        resultado = await access_service.generar_codigo_recuperacion(
+            db,
+            "google@test.com",
+            background_tasks,
+            "en",
+        )
+
+        assert resultado["estatus"] == "success"
+        assert "instructions" in resultado["mensaje"].lower()
+        assert usuario.codigo_recuperacion is None
+        assert usuario.codigo_expiracion is None
+        db.commit.assert_not_called()
+        assert len(background_tasks.tasks) == 1
+        tarea = background_tasks.tasks[0]
+        assert tarea.args == ("google@test.com", "en")
 
 
 # ─────────────────────────────────────────────
@@ -564,6 +601,7 @@ class TestResetearPassword:
         db.execute = AsyncMock(
             side_effect=[
                 MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
                 MagicMock(),
             ]
         )
@@ -588,7 +626,7 @@ class TestResetearPassword:
         assert usuario.password_encriptada == "hash-nuevo"
         assert usuario.codigo_recuperacion is None
         assert usuario.codigo_expiracion is None
-        assert db.execute.call_count == 2
+        assert db.execute.call_count == 3
         db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -662,6 +700,37 @@ class TestResetearPassword:
         assert exc.value.status_code == 400
         assert "inválidos" in exc.value.detail.lower()
         db.commit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cuenta_google_con_codigo_existente_se_bloquea_y_limpia_otp(self):
+        usuario = MagicMock()
+        usuario.id = 7
+        usuario.codigo_expiracion = _ahora() + timedelta(minutes=10)
+        usuario.codigo_recuperacion = access_service._hash_codigo_recuperacion("123456")
+
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=1)),
+            ]
+        )
+        db.commit = AsyncMock()
+
+        datos = schemas.ConfirmarPassword(
+            email="google@test.com",
+            codigo="123456",
+            nueva_password="Password1",
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await access_service.resetear_password(db, datos)
+
+        assert exc.value.status_code == 400
+        assert exc.value.detail["error_code"] == "RECOVERY_CODE_OR_EMAIL_INVALID"  # type: ignore
+        assert usuario.codigo_recuperacion is None
+        assert usuario.codigo_expiracion is None
+        db.commit.assert_called_once()
 
 
 # ─────────────────────────────────────────────

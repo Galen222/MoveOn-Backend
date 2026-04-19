@@ -1,3 +1,4 @@
+
 # services/access_service.py
 
 from __future__ import annotations
@@ -152,6 +153,48 @@ def _hash_codigo_recuperacion(codigo: str) -> str:
     """
     key = (settings.CODE_HASH_SECRET).encode("utf-8")
     return hmac.new(key, codigo.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _mensaje_recuperacion_generico(locale: str) -> str:
+    if locale == "en":
+        return "If the account supports recovery, you will receive instructions by email."
+    return "Si la cuenta admite recuperación, recibirás instrucciones por correo."
+
+
+def _safe_log_usuario_id(usuario: object) -> int | None:
+    valor = getattr(usuario, "id", None)
+    return valor if isinstance(valor, int) and valor > 0 else None
+
+
+async def _usuario_tiene_vinculo_google(db: AsyncSession, usuario_id: object) -> bool:
+    """
+    Devuelve ``True`` solo si existe un vínculo Google real en BD.
+
+    Notas:
+    - En tests con ``MagicMock``/``AsyncMock`` no debemos interpretar valores simulados
+      como si fuesen vínculos sociales reales.
+    - Si el resultado de ``db.execute`` no expone ``scalar_one_or_none()`` de forma
+      válida, se considera que no existe vínculo.
+    """
+    if not isinstance(usuario_id, int) or usuario_id <= 0:
+        return False
+
+    result = await db.execute(
+        select(database.UsuarioAuthSocial.id)
+        .where(
+            database.UsuarioAuthSocial.usuario_id == usuario_id,
+            database.UsuarioAuthSocial.provider
+            == schemas.ProveedorAuthSocial.GOOGLE.value,
+        )
+        .limit(1)
+    )
+
+    scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
+    if not callable(scalar_one_or_none):
+        return False
+
+    vinculo_id = scalar_one_or_none()
+    return isinstance(vinculo_id, int) and vinculo_id > 0
 
 
 async def refrescar_sesion(db: AsyncSession, refresh_token: str):
@@ -453,60 +496,102 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
 
 
 async def generar_codigo_recuperacion(
-    db: AsyncSession, email: str, background_tasks: BackgroundTasks
+    db: AsyncSession,
+    email: str,
+    background_tasks: BackgroundTasks,
+    locale: str,
 ):
-    """Genera el OTP de 6 dígitos y lo envía por email."""
+    """Gestiona la recuperación sin revelar si la cuenta es local, social o inexistente."""
+    email_normalizado = email.lower()
+    locale_normalizado = schemas.SolicitarPassword.model_validate(
+        {"email": email_normalizado, "locale": locale}
+    ).locale
+
     usuario = (
         await db.execute(
             select(database.Usuario)
-            .where(database.Usuario.email == email.lower())
+            .where(database.Usuario.email == email_normalizado)
             .with_for_update()
         )
     ).scalar_one_or_none()
 
-    # Si existe el correo se envía pero el mensaje de respuesta es el mismo para evitar pistas.
+    # Si existe el correo, mantenemos respuesta neutra pero diferenciamos el correo enviado.
     if usuario:
-        # Genera un código aleatorio con validez de 15 minutos.
-        # Usamos 'secrets' (aleatoriedad criptográfica) y lo formateamos a 6 dígitos.
-        codigo = f"{secrets.randbelow(900000) + 100000:06d}"
-        # Guardar el HASH en BD (no el código en claro)
-        usuario.codigo_recuperacion = _hash_codigo_recuperacion(codigo)
-        usuario.codigo_expiracion = _ahora_utc() + timedelta(
-            minutes=int(settings.RECOVERY_CODE_EXPIRE_MINUTES)
-        )
+        tiene_google = await _usuario_tiene_vinculo_google(db, int(usuario.id))
 
-        try:
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            raise
-        # Envia el código por correo al usuario.
-        background_tasks.add_task(
-            email_service.enviar_codigo_recuperacion,
-            email,
-            codigo,
-            int(settings.RECOVERY_CODE_EXPIRE_MINUTES),
-        )
+        if tiene_google:
+            cambios_pendientes = (
+                usuario.codigo_recuperacion is not None
+                or usuario.codigo_expiracion is not None
+            )
+            usuario.codigo_recuperacion = None
+            usuario.codigo_expiracion = None
 
-        logger.info(
-            "codigo_recuperacion_generado",
-            extra={
-                "usuario_id": usuario.id,
-                "email": email.lower(),
-                "expira_minutos": int(settings.RECOVERY_CODE_EXPIRE_MINUTES),
-            },
-        )
+            if cambios_pendientes:
+                try:
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+                    raise
+
+            background_tasks.add_task(
+                email_service.enviar_aviso_recuperacion_google,
+                email_normalizado,
+                locale_normalizado,
+            )
+
+            logger.info(
+                "recuperacion_password_cuenta_google",
+                extra={
+                    "usuario_id": _safe_log_usuario_id(usuario),
+                    "email": email_normalizado,
+                    "provider": "google",
+                    "locale": locale_normalizado,
+                },
+            )
+        else:
+            # Genera un código aleatorio con validez de 15 minutos.
+            codigo = f"{secrets.randbelow(900000) + 100000:06d}"
+            usuario.codigo_recuperacion = _hash_codigo_recuperacion(codigo)
+            usuario.codigo_expiracion = _ahora_utc() + timedelta(
+                minutes=int(settings.RECOVERY_CODE_EXPIRE_MINUTES)
+            )
+
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
+
+            background_tasks.add_task(
+                email_service.enviar_codigo_recuperacion,
+                email_normalizado,
+                codigo,
+                int(settings.RECOVERY_CODE_EXPIRE_MINUTES),
+                locale_normalizado,
+            )
+
+            logger.info(
+                "codigo_recuperacion_generado",
+                extra={
+                    "usuario_id": usuario.id,
+                    "email": email_normalizado,
+                    "expira_minutos": int(settings.RECOVERY_CODE_EXPIRE_MINUTES),
+                    "locale": locale_normalizado,
+                },
+            )
     else:
         logger.info(
             "recuperacion_password_email_no_registrado",
             extra={
-                "email": email.lower(),
+                "email": email_normalizado,
+                "locale": locale_normalizado,
             },
         )
 
     return {
         "estatus": "success",
-        "mensaje": "Si el email corresponde a un usuario recibirá un código",
+        "mensaje": _mensaje_recuperacion_generico(locale_normalizado),
     }
 
 
@@ -553,6 +638,33 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
             error_code="CODE_EXPIRED",
         )
 
+    if await _usuario_tiene_vinculo_google(db, int(usuario.id)):
+        try:
+            usuario.codigo_recuperacion = None
+            usuario.codigo_expiracion = None
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+
+        logger.info(
+            "reset_password_rechazado_cuenta_google",
+            extra={
+                "usuario_id": _safe_log_usuario_id(usuario),
+                "email": datos.email.lower(),
+                "provider": "google",
+            },
+        )
+        raise app_http_exception(
+            status_code=400,
+            mensaje="Error: Código o email inválidos",
+            error_code="RECOVERY_CODE_OR_EMAIL_INVALID",
+            detail={
+                "mensaje": "Error: Código o email inválidos",
+                "error_code": "RECOVERY_CODE_OR_EMAIL_INVALID",
+            },
+        )
+
     try:
         usuario.password_encriptada = await run_in_threadpool(
             auth.encriptar_password, datos.nueva_password
@@ -585,3 +697,5 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
     )
 
     return {"estatus": "success", "mensaje": "Contraseña actualizada correctamente"}
+
+
