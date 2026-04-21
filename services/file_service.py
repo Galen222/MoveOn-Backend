@@ -69,6 +69,17 @@ MALICIOUS_SIGNATURES = [
     b".dll\x00",
 ]
 
+ALLOWED_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/heic-sequence",
+    "image/heif-sequence",
+}
+
 
 # NOTA:
 # - En producción usamos Cloudinary y guardamos una URL canónica SIN versión en BD.
@@ -96,10 +107,10 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 def validar_seguridad(archivo: UploadFile) -> bytes:
     """Valida seguridad."""
     # Valida seguridad.
-    if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
+    if archivo.content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
         raise app_http_exception(
             status_code=400,
-            mensaje="Error: Solo imágenes JPG o PNG",
+            mensaje="Error: Solo imágenes JPG, PNG, WEBP o HEIC/HEIF",
             error_code="IMAGE_FORMAT_NOT_ALLOWED",
         )
 
@@ -274,6 +285,11 @@ def guardar_local(
         "image/jpeg": ".jpg",
         "image/jpg": ".jpg",
         "image/png": ".png",
+        "image/webp": ".jpg",
+        "image/heic": ".jpg",
+        "image/heif": ".jpg",
+        "image/heic-sequence": ".jpg",
+        "image/heif-sequence": ".jpg",
     }
     extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
 

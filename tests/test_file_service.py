@@ -62,6 +62,14 @@ def _make_rgba_bytes(width: int = 10, height: int = 10) -> bytes:
     return buf.getvalue()
 
 
+def _make_webp_bytes(width: int = 100, height: int = 100) -> bytes:
+    """Construye webp bytes."""
+    img = Image.new("RGB", (width, height), color=(120, 80, 220))
+    buf = io.BytesIO()
+    img.save(buf, format="WEBP")
+    return buf.getvalue()
+
+
 def _make_jpeg_with_exif_orientation() -> bytes:
     """Construye jpeg with exif orientation."""
     img = Image.new("RGB", (10, 20), color=(200, 100, 50))
@@ -197,6 +205,13 @@ class TestValidarImagenReal:
     def test_acepta_png_valido(self):
         """Verifica que acepta png valido."""
         archivo = FakeUploadFile(_make_png_bytes(), "image/png")
+        raw = file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
+        assert isinstance(raw, bytes)
+        assert raw
+
+    def test_acepta_webp_valido(self):
+        """Verifica que acepta webp valido."""
+        archivo = FakeUploadFile(_make_webp_bytes(), "image/webp")
         raw = file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
         assert isinstance(raw, bytes)
         assert raw
@@ -517,6 +532,19 @@ class TestGuardarLocal:
             with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
                 nombre = file_service.guardar_local(archivo, 1, raw)  # type: ignore[arg-type]
         assert nombre.endswith(".png")
+
+    def test_guarda_webp_normalizado_a_jpg(self):
+        """Verifica que webp se normaliza a jpg en almacenamiento local."""
+        raw = _make_webp_bytes()
+        archivo = FakeUploadFile(raw, "image/webp")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(file_service.settings, "UPLOAD_DIR", tmpdir):
+                nombre = file_service.guardar_local(archivo, 1, raw)  # type: ignore[arg-type]
+                ruta = os.path.join(tmpdir, nombre)
+                formato = Image.open(ruta).format
+
+            assert nombre.endswith(".jpg")
+            assert formato == "JPEG"
 
     def test_archivo_realmente_existe_en_disco(self):
         """Verifica que archivo realmente existe en disco."""

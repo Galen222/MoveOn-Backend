@@ -22,6 +22,7 @@ def _build_app() -> FastAPI:
             ("POST", "/registro"): 256,
             ("POST", "/password/solicitar"): 64,
             ("POST", "/password/confirmar"): 128,
+            ("POST", "/stream-body"): 128,
         },
     )
 
@@ -48,6 +49,11 @@ def _build_app() -> FastAPI:
     @app.post("/perfil/foto")
     async def foto(request: Request):
         """Gestiona foto."""
+        return {"ok": True, "size": len(await request.body())}
+
+    @app.post("/stream-body")
+    async def stream_body(request: Request):
+        """Gestiona stream body."""
         return {"ok": True, "size": len(await request.body())}
 
     return app
@@ -163,3 +169,64 @@ async def test_limitacion_streaming_sin_content_length_devuelve_413_y_no_store()
     assert headers["cache-control"] == "no-store"
     assert headers["pragma"] == "no-cache"
     assert b"tama" in body["body"] or b"m\xc3\xa1ximo" in body["body"]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_no_entra_en_bucle_y_reinyecta_mensajes():
+    """Verifica que disconnect no entra en bucle y reinyecta mensajes."""
+    # Verifica que disconnect no entra en bucle y reinyecta mensajes.
+    recibidos = []
+
+    async def downstream(scope, receive, send):
+        """Gestiona downstream."""
+        recibidos.append(await receive())
+        recibidos.append(await receive())
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    app = RequestSizeLimitMiddleware(
+        downstream,
+        route_limits={("POST", "/stream-body"): 128},
+    )
+
+    messages = [
+        {"type": "http.request", "body": b"abc", "more_body": True},
+        {"type": "http.disconnect"},
+    ]
+
+    async def receive():
+        """Gestiona receive."""
+        if messages:
+            return messages.pop(0)
+        pytest.fail("El middleware siguió leyendo tras http.disconnect")
+
+    sent = []
+
+    async def send(message):
+        """Gestiona send."""
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/stream-body",
+        "raw_path": b"/stream-body",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"content-type", b"application/octet-stream")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 80),
+    }
+
+    await app(scope, receive, send)
+
+    start = next(m for m in sent if m["type"] == "http.response.start")
+
+    assert start["status"] == 204
+    assert recibidos == [
+        {"type": "http.request", "body": b"abc", "more_body": True},
+        {"type": "http.disconnect"},
+    ]

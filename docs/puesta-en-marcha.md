@@ -14,12 +14,6 @@
 pip install -r requirements.txt
 ```
 
-Para construir la documentación del proyecto:
-
-```powershell
-pip install -r requirements-docs.txt
-```
-
 ## Generación del HTML de documentación
 
 ```powershell

@@ -88,6 +88,10 @@ class RequestSizeLimitMiddleware:
         while more_body:
             message = await receive()
 
+            if message["type"] == "http.disconnect":
+                body_chunks.append(message)
+                break
+
             if message["type"] != "http.request":
                 body_chunks.append(message)
                 continue
