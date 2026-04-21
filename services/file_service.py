@@ -27,7 +27,6 @@ logger = logging.getLogger("app.files")
 # Límite de seguridad (anti "decompression bomb")
 # Ajustable por env (ej: 13MP)
 MAX_IMAGE_PIXELS = int(settings.MAX_IMAGE_PIXELS)
-Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 # Tamaño máximo de imagen (bytes) ajustable por env (ej: 2MB)
 MAX_IMAGE_BYTES = settings.MAX_IMAGE_BYTES
@@ -124,8 +123,14 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
 
     try:
         img = Image.open(BytesIO(content))
+        if (img.width * img.height) > MAX_IMAGE_PIXELS:
+            raise app_http_exception(
+                status_code=400,
+                mensaje="Error: Imagen demasiado grande",
+                error_code="IMAGE_TOO_LARGE",
+            )
         img.verify()
-    except (UnidentifiedImageError, OSError):
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
         raise app_http_exception(
             status_code=400,
             mensaje="Error: El archivo no es una imagen válida",
@@ -134,13 +139,13 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
 
     try:
         img2 = Image.open(BytesIO(content))
-        img2.load()
         if (img2.width * img2.height) > MAX_IMAGE_PIXELS:
             raise app_http_exception(
                 status_code=400,
                 mensaje="Error: Imagen demasiado grande",
                 error_code="IMAGE_TOO_LARGE",
             )
+        img2.load()
     except HTTPException:
         raise
     except Exception:
@@ -157,12 +162,18 @@ def _reencode_image(raw: bytes, extension: str) -> bytes:
     """Gestiona reencode imagen."""
     try:
         im = Image.open(BytesIO(raw))
+        if (im.width * im.height) > MAX_IMAGE_PIXELS:
+            raise app_http_exception(
+                status_code=400,
+                mensaje="Error: Imagen demasiado grande",
+                error_code="IMAGE_TOO_LARGE",
+            )
         im.load()
 
         # Aplica la orientación EXIF antes de eliminar metadatos.
         # Así evitamos que algunas fotos queden giradas al strippear EXIF.
         im = ImageOps.exif_transpose(im)
-    except (UnidentifiedImageError, OSError):
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
         raise app_http_exception(
             status_code=400,
             mensaje="Error: El archivo no es una imagen válida",

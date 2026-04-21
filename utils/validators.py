@@ -4,7 +4,7 @@
 
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional
 
 from exceptions import AppValidationError
 
@@ -92,7 +92,7 @@ def validar_fecha_nacimiento_logica(v: date) -> date:
     return v
 
 
-def validar_altura_logica(v: int) -> int:
+def validar_altura_logica(v: Optional[int]) -> Optional[int]:
     """Valida la altura en cm."""
     if v is None:
         return v
@@ -103,7 +103,7 @@ def validar_altura_logica(v: int) -> int:
     return v
 
 
-def validar_peso_logica(v: float) -> float:
+def validar_peso_logica(v: Optional[float]) -> Optional[float]:
     """Valida el peso en kg."""
     if v is None:
         return v
