@@ -108,6 +108,7 @@ REQUEST_SIZE_LIMITS = {
     ("POST", "/registro"): 16 * 1024,
     ("POST", "/password/solicitar"): 4 * 1024,
     ("POST", "/password/confirmar"): 8 * 1024,
+    ("POST", "/actividad/guardar"): 256 * 1024,
 }
 
 # Configurar el limitador (usa la IP del usuario para contar)

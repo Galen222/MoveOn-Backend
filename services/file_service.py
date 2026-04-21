@@ -7,6 +7,7 @@ import os
 import re
 import time
 import hashlib
+import uuid
 from typing import Optional
 from io import BytesIO
 import logging
@@ -58,16 +59,6 @@ if settings.STORAGE_TYPE == "cloudinary":
         secure=True,
     )
 
-# Firmas de contenido malicioso conocidas.
-MALICIOUS_SIGNATURES = [
-    b"<%eval",
-    b"<%execute",
-    b"<script>",
-    b"javascript:",
-    b"vbscript:",
-    b".exe\x00",
-    b".dll\x00",
-]
 
 ALLOWED_IMAGE_CONTENT_TYPES = {
     "image/jpeg",
@@ -107,7 +98,8 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 def validar_seguridad(archivo: UploadFile) -> bytes:
     """Valida seguridad."""
     # Valida seguridad.
-    if archivo.content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+    content_type = (archivo.content_type or "").lower()
+    if content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
         raise app_http_exception(
             status_code=400,
             mensaje="Error: Solo imágenes JPG, PNG, WEBP o HEIC/HEIF",
@@ -129,14 +121,6 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
     content = archivo.file.read()
     archivo.file.seek(0)
 
-    content_lower = content.lower()
-    for signature in MALICIOUS_SIGNATURES:
-        if signature in content_lower:
-            raise app_http_exception(
-                status_code=400,
-                mensaje="Error: Contenido malicioso detectado",
-                error_code="MALICIOUS_CONTENT_DETECTED",
-            )
 
     try:
         img = Image.open(BytesIO(content))
@@ -291,13 +275,13 @@ def guardar_local(
         "image/heic-sequence": ".jpg",
         "image/heif-sequence": ".jpg",
     }
-    extension = mapa_extensiones.get(archivo.content_type or "", ".jpg")
+    content_type = (archivo.content_type or "").lower()
+    extension = mapa_extensiones.get(content_type, ".jpg")
+    nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}_{uuid.uuid4().hex[:12]}{extension}"
+    ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
 
     try:
         data_limpia = _reencode_image(raw, extension)
-
-        nombre_archivo = f"perfil_{nombre_seguro}_{int(time.time())}{extension}"
-        ruta_final = os.path.join(carpeta_imagenes, nombre_archivo)
 
         with open(ruta_final, "wb") as buffer:
             buffer.write(data_limpia)
@@ -315,7 +299,7 @@ def guardar_local(
                 "storage_type": settings.STORAGE_TYPE,
                 "ruta_destino": os.path.join(
                     carpeta_imagenes,
-                    f"perfil_{nombre_seguro}_{int(time.time())}{extension}",
+                    nombre_archivo,
                 ),
             },
         )

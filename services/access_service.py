@@ -71,7 +71,7 @@ async def buscar_por_identificador(db: AsyncSession, identificador: str):
     return (
         await db.execute(
             select(database.Usuario).where(
-                (database.Usuario.email == identificador_limpio)
+                (func.lower(database.Usuario.email) == identificador_limpio)
                 | (func.lower(database.Usuario.nombre_usuario) == identificador_limpio)
             )
         )
@@ -435,7 +435,10 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
     """
     try:
         payload = auth.decodificar_token_refresh(refresh_token)
-    except HTTPException:
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if detail.get("error_code") != "REFRESH_TOKEN_INVALID_OR_EXPIRED":
+            raise
         logger.info(
             "logout_idempotente_refresh_invalido",
             extra={},
@@ -517,7 +520,7 @@ async def generar_codigo_recuperacion(
     locale: str,
 ):
     """Gestiona la recuperación sin revelar si la cuenta es local, social o inexistente."""
-    email_normalizado = email.lower()
+    email_normalizado = email.strip().lower()
     locale_normalizado = schemas.SolicitarPassword.model_validate(
         {"email": email_normalizado, "locale": locale}
     ).locale
@@ -565,10 +568,30 @@ async def generar_codigo_recuperacion(
                 },
             )
         else:
+            ahora = _ahora_utc()
+            if usuario.codigo_expiracion and usuario.codigo_recuperacion:
+                expiracion_actual = _normalizar_utc(usuario.codigo_expiracion)
+                emitido_en = expiracion_actual - timedelta(
+                    minutes=int(settings.RECOVERY_CODE_EXPIRE_MINUTES)
+                )
+                if expiracion_actual > ahora and (ahora - emitido_en) < timedelta(seconds=60):
+                    logger.info(
+                        "codigo_recuperacion_omitido_por_cooldown",
+                        extra={
+                            "usuario_id": usuario.id,
+                            "email": email_normalizado,
+                            "locale": locale_normalizado,
+                        },
+                    )
+                    return {
+                        "estatus": "success",
+                        "mensaje": _mensaje_recuperacion_generico(locale_normalizado),
+                    }
+
             # Genera un código aleatorio con validez de 15 minutos.
             codigo = f"{secrets.randbelow(900000) + 100000:06d}"
             usuario.codigo_recuperacion = _hash_codigo_recuperacion(codigo)
-            usuario.codigo_expiracion = _ahora_utc() + timedelta(
+            usuario.codigo_expiracion = ahora + timedelta(
                 minutes=int(settings.RECOVERY_CODE_EXPIRE_MINUTES)
             )
 
@@ -689,6 +712,7 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
 
         # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
         ahora = _ahora_utc()
+        usuario.password_changed_at = ahora
         await db.execute(
             update(database.SesionRefresh)
             .where(

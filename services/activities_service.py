@@ -454,7 +454,7 @@ async def eliminar_actividad(
                 ),
             )
             .where(database.Usuario.id == usuario_actual_id)
-            .with_for_update(of=database.Usuario)
+            .with_for_update()
         )
     ).first()
 

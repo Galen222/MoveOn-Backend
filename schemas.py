@@ -1012,7 +1012,7 @@ class GuardarActividad(BaseModel):
     auto_pausas: StrictInt = Field(default=0)
     pausas_manuales: StrictInt = Field(default=0)
     alertas_velocidad: StrictInt = Field(default=0)
-    ruta_polilinea: Optional[str] = None
+    ruta_polilinea: Optional[str] = Field(None, max_length=200000)
     ruta_mapa_url: Optional[AnyHttpUrl] = Field(None, max_length=2048)
     fecha_ruta: datetime
 
@@ -1495,7 +1495,7 @@ class RespuestaObtenerActividad(BaseModel):
     auto_pausas: int
     pausas_manuales: int
     alertas_velocidad: int
-    ruta_polilinea: Optional[str] = None
+    ruta_polilinea: Optional[str] = Field(None, max_length=200000)
     ruta_mapa_url: Optional[str] = None
     fecha_ruta: datetime
     nuevo_total_puntos: Optional[int] = None

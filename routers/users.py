@@ -208,9 +208,7 @@ async def foto_perfil(
             exc_info=True,
         )
 
-        # En pruebas puede venir db=None; en producción normalmente será una sesión real
-        if db is not None and hasattr(db, "rollback"):
-            await db.rollback()
+        await db.rollback()
 
         # Si ya habíamos subido la nueva imagen y luego falla el flujo, la limpiamos
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
@@ -231,8 +229,7 @@ async def foto_perfil(
             },
         )
 
-        if db is not None and hasattr(db, "rollback"):
-            await db.rollback()
+        await db.rollback()
 
         if settings.STORAGE_TYPE != "cloudinary" and nueva_ruta_foto:
             await run_in_threadpool(

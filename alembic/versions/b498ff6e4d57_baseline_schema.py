@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: 7ab4fef30ffd
+Revision ID: b498ff6e4d57
 Revises: 
-Create Date: 2026-04-21 11:59:40.575538
+Create Date: 2026-04-21 14:14:50.752085
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '7ab4fef30ffd'
+revision: str = 'b498ff6e4d57'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -47,6 +47,7 @@ def upgrade() -> None:
     sa.Column('perfil_visible', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.Column('codigo_recuperacion', sa.String(length=64), nullable=True),
     sa.Column('codigo_expiracion', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('password_changed_at', sa.DateTime(timezone=True), nullable=True),
     sa.CheckConstraint("codigo_recuperacion IS NULL OR codigo_recuperacion ~* '^[0-9a-f]{64}$'", name='ck_usuarios_codigo_recuperacion_hex64'),
     sa.CheckConstraint("email !~ '[[:space:]]'", name='ck_usuarios_email_no_spaces'),
     sa.CheckConstraint("email ~ '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$'", name='ck_usuarios_email_basic_format'),
@@ -117,7 +118,7 @@ def upgrade() -> None:
     sa.CheckConstraint('ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600', name='ck_actividades_ritmo_medio_movimiento_range'),
     sa.CheckConstraint('ritmo_medio_total >= 0 AND ritmo_medio_total <= 3600', name='ck_actividades_ritmo_medio_total_range'),
     sa.CheckConstraint('ruta_mapa_url IS NULL OR char_length(ruta_mapa_url) <= 2048', name='ck_actividades_ruta_mapa_url_len'),
-    sa.CheckConstraint('ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5', name='ck_actividades_ruta_polilinea_len'),
+    sa.CheckConstraint('ruta_polilinea IS NULL OR char_length(ruta_polilinea) BETWEEN 5 AND 200000', name='ck_actividades_ruta_polilinea_len'),
     sa.CheckConstraint('velocidad_max_x100 >= 0 AND velocidad_max_x100 <= 10000', name='ck_actividades_velocidad_max_range'),
     sa.CheckConstraint('velocidad_max_x100 >= velocidad_media_x100', name='ck_actividades_velocidad_max_ge_media'),
     sa.CheckConstraint('velocidad_media_x100 >= 0 AND velocidad_media_x100 <= 10000', name='ck_actividades_velocidad_media_range'),

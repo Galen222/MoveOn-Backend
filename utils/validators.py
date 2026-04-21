@@ -117,14 +117,16 @@ def validar_peso_logica(v: float) -> float:
 def validar_fecha_ruta_logica(v: datetime) -> datetime:
     """Valida fecha ruta logica."""
     if v:
+        if v.tzinfo is None:
+            raise AppValidationError(
+                "Error: La fecha debe incluir zona horaria",
+                "ACTIVITY_DATE_MISSING_TIMEZONE",
+            )
+
         ahora = datetime.now(timezone.utc)
 
         # Normalizar v a UTC para comparar y almacenar siempre igual
-        v_utc = (
-            v.replace(tzinfo=timezone.utc)
-            if v.tzinfo is None
-            else v.astimezone(timezone.utc)
-        )
+        v_utc = v.astimezone(timezone.utc)
 
         margen = ahora + timedelta(minutes=10)
         if v_utc > margen:
@@ -191,11 +193,16 @@ def validar_calorias_logica(v: int) -> int:
 
 
 def validar_polilinea_logica(v: str) -> str:
-    """La polilínea no puede ser muy corta si existe."""
+    """La polilínea no puede ser muy corta o muy larga si existe."""
     if v is None:
         return None
     if len(v) < 5:
         raise AppValidationError("Error: La ruta parece inválida", "ROUTE_INVALID")
+    if len(v) > 200000:
+        raise AppValidationError(
+            "Error: La ruta supera el tamaño máximo permitido",
+            "ROUTE_TOO_LARGE",
+        )
     return v
 
 

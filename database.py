@@ -474,6 +474,10 @@ class Usuario(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    password_changed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     __table_args__ = (
         # Unicidad case-insensitive
@@ -747,7 +751,7 @@ class Usuario(Base):
             too_long_code="PROFILE_PHOTO_TOO_LONG",
         )
 
-    @validates("foto_fecha_actualizacion", "fecha_registro", "codigo_expiracion")
+    @validates("foto_fecha_actualizacion", "fecha_registro", "codigo_expiracion", "password_changed_at")
     def validar_fechas_auxiliares(
         self, key: str, valor: Optional[datetime]
     ) -> Optional[datetime]:
@@ -1077,7 +1081,7 @@ class Actividad(Base):
             name="ck_actividades_alertas_velocidad_range",
         ),
         CheckConstraint(
-            "ruta_polilinea IS NULL OR char_length(ruta_polilinea) >= 5",
+            "ruta_polilinea IS NULL OR char_length(ruta_polilinea) BETWEEN 5 AND 200000",
             name="ck_actividades_ruta_polilinea_len",
         ),
         CheckConstraint(

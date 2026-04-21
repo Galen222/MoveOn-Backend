@@ -464,6 +464,7 @@ async def actualizar_perfil_usuario(
 
             # Seguridad extra: revocar refresh tokens activos del usuario al cambiar contraseña
             ahora = datetime.now(timezone.utc)
+            usuario.password_changed_at = ahora
             await db.execute(
                 update(database.SesionRefresh)
                 .where(

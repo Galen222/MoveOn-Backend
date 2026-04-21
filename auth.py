@@ -12,10 +12,13 @@ import jwt
 import logging
 from jwt.exceptions import InvalidTokenError
 from fastapi import Header, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Any, Optional
 from config import settings
 from exceptions import app_http_exception
+import database
 
 logger = logging.getLogger("app.auth")
 
@@ -136,23 +139,11 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
         # Validación uniforme (firma + exp + iss + aud + typ)
         decodifica_jwt(x_app_session, APP_SESSION_SECRET, "app_session")
         return x_app_session
-    except InvalidTokenError:
+    except (InvalidTokenError, HTTPException):
         logger.warning(
             "sesion_aplicacion_invalida_o_expirada",
             extra={},
         )
-        raise app_http_exception(
-            status_code=403,
-            mensaje="Error: Token inválido o expirado",
-            error_code="TOKEN_INVALID_OR_EXPIRED",
-            headers={"x-app-session-expired": "1"},
-        )
-    except HTTPException:
-        logger.warning(
-            "validacion_sesion_aplicacion_fallida",
-            extra={},
-        )
-        # Si falla por typ u otras validaciones, lo tratamos igual que expirado/inválido
         raise app_http_exception(
             status_code=403,
             mensaje="Error: Token inválido o expirado",
@@ -198,8 +189,9 @@ def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
         )
 
 
-def obtener_usuario_actual(
+async def obtener_usuario_actual(
     res: HTTPAuthorizationCredentials = Depends(security_scheme),
+    db: AsyncSession = Depends(database.obtener_db),
 ) -> int:
     """
     Extrae el usuario validando el token de acceso.
@@ -213,6 +205,7 @@ def obtener_usuario_actual(
         payload = decodifica_jwt(token, ACCESS_TOKEN_SECRET, "access")
 
         sub = payload.get("sub")
+        iat = payload.get("iat")
         if sub is None or not isinstance(sub, str) or not sub.isdigit():
             logger.warning(
                 "access_token_sin_sub_valido",
@@ -224,7 +217,31 @@ def obtener_usuario_actual(
                 error_code="TOKEN_MISSING_VALID_USER",
             )
 
-        return int(sub)
+        usuario_id = int(sub)
+        password_changed_at = (
+            await db.execute(
+                select(database.Usuario.password_changed_at).where(
+                    database.Usuario.id == usuario_id
+                )
+            )
+        ).scalar_one_or_none()
+
+        if (
+            password_changed_at is not None
+            and isinstance(iat, int)
+            and iat < int(password_changed_at.timestamp())
+        ):
+            logger.warning(
+                "access_token_invalidado_por_cambio_password",
+                extra={"usuario_id": usuario_id},
+            )
+            raise app_http_exception(
+                status_code=401,
+                mensaje="Error: Sesión invalidada por cambio de contraseña",
+                error_code="SESSION_REVOKED_BY_PASSWORD_CHANGE",
+            )
+
+        return usuario_id
     except InvalidTokenError:
         logger.warning(
             "access_token_invalido_o_expirado",
