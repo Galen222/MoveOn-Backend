@@ -1,0 +1,54 @@
+site_name: MoveOn Backend
+site_description: Documentación técnica y funcional del backend de MoveOn
+site_dir: site
+use_directory_urls: false
+
+theme:
+  name: mkdocs
+
+nav:
+  - Inicio: index.md
+  - Puesta en marcha: puesta-en-marcha.md
+  - Arquitectura: arquitectura.md
+  - Configuración: configuracion.md
+  - Ejecución: ejecucion.md
+  - Base de datos y migraciones: base-de-datos-y-migraciones.md
+  - Pruebas y scripts: pruebas-y-scripts.md
+  - Referencia API:
+      - Visión general: api/index.md
+      - Módulos raíz: api/modulos-raiz.md
+      - Routers: api/routers.md
+      - Services: api/services.md
+      - Middlewares: api/middlewares.md
+      - Utils: api/utils.md
+      - Domain: api/domain.md
+      - Scripts: api/scripts.md
+      - Tests: api/tests.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [.] 
+          options:
+            show_root_heading: true
+            show_root_full_path: false
+            show_root_toc_entry: true
+            show_object_full_path: false
+            show_signature: true
+            show_signature_annotations: true
+            separate_signature: true
+            members_order: source
+            group_by_category: true
+            show_category_heading: true
+            show_if_no_docstring: true
+            show_source: false
+            docstring_style: null

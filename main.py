@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.9.8",
+    version="0.9.9",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,

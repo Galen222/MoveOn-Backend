@@ -32,7 +32,8 @@ pillow
 aiosmtplib
 
 # --- Documentación ---
-pdoc
+mkdocs
+mkdocstrings[python]
 
 # --- Gestion de librerias ---
 pip-review

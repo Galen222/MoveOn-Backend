@@ -1,5 +1,6 @@
 # --- ARCHIVOS DE PROYECTO ---
 datos.txt
+docs.ps1
 
 # --- SISTEMA OPERATIVO Y IDEs (GLOBAL) ---
 .DS_Store
@@ -11,13 +12,14 @@ Thumbs.db
 
 # --- BACKEND (PYTHON) ---
 venv/
+.venv/
 .env
 .env.prod
 __pycache__/
 *.py[cod]
 uploads/
 .uploads/
-docs/
-.docs/
+site/
+.site/
 *.pyc
 .pytest_cache
