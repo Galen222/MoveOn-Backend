@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: 1a132cfee25e
+Revision ID: 7ab4fef30ffd
 Revises: 
-Create Date: 2026-04-21 09:06:04.824673
+Create Date: 2026-04-21 11:59:40.575538
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '1a132cfee25e'
+revision: str = '7ab4fef30ffd'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -130,7 +130,6 @@ def upgrade() -> None:
     op.create_index('uq_actividades_usuario_client_local_id', 'actividades', ['usuario_id', 'client_local_id'], unique=True, postgresql_where=sa.text('client_local_id IS NOT NULL'))
     op.create_table('sesiones_refresh',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('client_local_id', sa.String(length=64), nullable=True),
     sa.Column('usuario_id', sa.Integer(), nullable=False),
     sa.Column('jti', sa.String(length=64), nullable=False),
     sa.Column('familia_id', sa.String(length=64), nullable=False),
@@ -157,7 +156,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_sesiones_refresh_usuario_id'), 'sesiones_refresh', ['usuario_id'], unique=False)
     op.create_table('usuarios_auth_social',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('client_local_id', sa.String(length=64), nullable=True),
     sa.Column('usuario_id', sa.Integer(), nullable=False),
     sa.Column('provider', sa.String(length=20), nullable=False),
     sa.Column('provider_user_id', sa.String(length=255), nullable=False),
@@ -183,7 +181,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_usuarios_auth_social_usuario_id'), 'usuarios_auth_social', ['usuario_id'], unique=False)
     op.create_table('actividades_diagnostico',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('client_local_id', sa.String(length=64), nullable=True),
     sa.Column('usuario_id', sa.Integer(), nullable=False),
     sa.Column('actividad_id', sa.Integer(), nullable=True),
     sa.Column('actividad_local_id', sa.String(length=64), nullable=True),
