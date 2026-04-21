@@ -996,6 +996,7 @@ class ConfirmarPassword(BaseModel):
 class GuardarActividad(BaseModel):
     """Payload validado para persistir una actividad con métricas enriquecidas."""
 
+    client_local_id: Optional[str] = Field(None, max_length=64)
     tipo: TipoActividad
     distancia: StrictInt = Field(...)
     duracion_total: StrictInt = Field(...)
@@ -1051,6 +1052,30 @@ class GuardarActividad(BaseModel):
                 if field_name not in values:
                     raise AppValidationError(message, code)
         return values
+
+    @field_validator("client_local_id")
+    @classmethod
+    def validar_client_local_id_actividad(cls, v):
+        """Valida client local id actividad."""
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise AppValidationError(
+                "Error: El identificador local de la actividad debe ser texto",
+                "ACTIVITY_CLIENT_LOCAL_ID_INVALID",
+            )
+        v = v.strip()
+        if not v:
+            raise AppValidationError(
+                "Error: El identificador local de la actividad no puede estar vacío",
+                "ACTIVITY_CLIENT_LOCAL_ID_INVALID",
+            )
+        if len(v) > 64:
+            raise AppValidationError(
+                "Error: El identificador local de la actividad no puede superar los 64 caracteres",
+                "ACTIVITY_CLIENT_LOCAL_ID_TOO_LONG",
+            )
+        return v
 
     @field_validator("tipo", mode="wrap")
     @classmethod

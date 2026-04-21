@@ -945,6 +945,8 @@ class Actividad(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    client_local_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     usuario_id: Mapped[int] = mapped_column(
         ForeignKey("usuarios.id", ondelete="CASCADE"),
         nullable=False,
@@ -1001,6 +1003,10 @@ class Actividad(Base):
         CheckConstraint(
             _build_enum_check_sql("tipo", VALID_TIPOS_ACTIVIDAD, allow_null=False),
             name="ck_actividades_tipo_values",
+        ),
+        CheckConstraint(
+            "client_local_id IS NULL OR char_length(btrim(client_local_id)) BETWEEN 1 AND 64",
+            name="ck_actividades_client_local_id_len",
         ),
         CheckConstraint(
             "distancia > 0 AND distancia <= 300000",
@@ -1083,6 +1089,13 @@ class Actividad(Base):
             name="ck_actividades_ruta_mapa_url_http",
         ),
         Index("ix_actividades_usuario_fecha", "usuario_id", "fecha_ruta", "id"),
+        Index(
+            "uq_actividades_usuario_client_local_id",
+            "usuario_id",
+            "client_local_id",
+            unique=True,
+            postgresql_where=text("client_local_id IS NOT NULL"),
+        ),
     )
 
     @validates("usuario_id")
@@ -1097,6 +1110,20 @@ class Actividad(Base):
                 "Error: usuario_id debe ser mayor a 0", "USER_ID_MUST_BE_POSITIVE"
             )
         return valor
+
+    @validates("client_local_id")
+    def validar_client_local_id(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida identificador local de la actividad."""
+        if valor is None:
+            return None
+        return _validar_texto_no_vacio(
+            valor,
+            "client_local_id",
+            64,
+            must_be_string_code="ACTIVITY_CLIENT_LOCAL_ID_MUST_BE_STRING",
+            empty_code="ACTIVITY_CLIENT_LOCAL_ID_EMPTY",
+            too_long_code="ACTIVITY_CLIENT_LOCAL_ID_TOO_LONG",
+        )
 
     @validates("tipo")
     def validar_tipo(self, key: str, valor: Optional[Any]) -> str:

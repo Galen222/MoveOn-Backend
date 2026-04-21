@@ -52,6 +52,11 @@ class TestGuardarActividadSchema:
         assert data.duracion_parado == 120
         assert data.ritmo_maximo == 290
 
+    def test_acepta_client_local_id(self):
+        """Verifica que acepta client local id opcional."""
+        data = schemas.GuardarActividad(**_payload(client_local_id="local-123"))
+        assert data.client_local_id == "local-123"
+
     def test_duracion_breakdown_invalido(self):
         """Verifica que duracion breakdown invalido."""
         with pytest.raises(

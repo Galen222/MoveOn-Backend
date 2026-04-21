@@ -32,6 +32,7 @@ def _make_usuario(
 def _make_datos() -> schemas.GuardarActividad:
     """Construye datos."""
     return schemas.GuardarActividad(
+        client_local_id="test-local-id",
         tipo=TipoActividad.CORRER,
         distancia=5000,
         duracion_total=1800,
@@ -69,6 +70,60 @@ class TestCrearActividad:
         db.execute = _mock_execute_one(None)
         with pytest.raises(HTTPException):
             await activities_service.crear_actividad(db, 999, _make_datos())
+
+    @pytest.mark.asyncio
+    async def test_reutiliza_actividad_existente_por_client_local_id(self):
+        """Verifica que reutiliza una actividad existente por client local id."""
+        usuario = _make_usuario(total_metros=1000, total_calorias=50)
+        usuario.total_duracion_segundos = 600
+        usuario.total_actividades = 1
+
+        actividad_existente = MagicMock()
+        actividad_existente.id = 7
+        actividad_existente.tipo = "Correr"
+        actividad_existente.distancia = 5000
+        actividad_existente.duracion_total = 1800
+        actividad_existente.duracion_movimiento = 1680
+        actividad_existente.duracion_parado = 120
+        actividad_existente.duracion_pausa_manual = 60
+        actividad_existente.calorias_quemadas = 300
+        actividad_existente.ritmo_medio_movimiento = 336
+        actividad_existente.ritmo_medio_total = 360
+        actividad_existente.ritmo_maximo = 290
+        actividad_existente.velocidad_media_x100 = 1071
+        actividad_existente.velocidad_max_x100 = 1840
+        actividad_existente.auto_pausas = 1
+        actividad_existente.pausas_manuales = 1
+        actividad_existente.alertas_velocidad = 0
+        actividad_existente.ruta_polilinea = None
+        actividad_existente.ruta_mapa_url = None
+        actividad_existente.fecha_ruta = _ahora() - timedelta(minutes=5)
+
+        execute_results = [
+            MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+            MagicMock(scalar_one_or_none=MagicMock(return_value=actividad_existente)),
+        ]
+
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=execute_results)
+        db.add = MagicMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+
+        datos = _make_datos().model_copy(update={"client_local_id": "local-123"})
+
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel",
+            return_value=15,
+        ):
+            resultado = await activities_service.crear_actividad(db, 1, datos)
+
+        assert resultado["id"] == 7
+        assert resultado["nuevo_total_puntos"] == 15
+        db.add.assert_not_called()
+        db.commit.assert_not_called()
+        assert usuario.total_metros == 1000
+        assert usuario.total_calorias == 50
 
     @pytest.mark.asyncio
     async def test_persiste_metricas_enriquecidas(self):

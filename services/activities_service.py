@@ -41,7 +41,55 @@ async def crear_actividad(
             error_code="USER_NOT_FOUND",
         )
 
+    if datos.client_local_id:
+        actividad_existente = (
+            await db.execute(
+                select(database.Actividad).where(
+                    database.Actividad.usuario_id == usuario.id,
+                    database.Actividad.client_local_id == datos.client_local_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if actividad_existente:
+            logger.info(
+                "actividad_idempotente_reutilizada",
+                extra={
+                    "usuario_id": usuario.id,
+                    "actividad_id": actividad_existente.id,
+                    "client_local_id": datos.client_local_id,
+                },
+            )
+
+            puntos_actualizados = calculos.calcular_puntos_nivel(
+                int(usuario.total_metros or 0)
+            )
+
+            return {
+                "id": actividad_existente.id,
+                "tipo": actividad_existente.tipo,
+                "distancia": actividad_existente.distancia,
+                "duracion_total": actividad_existente.duracion_total,
+                "duracion_movimiento": actividad_existente.duracion_movimiento,
+                "duracion_parado": actividad_existente.duracion_parado,
+                "duracion_pausa_manual": actividad_existente.duracion_pausa_manual,
+                "calorias_quemadas": actividad_existente.calorias_quemadas,
+                "ritmo_medio_movimiento": actividad_existente.ritmo_medio_movimiento,
+                "ritmo_medio_total": actividad_existente.ritmo_medio_total,
+                "ritmo_maximo": actividad_existente.ritmo_maximo,
+                "velocidad_media_x100": actividad_existente.velocidad_media_x100,
+                "velocidad_max_x100": actividad_existente.velocidad_max_x100,
+                "auto_pausas": actividad_existente.auto_pausas,
+                "pausas_manuales": actividad_existente.pausas_manuales,
+                "alertas_velocidad": actividad_existente.alertas_velocidad,
+                "ruta_polilinea": actividad_existente.ruta_polilinea,
+                "ruta_mapa_url": actividad_existente.ruta_mapa_url,
+                "fecha_ruta": actividad_existente.fecha_ruta,
+                "nuevo_total_puntos": puntos_actualizados,
+            }
+
     nueva_actividad = database.Actividad(
+        client_local_id=datos.client_local_id,
         usuario_id=usuario.id,
         tipo=datos.tipo.value,
         distancia=datos.distancia,
