@@ -53,7 +53,6 @@ from domain.enums import ProvinciaEspaña, GeneroUsuario, TipoActividad
 from utils import validators
 from exceptions import AppValidationError
 
-
 # =========================================================
 # Conexión a base de datos (lazy)
 # =========================================================
@@ -132,7 +131,7 @@ class Base(DeclarativeBase):
 
 
 # =========================================================
-# Constantes y helpers internos
+# Constantes y ayudantes internos
 # =========================================================
 
 # Regex en Python para validaciones ORM
@@ -209,6 +208,7 @@ def _validar_enum_str(
     - el .value del Enum
     - un string plano
     """
+    # Valida enum str.
     if valor is None:
         return None
 
@@ -239,6 +239,7 @@ def _validar_hex64_opcional(
     invalid_code: str,
 ) -> Optional[str]:
     """Valida un hash hexadecimal SHA-256 de 64 caracteres."""
+    # Valida hex64 opcional.
     if valor is None:
         return None
 
@@ -268,6 +269,7 @@ def _validar_texto_no_vacio(
     too_long_code: str,
 ) -> str:
     """Valida que un texto no esté vacío y no supere una longitud máxima."""
+    # Valida texto no vacio.
     if not isinstance(valor, str):
         raise AppValidationError(
             f"Error: {nombre_campo} debe ser un string",
@@ -303,6 +305,7 @@ def _validar_url_http_opcional(
 
     Se usa el mismo criterio fuerte que en Pydantic con AnyHttpUrl.
     """
+    # Valida URL HTTP opcional.
     if valor is None:
         return None
 
@@ -600,6 +603,8 @@ class Usuario(Base):
 
     @validates("nombre_usuario")
     def validar_nombre_usuario(self, key: str, valor: str) -> str:
+        """Valida nombre usuario."""
+        # Valida nombre usuario.
         if not isinstance(valor, str):
             raise AppValidationError(
                 "Error: El nombre de usuario debe ser un texto", "USERNAME_MUST_BE_TEXT"
@@ -627,6 +632,8 @@ class Usuario(Base):
 
     @validates("email")
     def validar_email(self, key: str, valor: str) -> str:
+        """Valida correo electrónico."""
+        # Valida correo electrónico.
         if not isinstance(valor, str):
             raise AppValidationError(
                 "Error: El email debe ser un texto", "EMAIL_MUST_BE_TEXT"
@@ -647,6 +654,7 @@ class Usuario(Base):
 
     @validates("password_encriptada")
     def validar_password_encriptada(self, key: str, valor: str) -> str:
+        """Valida password encriptada."""
         return _validar_texto_no_vacio(
             valor,
             "La contraseña encriptada",
@@ -658,6 +666,7 @@ class Usuario(Base):
 
     @validates("nombre_real")
     def validar_nombre_real(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida nombre real."""
         if valor is None:
             return None
         if not isinstance(valor, str):
@@ -670,6 +679,7 @@ class Usuario(Base):
 
     @validates("fecha_nacimiento")
     def validar_fecha_nacimiento(self, key: str, valor: date) -> date:
+        """Valida fecha nacimiento."""
         if not isinstance(valor, date):
             raise AppValidationError(
                 "Error: La fecha de nacimiento debe ser una fecha válida",
@@ -679,6 +689,7 @@ class Usuario(Base):
 
     @validates("genero")
     def validar_genero(self, key: str, valor: Optional[Any]) -> Optional[str]:
+        """Valida genero."""
         return _validar_enum_str(
             valor,
             VALID_GENEROS,
@@ -689,6 +700,7 @@ class Usuario(Base):
 
     @validates("altura")
     def validar_altura(self, key: str, valor: Optional[int]) -> Optional[int]:
+        """Valida altura."""
         if valor is None:
             return None
         if not isinstance(valor, int):
@@ -700,6 +712,7 @@ class Usuario(Base):
 
     @validates("peso")
     def validar_peso(self, key: str, valor: Optional[float]) -> Optional[float]:
+        """Valida peso."""
         if valor is None:
             return None
         if not isinstance(valor, (int, float)):
@@ -711,6 +724,7 @@ class Usuario(Base):
 
     @validates("provincia")
     def validar_provincia(self, key: str, valor: Optional[Any]) -> Optional[str]:
+        """Valida provincia."""
         return _validar_enum_str(
             valor,
             VALID_PROVINCIAS,
@@ -721,6 +735,7 @@ class Usuario(Base):
 
     @validates("foto_perfil")
     def validar_foto_perfil(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida foto perfil."""
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -736,10 +751,12 @@ class Usuario(Base):
     def validar_fechas_auxiliares(
         self, key: str, valor: Optional[datetime]
     ) -> Optional[datetime]:
+        """Valida fechas auxiliares."""
         return _normalizar_datetime_utc(valor)
 
     @validates("fecha_eula")
     def validar_fecha_eula(self, key: str, valor: datetime) -> datetime:
+        """Valida fecha eula."""
         if not isinstance(valor, datetime):
             raise AppValidationError(
                 "Error: La fecha de aceptación debe ser una fecha-hora válida",
@@ -761,6 +778,7 @@ class Usuario(Base):
 
     @validates("total_metros")
     def validar_total_metros(self, key: str, valor: int) -> int:
+        """Valida total metros."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de metros debe ser un número entero",
@@ -775,6 +793,7 @@ class Usuario(Base):
 
     @validates("total_calorias")
     def validar_total_calorias(self, key: str, valor: int) -> int:
+        """Valida total calorias."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de calorías debe ser un número entero",
@@ -789,6 +808,7 @@ class Usuario(Base):
 
     @validates("total_duracion_segundos")
     def validar_total_duracion(self, key: str, valor: int) -> int:
+        """Valida total duracion."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de duración debe ser un número entero",
@@ -803,6 +823,7 @@ class Usuario(Base):
 
     @validates("total_actividades")
     def validar_total_actividades(self, key: str, valor: int) -> int:
+        """Valida total actividades."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de actividades debe ser un número entero",
@@ -817,6 +838,7 @@ class Usuario(Base):
 
     @validates("objetivo_semanal_metros")
     def validar_objetivo_semanal(self, key: str, valor: int) -> int:
+        """Valida objetivo semanal."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El objetivo semanal debe ser un número entero",
@@ -831,6 +853,7 @@ class Usuario(Base):
 
     @validates("objetivo_mensual_metros")
     def validar_objetivo_mensual(self, key: str, valor: int) -> int:
+        """Valida objetivo mensual."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El objetivo mensual debe ser un número entero",
@@ -845,6 +868,7 @@ class Usuario(Base):
 
     @validates("acepta_terminos")
     def validar_acepta_terminos(self, key: str, valor: bool) -> bool:
+        """Valida acepta terminos."""
         if not isinstance(valor, bool):
             raise AppValidationError(
                 "Error: acepta_terminos debe ser booleano",
@@ -859,6 +883,7 @@ class Usuario(Base):
 
     @validates("perfil_visible")
     def validar_perfil_visible(self, key: str, valor: bool) -> bool:
+        """Valida perfil visible."""
         if not isinstance(valor, bool):
             raise AppValidationError(
                 "Error: perfil_visible debe ser booleano",
@@ -868,6 +893,8 @@ class Usuario(Base):
 
     @validates("version_terminos")
     def validar_version_terminos(self, key: str, valor: str) -> str:
+        """Valida version terminos."""
+        # Valida version terminos.
         if not isinstance(valor, str):
             raise AppValidationError(
                 "Error: La versión de términos debe ser un texto",
@@ -892,6 +919,7 @@ class Usuario(Base):
     def validar_codigo_recuperacion(
         self, key: str, valor: Optional[str]
     ) -> Optional[str]:
+        """Valida codigo recuperacion."""
         return _validar_hex64_opcional(
             valor,
             "codigo_recuperacion",
@@ -907,7 +935,7 @@ class Usuario(Base):
 
 class Actividad(Base):
     """
-    Tabla de actividades deportivas enriquecida con métricas de tracking.
+    Tabla de actividades deportivas enriquecida con métricas de seguimiento.
 
     Se mantienen valores enteros para facilitar validación, sincronización y
     compatibilidad con el cliente móvil offline.
@@ -1059,6 +1087,7 @@ class Actividad(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
+        """Valida usuario identificador."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
@@ -1088,76 +1117,90 @@ class Actividad(Base):
 
     @validates("distancia")
     def validar_distancia(self, key: str, valor: int) -> int:
+        """Valida distancia."""
         return validators.validar_distancia_logica(valor)
 
     @validates("duracion_total")
     def validar_duracion_total(self, key: str, valor: int) -> int:
+        """Valida duracion total."""
         return validators.validar_duracion_logica(valor)
 
     @validates("duracion_movimiento")
     def validar_duracion_movimiento(self, key: str, valor: int) -> int:
+        """Valida duracion movimiento."""
         return validators.validar_duracion_logica(valor)
 
     @validates("duracion_parado")
     def validar_duracion_parado(self, key: str, valor: int) -> int:
+        """Valida duracion parado."""
         return validators.validar_duracion_no_negativa_logica(
             valor, "la duración parada", "STOPPED_DURATION"
         )
 
     @validates("duracion_pausa_manual")
     def validar_duracion_pausa_manual(self, key: str, valor: int) -> int:
+        """Valida duracion pausa manual."""
         return validators.validar_duracion_no_negativa_logica(
             valor, "la duración de pausa manual", "MANUAL_PAUSE_DURATION"
         )
 
     @validates("calorias_quemadas")
     def validar_calorias(self, key: str, valor: int) -> int:
+        """Valida calorias."""
         return validators.validar_calorias_logica(valor)
 
     @validates("ritmo_medio_movimiento")
     def validar_ritmo_medio_movimiento(self, key: str, valor: int) -> int:
+        """Valida ritmo medio movimiento."""
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo medio en movimiento", "MOVING_PACE"
         )
 
     @validates("ritmo_medio_total")
     def validar_ritmo_medio_total(self, key: str, valor: int) -> int:
+        """Valida ritmo medio total."""
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo medio total", "TOTAL_PACE"
         )
 
     @validates("ritmo_maximo")
     def validar_ritmo_maximo(self, key: str, valor: int) -> int:
+        """Valida ritmo maximo."""
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo máximo", "MAX_PACE"
         )
 
     @validates("velocidad_media_x100")
     def validar_velocidad_media(self, key: str, valor: int) -> int:
+        """Valida velocidad media."""
         return validators.validar_velocidad_x100_logica(
             valor, "la velocidad media", "AVERAGE_SPEED"
         )
 
     @validates("velocidad_max_x100")
     def validar_velocidad_max(self, key: str, valor: int) -> int:
+        """Valida velocidad max."""
         return validators.validar_velocidad_x100_logica(
             valor, "la velocidad máxima", "MAX_SPEED"
         )
 
     @validates("auto_pausas")
     def validar_auto_pausas(self, key: str, valor: int) -> int:
+        """Valida auto pausas."""
         return validators.validar_contador_tracking_logica(
             valor, "las auto pausas", "AUTO_PAUSE_COUNT"
         )
 
     @validates("pausas_manuales")
     def validar_pausas_manuales(self, key: str, valor: int) -> int:
+        """Valida pausas manuales."""
         return validators.validar_contador_tracking_logica(
             valor, "las pausas manuales", "MANUAL_PAUSE_COUNT"
         )
 
     @validates("alertas_velocidad")
     def validar_alertas_velocidad(self, key: str, valor: int) -> int:
+        """Valida alertas velocidad."""
         return validators.validar_contador_tracking_logica(
             valor, "las alertas de velocidad", "SPEED_ALERT_COUNT"
         )
@@ -1171,6 +1214,7 @@ class Actividad(Base):
 
     @validates("ruta_mapa_url")
     def validar_ruta_mapa_url(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida ruta mapa URL."""
         if valor is None:
             return None
         if len(valor) > 2048:
@@ -1186,12 +1230,13 @@ class Actividad(Base):
 
     @validates("fecha_ruta")
     def validar_fecha_ruta(self, key: str, valor: datetime) -> datetime:
+        """Valida fecha ruta."""
         return validators.validar_fecha_ruta_logica(valor)
 
 
 class ActividadDiagnostico(Base):
     """
-    Persistencia de telemetría de tracking enviada automáticamente por builds internas.
+    Persistencia de telemetría de seguimiento enviada automáticamente por builds internas.
 
     Esta tabla NO sustituye a ``Actividad`` ni participa en los acumulados del perfil.
     Su única finalidad es permitir depurar sesiones problemáticas reportadas por testers
@@ -1372,6 +1417,7 @@ class ActividadDiagnostico(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
+        """Valida usuario identificador."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero",
@@ -1386,6 +1432,7 @@ class ActividadDiagnostico(Base):
 
     @validates("actividad_id")
     def validar_actividad_id(self, key: str, valor: Optional[int]) -> Optional[int]:
+        """Valida actividad identificador."""
         if valor is None:
             return None
         if not isinstance(valor, int):
@@ -1409,6 +1456,7 @@ class ActividadDiagnostico(Base):
         "model",
     )
     def validar_textos_cortos(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida textos cortos."""
         if valor is None:
             return None
         if not isinstance(valor, str):
@@ -1428,6 +1476,7 @@ class ActividadDiagnostico(Base):
         "creada_en",
     )
     def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
+        """Valida fechas."""
         return _normalizar_datetime_utc(valor)
 
     @validates(
@@ -1447,6 +1496,7 @@ class ActividadDiagnostico(Base):
         "service_restart_count",
     )
     def validar_enteros_no_negativos(self, key: str, valor: int) -> int:
+        """Valida enteros no negativos."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: el valor de diagnóstico debe ser un entero",
@@ -1461,6 +1511,7 @@ class ActividadDiagnostico(Base):
 
     @validates("event_log_json", "device_info_json")
     def validar_json_serializado(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida JSON serializado."""
         if valor is None:
             return None
         if not isinstance(valor, str):
@@ -1557,6 +1608,7 @@ class UsuarioAuthSocial(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
+        """Valida usuario identificador."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
@@ -1569,6 +1621,7 @@ class UsuarioAuthSocial(Base):
 
     @validates("provider")
     def validar_provider(self, key: str, valor: str) -> str:
+        """Valida provider."""
         resultado = _validar_enum_str(
             valor,
             VALID_SOCIAL_PROVIDERS,
@@ -1581,6 +1634,7 @@ class UsuarioAuthSocial(Base):
 
     @validates("provider_user_id")
     def validar_provider_user_id(self, key: str, valor: str) -> str:
+        """Valida provider usuario identificador."""
         return _validar_texto_no_vacio(
             valor,
             "provider_user_id",
@@ -1592,6 +1646,8 @@ class UsuarioAuthSocial(Base):
 
     @validates("email_social")
     def validar_email_social(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida correo electrónico social."""
+        # Valida correo electrónico social.
         if valor is None:
             return None
 
@@ -1616,6 +1672,7 @@ class UsuarioAuthSocial(Base):
 
     @validates("nombre_social")
     def validar_nombre_social(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida nombre social."""
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -1629,6 +1686,7 @@ class UsuarioAuthSocial(Base):
 
     @validates("avatar_url")
     def validar_avatar_url(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida avatar URL."""
         return _validar_url_http_opcional(
             valor,
             "avatar_url",
@@ -1640,6 +1698,7 @@ class UsuarioAuthSocial(Base):
 
     @validates("creada_en", "ultimo_login_en")
     def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
+        """Valida fechas."""
         return _normalizar_datetime_utc(valor)
 
 
@@ -1727,6 +1786,7 @@ class SesionRefresh(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
+        """Valida usuario identificador."""
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
@@ -1739,6 +1799,7 @@ class SesionRefresh(Base):
 
     @validates("jti", "familia_id", "reemplazada_por_jti")
     def validar_ids_sesion(self, key: str, valor: Optional[str]) -> Optional[str]:
+        """Valida identificadores sesion."""
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -1752,6 +1813,7 @@ class SesionRefresh(Base):
 
     @validates("token_hash")
     def validar_token_hash(self, key: str, valor: str) -> str:
+        """Valida token hash."""
         resultado = _validar_hex64_opcional(
             valor,
             "token_hash",
@@ -1766,6 +1828,7 @@ class SesionRefresh(Base):
 
     @validates("creada_en", "ultimo_uso_en", "expira_en", "revocada_en")
     def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
+        """Valida fechas."""
         valor = _normalizar_datetime_utc(valor)
 
         if key == "expira_en" and valor is None:

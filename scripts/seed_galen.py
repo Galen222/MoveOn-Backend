@@ -1,3 +1,6 @@
+# scripts/seed_galen.py
+
+"""Incluye un script de apoyo para tareas del proyecto."""
 
 from __future__ import annotations
 
@@ -67,7 +70,7 @@ RUTAS_GALEN_BASE = [
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
         "ruta_polilinea": "skuuFvgoUfEcQzE{T~HoQjQgPjZoNjWoI~AgBfRcHnFiLo@sNgG{MiJwG{EsS",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490#map=15/40.41430/-3.68490",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490# map=15/40.41430/-3.68490",
         "dias_atras": 3,
         "horas_atras": 7,
     },
@@ -88,7 +91,7 @@ RUTAS_GALEN_BASE = [
         "alertas_velocidad": 0,
         # Polilínea corregida: la versión anterior estaba truncada.
         "ruta_polilinea": "gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310#map=15/40.40820/-3.70310",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310# map=15/40.40820/-3.70310",
         "dias_atras": 5,
         "horas_atras": 19,
     },
@@ -109,7 +112,7 @@ RUTAS_GALEN_BASE = [
         "alertas_velocidad": 1,
         # Polilínea corregida: la versión anterior estaba truncada.
         "ruta_polilinea": "_mtuFnowUgJwQgOwLkMgOcL_SnKwQ~RkC~RzE~MnP~HvVoAvVsI~MkH~C",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000#map=15/40.41440/-3.73000",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000# map=15/40.41440/-3.73000",
         "dias_atras": 8,
         "horas_atras": 8,
     },
@@ -129,7 +132,7 @@ RUTAS_GALEN_BASE = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "oo~uFvouUgJcVcGgYg@k[~DaYzJwVmFsLaQ_CoTuImPeRkEmUw@qYfGaY~QmPvUmGjWbLrTfU|QhYdBxZgI~XqOzToVjNmVfGkR{DcNqIgP}A_N{@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750#map=15/40.46070/-3.70750",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750# map=15/40.46070/-3.70750",
         "dias_atras": 12,
         "horas_atras": 18,
     },
@@ -149,7 +152,7 @@ RUTAS_GALEN_BASE = [
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
         "ruta_polilinea": "ot~uFrx`U{Jo_@wG_b@?_b@vGg^nNo\\vWmRj_@uDj_@eCz]mGhZoNpSsUhLgYfEaZqC{Y}J{ViQyQqWwIe\\?w\\vGqZrNoVnWoQl_@cDz^?~HgYf@{TsI",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.45890&mlon=-3.59890#map=15/40.45890/-3.59890",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.45890&mlon=-3.59890# map=15/40.45890/-3.59890",
         "dias_atras": 16,
         "horas_atras": 7,
     },
@@ -169,7 +172,7 @@ RUTAS_GALEN_BASE = [
         "pausas_manuales": 2,
         "alertas_velocidad": 0,
         "ruta_polilinea": "wj|uFvc}ToFwQkCgT?gTbEuRnJmOtPuHpXeA|XcFjUcKjNuOjGqQ~@oR_DgQiJmNmPcIvUcD|W~@vWbEyT~HoP|LmJpQeCxQ?lQeDzEoP{@wLwG",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640#map=15/40.44990/-3.58640",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640# map=15/40.44990/-3.58640",
         "dias_atras": 21,
         "horas_atras": 20,
     },
@@ -190,7 +193,7 @@ RUTAS_GALEN_BASE = [
         "alertas_velocidad": 0,
         # Polilínea corregida: la versión anterior estaba truncada.
         "ruta_polilinea": "_houF~sgU_IwL{JwL_IgOrDgT~M_IvQR~MrIvGvQg@~RkHfOgJbGkHR",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880#map=15/40.38800/-3.64880",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880# map=15/40.38800/-3.64880",
         "dias_atras": 27,
         "horas_atras": 6,
     },
@@ -218,6 +221,7 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
     - Ajusta distancia, tiempos y métricas para que sigan siendo coherentes.
     - Asigna fechas más antiguas que las rutas originales para no solaparlas.
     """
+    # Genera rutas extra.
     extras: list[dict] = []
 
     for i in range(total_extra):
@@ -270,7 +274,7 @@ def generar_rutas_extra(total_extra: int = 50) -> list[dict]:
 
         base.update(
             {
-                "nombre": f"{zona} #{i + 1} {km}",
+                "nombre": f"{zona} # {i + 1} {km}",
                 "distancia": distancia,
                 "duracion_movimiento": duracion_movimiento,
                 "duracion_parado": duracion_parado,
@@ -305,7 +309,7 @@ async def obtener_usuario_existente(db):
     """
     Busca un usuario existente por nombre de usuario o email.
 
-    Se usa para hacer el seed idempotente y evitar errores por duplicados
+    Se usa para hacer el semilla idempotente y evitar errores por duplicados
     si el script se ejecuta varias veces.
     """
     result = await db.execute(
@@ -323,6 +327,7 @@ async def obtener_o_crear_usuario_galen(db):
     servicio real de registro para que el hash de contraseña se genere
     igual que en producción.
     """
+    # Obtiene o crear usuario galen.
     usuario = await obtener_usuario_existente(db)
     if usuario:
         print(
@@ -354,20 +359,19 @@ async def obtener_o_crear_usuario_galen(db):
     return usuario
 
 
-
-
 def derivar_ritmo_maximo(
     ritmo_medio_movimiento: int,
     velocidad_max_x100: int,
     tipo: TipoActividad,
 ) -> int:
-    """Deriva un ritmo máximo razonable para datos seed.
+    """Deriva un ritmo máximo razonable para datos semilla.
 
     El backend persistente ahora guarda ritmo máximo además del ritmo medio.
-    En los seeds evitamos valores imposibles partiendo de la velocidad máxima
+    En los semillas evitamos valores imposibles partiendo de la velocidad máxima
     y acotando el resultado para que sea mejor que el ritmo medio en movimiento,
     pero sin producir picos absurdos por ruido.
     """
+    # Gestiona derivar ritmo maximo.
     ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
     velocidad_max_x100 = max(1, int(velocidad_max_x100))
 
@@ -377,14 +381,19 @@ def derivar_ritmo_maximo(
     es_correr = tipo == TipoActividad.CORRER
     mejora_maxima = 60 if es_correr else 90
     ratio_minimo = 0.72 if es_correr else 0.80
-    suelo = max(int(round(ritmo_medio_movimiento * ratio_minimo)), ritmo_medio_movimiento - mejora_maxima)
+    suelo = max(
+        int(round(ritmo_medio_movimiento * ratio_minimo)),
+        ritmo_medio_movimiento - mejora_maxima,
+    )
     techo = max(1, ritmo_medio_movimiento - (15 if es_correr else 10))
 
     candidato = min(pace_desde_velocidad_max, techo)
     return max(1, min(candidato, techo) if candidato >= suelo else suelo)
 
+
 def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
-    """Construye el payload validado de una actividad a partir del diccionario del seed."""
+    """Construye la carga útil validada de una actividad a partir del diccionario de la semilla."""
+    # Construye actividad.
     fecha_ruta = ahora_utc() - timedelta(
         days=ruta["dias_atras"],
         hours=ruta["horas_atras"],
@@ -403,11 +412,14 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
         calorias_quemadas=int(ruta["calorias_quemadas"]),
         ritmo_medio_movimiento=int(ruta["ritmo_medio_movimiento"]),
         ritmo_medio_total=int(ruta["ritmo_medio_total"]),
-        ritmo_maximo=int(ruta.get("ritmo_maximo") or derivar_ritmo_maximo(
-            int(ruta["ritmo_medio_movimiento"]),
-            int(ruta["velocidad_max_x100"]),
-            ruta["tipo"],
-        )),
+        ritmo_maximo=int(
+            ruta.get("ritmo_maximo")
+            or derivar_ritmo_maximo(
+                int(ruta["ritmo_medio_movimiento"]),
+                int(ruta["velocidad_max_x100"]),
+                ruta["tipo"],
+            )
+        ),
         velocidad_media_x100=int(ruta["velocidad_media_x100"]),
         velocidad_max_x100=int(ruta["velocidad_max_x100"]),
         auto_pausas=int(ruta["auto_pausas"]),
@@ -421,6 +433,7 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
 
 async def crear_rutas_galen() -> None:
     """Inicializa la BD, garantiza el usuario Galen y crea las 57 rutas de prueba."""
+    # Construye rutas galen.
     await database.init_db()
 
     if database.AsyncSessionLocal is None:
@@ -445,7 +458,7 @@ async def crear_rutas_galen() -> None:
                 )
             except Exception as exc:
                 print(
-                    f"[SKIP] {usuario.nombre_usuario}: ruta #{indice} "
+                    f"[SKIP] {usuario.nombre_usuario}: ruta # {indice} "
                     f"({ruta['nombre']}) -> {exc}"
                 )
 
@@ -459,5 +472,3 @@ async def crear_rutas_galen() -> None:
 
 if __name__ == "__main__":
     asyncio.run(crear_rutas_galen())
-
-

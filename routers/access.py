@@ -28,10 +28,11 @@ router = APIRouter(tags=["Seguridad"])
 
 
 # Valida el identificador de app y entrega un token de sesión temporal.
-# routers/access.py
 @router.get("/handshake", response_model=schemas.RespuestaHandshake)
 @rate_limit(settings.RL_HANDSHAKE)
 async def handshake(request: Request, x_app_id: Optional[str] = Header(default=None)):
+    """Valida la aplicación cliente y genera una sesión temporal."""
+    # Valida la aplicación cliente y genera una sesión temporal.
     if not hmac.compare_digest((x_app_id or ""), settings.APP_ID):
         logger.warning(
             "handshake_fallido",
@@ -67,8 +68,9 @@ async def login(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
-    # Rate-limit adicional por identidad (anti-abuso distribuido)
+    # Límite de tasa adicional por identidad (antiabuso distribuido)
     # Lanza IdentityRateLimitExceeded (main.py la maneja).
+    """Gestiona el inicio de sesión del usuario."""
     check_identity_limit("login", datos.identificador, settings.RL_LOGIN_ID)
 
     # Búsqueda flexible por nombre o email.
@@ -128,6 +130,8 @@ async def login_social(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
+    """Gestiona login social."""
+    # Gestiona login social.
     identidad = await social_auth_service.verificar_token_social(
         datos.provider, datos.token
     )
@@ -184,6 +188,7 @@ async def refresh_token(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
+    """Gestiona refresco token."""
     return await access_service.refrescar_sesion(db, datos.refresh_token)
 
 
@@ -196,6 +201,7 @@ async def logout(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
+    """Gestiona el cierre de sesión del usuario."""
     return await access_service.cerrar_sesion(db, datos.refresh_token)
 
 
@@ -210,7 +216,8 @@ async def solicitar_password(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
-    # Rate-limit adicional por identidad (anti-abuso distribuido)
+    # Límite de tasa adicional por identidad (antiabuso distribuido)
+    """Solicita password."""
     check_identity_limit(
         "password_solicitar", datos.email, settings.RL_PASSWORD_SOLICITAR_ID
     )
@@ -229,7 +236,8 @@ async def confirmar_password(
     db: AsyncSession = Depends(obtener_db),
     _auth_app=Depends(auth.verificar_sesion_aplicacion),
 ):
-    # Rate-limit adicional por identidad (anti-abuso distribuido)
+    # Límite de tasa adicional por identidad (antiabuso distribuido)
+    """Confirma password."""
     check_identity_limit(
         "password_confirmar", datos.email, settings.RL_PASSWORD_CONFIRMAR_ID
     )

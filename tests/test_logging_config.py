@@ -1,6 +1,5 @@
 # tests/test_logging_config.py
-#
-# Tests para logging_config.py.
+
 # Cubre:
 # - RequestIdFilter
 # - JsonPipeFormatter

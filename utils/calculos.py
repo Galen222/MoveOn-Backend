@@ -1,4 +1,6 @@
-# Utils/calculos.py
+# utils/calculos.py
+
+"""Incluye utilidades auxiliares de la aplicación."""
 
 
 def calcular_puntos_nivel(metros: int) -> int:

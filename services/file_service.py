@@ -1,8 +1,6 @@
 # services/file_service.py
 
 """
-services/file_service.py
-
 Servicio para manejar la validación y procesamiento de archivos.
 """
 import os
@@ -41,7 +39,6 @@ if IMAGE_JPEG_QUALITY < 1:
 if IMAGE_JPEG_QUALITY > 95:
     IMAGE_JPEG_QUALITY = 95
 
-
 # Si la API está en producción carga variables de Cloudinary.
 if settings.STORAGE_TYPE == "cloudinary":
     if (
@@ -75,8 +72,8 @@ MALICIOUS_SIGNATURES = [
 
 # NOTA:
 # - En producción usamos Cloudinary y guardamos una URL canónica SIN versión en BD.
-#   Así evitamos depender de una secure_url versionada nueva tras cada overwrite.
-# - request.base_url solo se usa en modo local con storage local (HTTP), donde es suficiente.
+# Así evitamos depender de una secure_url versionada nueva tras cada overwrite.
+# - petición.base_url solo se usa en modo local con storage local (HTTP), donde es suficiente.
 # - Si en el futuro se despliega detrás de reverse proxy/HTTPS, considerar usar X-Forwarded-* o PUBLIC_BASE_URL.
 def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional[str]:
     """
@@ -97,6 +94,8 @@ def construir_url_foto(foto_perfil: Optional[str], request: Request) -> Optional
 
 
 def validar_seguridad(archivo: UploadFile) -> bytes:
+    """Valida seguridad."""
+    # Valida seguridad.
     if archivo.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
         raise app_http_exception(
             status_code=400,
@@ -160,6 +159,7 @@ def validar_seguridad(archivo: UploadFile) -> bytes:
 
 
 def _reencode_image(raw: bytes, extension: str) -> bytes:
+    """Gestiona reencode imagen."""
     try:
         im = Image.open(BytesIO(raw))
         im.load()
@@ -235,6 +235,8 @@ def procesar_subida(
     raw: bytes,
     foto_anterior_bd: Optional[str] = None,
 ) -> str:
+    """Gestiona procesar subida."""
+    # Gestiona procesar subida.
     try:
         if settings.STORAGE_TYPE == "cloudinary":
             return guardar_nube(archivo, usuario_actual_id, raw)
@@ -263,6 +265,8 @@ def guardar_local(
     raw: bytes,
     foto_anterior_bd: Optional[str] = None,
 ) -> str:
+    """Guarda local."""
+    # Guarda local.
     carpeta_imagenes = settings.UPLOAD_DIR
     nombre_seguro = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
 
@@ -307,6 +311,7 @@ def guardar_local(
 
 
 def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str:
+    """Guarda nube."""
     try:
         usuario_hash = hashlib.sha256(str(usuario_actual_id).encode()).hexdigest()
 
@@ -356,6 +361,7 @@ def guardar_nube(archivo: UploadFile, usuario_actual_id: int, raw: bytes) -> str
 
 def borrar_foto(foto_perfil: Optional[str], usuario_actual_id: int) -> None:
     """Lógica de borrado permanente segura usando hashing."""
+    # Elimina foto.
     if not foto_perfil:
         return
 

@@ -1,5 +1,7 @@
-#
-# Sustituye a: test_auth_tokens.py + test_auth_tokens_hardening.py
+# tests/test_auth.py
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 # Cubre: creación/validación de tokens, hardening JWT (iss/aud/typ),
 # y extracción del usuario actual desde credenciales Bearer.
 
@@ -10,14 +12,16 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 import auth
 
-
 # ─────────────────────────────────────────────
 # Tipos de token (typ claim)
 # ─────────────────────────────────────────────
 
 
 class TestTiposDeToken:
+    """Agrupa pruebas relacionadas con tipos de token."""
+
     def test_access_token_tiene_typ_access(self):
+        """Verifica que acceso token tiene typ acceso."""
         token = auth.crear_token_acceso({"sub": "123"})
         payload = auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
@@ -25,6 +29,7 @@ class TestTiposDeToken:
         assert payload["typ"] == "access"
 
     def test_refresh_token_tiene_typ_refresh(self):
+        """Verifica que refresco token tiene typ refresco."""
         token = auth.crear_token_refresh(123, "jti-1", "fam-1")
         payload = auth.decodifica_jwt(token, auth.REFRESH_TOKEN_SECRET, "refresh")
 
@@ -32,33 +37,40 @@ class TestTiposDeToken:
         assert payload["typ"] == "refresh"
 
     def test_refresh_token_rechazado_como_access(self):
+        """Verifica que refresco token rechazado como acceso."""
         token = auth.crear_token_refresh(123, "jti-1", "familia-1")
         with pytest.raises(HTTPException):
             auth.decodifica_jwt(token, auth.REFRESH_TOKEN_SECRET, "access")
 
     def test_access_token_rechazado_como_refresh(self):
+        """Verifica que acceso token rechazado como refresco."""
         token = auth.crear_token_acceso({"sub": "123"})
         with pytest.raises(HTTPException):
             auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "refresh")
 
     def test_app_session_token_tiene_typ_correcto(self):
+        """Verifica que app session token tiene typ correcto."""
         token = auth.crear_token_aplicacion()
         payload = auth.decodifica_jwt(token, auth.APP_SESSION_SECRET, "app_session")
         assert payload["typ"] == "app_session"
 
     def test_app_session_rechazado_como_access(self):
+        """Verifica que app session rechazado como acceso."""
         token = auth.crear_token_aplicacion()
         with pytest.raises((HTTPException, Exception)):
             auth.decodifica_jwt(token, auth.APP_SESSION_SECRET, "access")
 
 
 # ─────────────────────────────────────────────
-# Hardening: issuer, audience, secreto, manipulación
+# Hardening: emisor, audiencia, secreto, manipulación
 # ─────────────────────────────────────────────
 
 
 class TestHardeningJWT:
+    """Agrupa pruebas relacionadas con hardening JWT."""
+
     def test_audience_incorrecta_falla(self, monkeypatch):
+        """Verifica que audience incorrecta falla."""
         audience_buena = auth.JWT_AUDIENCE
         monkeypatch.setattr(auth, "JWT_AUDIENCE", "audiencia-incorrecta")
         token = auth.codifica_jwt(
@@ -70,6 +82,7 @@ class TestHardeningJWT:
             auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
     def test_issuer_incorrecto_falla(self, monkeypatch):
+        """Verifica que issuer incorrecto falla."""
         issuer_bueno = auth.JWT_ISSUER
         monkeypatch.setattr(auth, "JWT_ISSUER", "issuer-incorrecto")
         token = auth.codifica_jwt(
@@ -81,6 +94,7 @@ class TestHardeningJWT:
             auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
     def test_secreto_erroneo_falla(self):
+        """Verifica que secreto erroneo falla."""
         token = auth.codifica_jwt(
             {"sub": "pepe"},
             "secreto-equivocado-12345678901234567890",
@@ -91,6 +105,7 @@ class TestHardeningJWT:
             auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
     def test_token_manipulado_falla(self):
+        """Verifica que token manipulado falla."""
         token = auth.crear_token_acceso({"sub": "123"})
         partes = token.split(".")
         partes[1] = partes[1][:-2] + "ZZ"
@@ -100,6 +115,7 @@ class TestHardeningJWT:
             auth.decodifica_jwt(token_manipulado, auth.ACCESS_TOKEN_SECRET, "access")
 
     def test_claims_iss_y_aud_presentes(self):
+        """Verifica que claims iss y aud presentes."""
         token = auth.crear_token_acceso({"sub": "123"})
         payload = auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
@@ -107,6 +123,7 @@ class TestHardeningJWT:
         assert payload["aud"] == auth.JWT_AUDIENCE
 
     def test_claims_exp_e_iat_presentes(self):
+        """Verifica que claims exp e iat presentes."""
         token = auth.crear_token_acceso({"sub": "123"})
         payload = auth.decodifica_jwt(token, auth.ACCESS_TOKEN_SECRET, "access")
 
@@ -115,6 +132,7 @@ class TestHardeningJWT:
         assert payload["exp"] > payload["iat"]
 
     def test_refresh_token_incluye_jti_y_familia(self):
+        """Verifica que refresco token incluye jti y familia."""
         token = auth.crear_token_refresh(123, "jti-test", "fam-test")
         payload = auth.decodifica_jwt(token, auth.REFRESH_TOKEN_SECRET, "refresh")
 
@@ -122,6 +140,7 @@ class TestHardeningJWT:
         assert payload["fam"] == "fam-test"
 
     def test_dos_refresh_con_jti_distinto_son_tokens_distintos(self):
+        """Verifica que dos refresco con jti distinto son tokens distintos."""
         t1 = auth.crear_token_refresh(123, "jti-a", "fam-1")
         t2 = auth.crear_token_refresh(123, "jti-b", "fam-1")
         assert t1 != t2
@@ -133,13 +152,17 @@ class TestHardeningJWT:
 
 
 class TestObtenerUsuarioActual:
+    """Agrupa pruebas relacionadas con obtener usuario actual."""
+
     def test_token_valido_devuelve_usuario_id(self):
+        """Verifica que token valido devuelve usuario identificador."""
         token = auth.crear_token_acceso({"sub": "123"})
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
         assert auth.obtener_usuario_actual(creds) == 123
 
     def test_rechaza_token_sin_sub(self):
+        """Verifica que rechaza token sin sub."""
         token = auth.codifica_jwt(
             {}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
         )
@@ -152,6 +175,7 @@ class TestObtenerUsuarioActual:
         assert "usuario válido" in exc.value.detail.lower()
 
     def test_rechaza_token_con_sub_no_string(self):
+        """Verifica que rechaza token con sub no string."""
         token = auth.codifica_jwt(
             {"sub": 99999}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
         )
@@ -163,6 +187,7 @@ class TestObtenerUsuarioActual:
         assert exc.value.status_code == 401
 
     def test_token_de_refresh_rechazado_en_endpoint(self):
+        """Verifica que token de refresco rechazado en endpoint."""
         token = auth.crear_token_refresh(123, "jti-x", "fam-x")
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
@@ -172,6 +197,7 @@ class TestObtenerUsuarioActual:
         assert exc.value.status_code == 401
 
     def test_token_completamente_invalido_rechazado(self):
+        """Verifica que token completamente invalido rechazado."""
         creds = HTTPAuthorizationCredentials(
             scheme="Bearer", credentials="token.basura.fake"
         )

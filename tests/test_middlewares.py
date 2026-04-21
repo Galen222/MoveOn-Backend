@@ -1,10 +1,10 @@
 # tests/test_middlewares.py
-#
-# Sustituye a: test_middlewares_request_id_security.py
-#
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 # Cubre los dos middlewares de infraestructura:
-#   - RequestContextMiddleware  (middlewares/request_context.py)
-#   - SecurityHeadersMiddleware (middlewares/security_headers.py)
+# - RequestContextMiddleware  (middlewares/petición_context.py)
+# - SecurityHeadersMiddleware (middlewares/security_headers.py)
 
 import logging
 import uuid
@@ -16,40 +16,45 @@ from fastapi.testclient import TestClient
 from middlewares.request_context import RequestContextMiddleware
 from middlewares.security_headers import SecurityHeadersMiddleware
 
-
 # ─────────────────────────────────────────────
-# Helpers
+# Ayudantes
 # ─────────────────────────────────────────────
 
 
 def _build_request_id_app() -> FastAPI:
+    """Construye request identificador app."""
     app = FastAPI()
     app.add_middleware(RequestContextMiddleware)
 
     @app.get("/ping")
     async def ping():
+        """Gestiona ping."""
         return {"ok": True}
 
     return app
 
 
 def _build_request_id_error_app() -> FastAPI:
+    """Construye request identificador error app."""
     app = FastAPI()
     app.add_middleware(RequestContextMiddleware)
 
     @app.get("/boom")
     async def boom():
+        """Gestiona boom."""
         raise RuntimeError("boom")
 
     return app
 
 
 def _build_security_headers_app() -> FastAPI:
+    """Construye security headers app."""
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)
 
     @app.get("/ping")
     async def ping():
+        """Gestiona ping."""
         return {"ok": True}
 
     return app
@@ -57,6 +62,7 @@ def _build_security_headers_app() -> FastAPI:
 
 def _sec_monkeypatch(monkeypatch, **overrides):
     """Aplica valores por defecto razonables y sobreescribe los indicados."""
+    # Gestiona sec monkeypatch.
     defaults = {
         "ENABLE_SECURITY_HEADERS": True,
         "SEC_HEADERS_RESPECT_X_FORWARDED_PROTO": False,
@@ -75,6 +81,7 @@ def _sec_monkeypatch(monkeypatch, **overrides):
 
 @contextmanager
 def _capture_logger(caplog, logger_name: str, level: int):
+    """Gestiona capture logger."""
     logger = logging.getLogger(logger_name)
     old_level = logger.level
 
@@ -95,7 +102,10 @@ def _capture_logger(caplog, logger_name: str, level: int):
 
 
 class TestRequestIdMiddleware:
+    """Agrupa pruebas relacionadas con request identificador middleware."""
+
     def test_inyecta_x_request_id_si_no_llega(self):
+        """Verifica que inyecta x request identificador si no llega."""
         client = TestClient(_build_request_id_app())
         response = client.get("/ping")
 
@@ -104,6 +114,7 @@ class TestRequestIdMiddleware:
         assert response.headers["X-Request-ID"]
 
     def test_respeta_x_request_id_si_llega_en_request(self):
+        """Verifica que respeta x request identificador si llega en request."""
         client = TestClient(_build_request_id_app())
         response = client.get("/ping", headers={"X-Request-ID": "req-123"})
 
@@ -120,7 +131,7 @@ class TestRequestIdMiddleware:
         assert str(parsed) == request_id
 
     def test_requests_distintos_generan_ids_distintos(self):
-        """Cada request sin X-Request-ID debe recibir un ID único."""
+        """Cada petición sin X-Request-ID debe recibir un identificador único."""
         client = TestClient(_build_request_id_app())
         ids = {client.get("/ping").headers["X-Request-ID"] for _ in range(5)}
         assert len(ids) == 5
@@ -134,7 +145,11 @@ class TestRequestIdMiddleware:
 
 
 class TestRequestIdMiddlewareLogging:
+    """Agrupa pruebas relacionadas con request identificador middleware registro."""
+
     def test_loggea_request_completed_con_campos_estructurados(self, caplog):
+        """Verifica que loggea request completed con campos estructurados."""
+        # Verifica que loggea petición completed con campos estructurados.
         client = TestClient(_build_request_id_app())
 
         with _capture_logger(caplog, "app.request", logging.INFO):
@@ -151,6 +166,8 @@ class TestRequestIdMiddlewareLogging:
         assert isinstance(record.duration_ms, int)
 
     def test_loggea_request_failed_con_campos_estructurados(self, caplog):
+        """Verifica que loggea request failed con campos estructurados."""
+        # Verifica que loggea petición failed con campos estructurados.
         client = TestClient(
             _build_request_id_error_app(), raise_server_exceptions=False
         )
@@ -175,7 +192,10 @@ class TestRequestIdMiddlewareLogging:
 
 
 class TestSecurityHeadersDesactivado:
+    """Agrupa pruebas relacionadas con security headers desactivado."""
+
     def test_no_añade_headers_cuando_desactivado(self, monkeypatch):
+        """Verifica que no añade headers cuando desactivado."""
         _sec_monkeypatch(monkeypatch, ENABLE_SECURITY_HEADERS=False)
 
         client = TestClient(
@@ -195,7 +215,10 @@ class TestSecurityHeadersDesactivado:
 
 
 class TestSecurityHeadersBase:
+    """Agrupa pruebas relacionadas con security headers base."""
+
     def test_añade_headers_y_hsts_en_https(self, monkeypatch):
+        """Verifica que añade headers y hsts en https."""
         _sec_monkeypatch(monkeypatch)
 
         client = TestClient(
@@ -211,6 +234,7 @@ class TestSecurityHeadersBase:
         assert "Strict-Transport-Security" in response.headers
 
     def test_no_añade_hsts_en_http(self, monkeypatch):
+        """Verifica que no añade hsts en HTTP."""
         _sec_monkeypatch(monkeypatch)
 
         client = TestClient(_build_security_headers_app(), base_url="http://testserver")
@@ -221,6 +245,7 @@ class TestSecurityHeadersBase:
         assert response.headers["X-Content-Type-Options"] == "nosniff"
 
     def test_x_frame_options_configurable(self, monkeypatch):
+        """Verifica que x frame options configurable."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_X_FRAME_OPTIONS="SAMEORIGIN")
 
         client = TestClient(
@@ -231,6 +256,7 @@ class TestSecurityHeadersBase:
         assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
 
     def test_referrer_policy_configurable(self, monkeypatch):
+        """Verifica que referrer policy configurable."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_REFERRER_POLICY="strict-origin")
 
         client = TestClient(
@@ -247,7 +273,10 @@ class TestSecurityHeadersBase:
 
 
 class TestSecurityHeadersHSTS:
+    """Agrupa pruebas relacionadas con security headers hsts."""
+
     def test_hsts_incluye_max_age(self, monkeypatch):
+        """Verifica que hsts incluye max age."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_SECONDS=31536000)
 
         client = TestClient(
@@ -258,6 +287,7 @@ class TestSecurityHeadersHSTS:
         assert "max-age=31536000" in hsts
 
     def test_hsts_include_subdomains(self, monkeypatch):
+        """Verifica que hsts include subdomains."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS=True)
 
         client = TestClient(
@@ -268,6 +298,7 @@ class TestSecurityHeadersHSTS:
         assert "includeSubDomains" in hsts
 
     def test_hsts_sin_include_subdomains(self, monkeypatch):
+        """Verifica que hsts sin include subdomains."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS=False)
 
         client = TestClient(
@@ -278,6 +309,7 @@ class TestSecurityHeadersHSTS:
         assert "includeSubDomains" not in hsts
 
     def test_hsts_con_preload(self, monkeypatch):
+        """Verifica que hsts con preload."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_PRELOAD=True)
 
         client = TestClient(
@@ -288,6 +320,7 @@ class TestSecurityHeadersHSTS:
         assert "preload" in hsts
 
     def test_hsts_sin_preload(self, monkeypatch):
+        """Verifica que hsts sin preload."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_PRELOAD=False)
 
         client = TestClient(
@@ -298,6 +331,7 @@ class TestSecurityHeadersHSTS:
         assert "preload" not in hsts
 
     def test_hsts_no_aparece_si_seconds_es_cero(self, monkeypatch):
+        """Verifica que hsts no aparece si seconds es cero."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_HSTS_SECONDS=0)
 
         client = TestClient(
@@ -314,7 +348,10 @@ class TestSecurityHeadersHSTS:
 
 
 class TestSecurityHeadersCSP:
+    """Agrupa pruebas relacionadas con security headers csp."""
+
     def test_csp_no_aparece_si_vacio(self, monkeypatch):
+        """Verifica que csp no aparece si vacio."""
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_CONTENT_SECURITY_POLICY="")
 
         client = TestClient(
@@ -325,6 +362,7 @@ class TestSecurityHeadersCSP:
         assert "Content-Security-Policy" not in response.headers
 
     def test_csp_aparece_cuando_configurado(self, monkeypatch):
+        """Verifica que csp aparece cuando configurado."""
         politica = "default-src 'self'; img-src *"
         _sec_monkeypatch(monkeypatch, SEC_HEADERS_CONTENT_SECURITY_POLICY=politica)
 

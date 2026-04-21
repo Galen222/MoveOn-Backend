@@ -28,11 +28,11 @@ REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 APP_ID = settings.APP_ID
 APP_SESSION_SECRET = settings.APP_SESSION_SECRET
 APP_SESSION_EXPIRE_MINUTES = settings.APP_SESSION_EXPIRE_MINUTES
-# JWT hardening (mismo issuer/audience para TODOS los JWT)
+# Endurecimiento de JWT (mismo emisor/audiencia para todos los JWT)
 JWT_ISSUER = settings.JWT_ISSUER
 JWT_AUDIENCE = settings.JWT_AUDIENCE
 
-# Instancia de seguridad que activa el botón "Authorize" en Swagger.
+# Instancia de seguridad que activa el botón "Autorizar" en Swagger.
 security_scheme = HTTPBearer()
 
 
@@ -50,6 +50,7 @@ def comprobar_password(password_plana: str, password_encriptada: str) -> bool:
 
 
 def _ahora_utc() -> datetime:
+    """Devuelve la fecha y hora actual en UTC."""
     return datetime.now(timezone.utc)
 
 
@@ -58,6 +59,7 @@ def codifica_jwt(payload: dict, secret: str, expires_delta: timedelta, typ: str)
     Firma un JWT con claims comunes:
       - exp, iat, iss, aud, typ
     """
+    # Gestiona codifica JWT.
     ahora = _ahora_utc()
     exp = ahora + expires_delta
 
@@ -84,6 +86,7 @@ def decodifica_jwt(token: str, secret: str, expected_typ: str) -> dict[str, Any]
       - aud
       - typ
     """
+    # Gestiona decodifica JWT.
     payload: dict[str, Any] = jwt.decode(
         token,
         str(secret),
@@ -203,6 +206,7 @@ def obtener_usuario_actual(
     Usa la dependencia de FastAPI para capturar el token del botón Authorize.
     """
     # El token ya viene limpio sin la palabra "Bearer" gracias a HTTPAuthorizationCredentials.
+    # Obtiene usuario actual.
     token = res.credentials
 
     try:

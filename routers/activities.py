@@ -1,5 +1,7 @@
 # routers/activities.py
 
+"""Define los endpoints y dependencias de este router."""
+
 from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import schemas
@@ -23,6 +25,7 @@ async def guardar_actividad(
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
+    """Guarda actividad."""
     return await activities_service.crear_actividad(db, usuario_actual_id, datos)
 
 
@@ -36,9 +39,9 @@ async def guardar_actividad_diagnostico(
     datos: schemas.GuardarActividadDiagnostico,
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
-):
+) -> schemas.RespuestaGuardarActividadDiagnostico:
     """
-    Recibe un bloque auxiliar de diagnóstico de tracking.
+    Recibe un bloque auxiliar de diagnóstico de seguimiento.
 
     La app lo enviará solo en builds internas con telemetría activada.
     Reutilizamos el mismo rate-limit que el guardado de actividad para no
@@ -102,6 +105,7 @@ async def borrar_actividad(
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
+    """Elimina actividad."""
     return await activities_service.eliminar_actividad(
         db, usuario_actual_id, id_actividad
     )

@@ -1,3 +1,7 @@
+# tests/test_activities_service.py
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,10 +14,14 @@ from services import activities_service
 
 
 def _ahora() -> datetime:
+    """Devuelve la fecha y hora actual."""
     return datetime.now(timezone.utc)
 
 
-def _make_usuario(id: int = 1, total_metros: int = 0, total_calorias: int = 0) -> MagicMock:
+def _make_usuario(
+    id: int = 1, total_metros: int = 0, total_calorias: int = 0
+) -> MagicMock:
+    """Construye un usuario simulado."""
     usuario = MagicMock()
     usuario.id = id
     usuario.total_metros = total_metros
@@ -22,6 +30,7 @@ def _make_usuario(id: int = 1, total_metros: int = 0, total_calorias: int = 0) -
 
 
 def _make_datos() -> schemas.GuardarActividad:
+    """Construye datos."""
     return schemas.GuardarActividad(
         tipo=TipoActividad.CORRER,
         distancia=5000,
@@ -44,12 +53,18 @@ def _make_datos() -> schemas.GuardarActividad:
 
 
 def _mock_execute_one(resultado):
-    return AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=resultado)))
+    """Crea un simulacro de execute one."""
+    return AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=resultado))
+    )
 
 
 class TestCrearActividad:
+    """Agrupa pruebas relacionadas con crear actividad."""
+
     @pytest.mark.asyncio
     async def test_usuario_no_encontrado_lanza_404(self):
+        """Verifica que usuario no encontrado lanza 404."""
         db = AsyncMock()
         db.execute = _mock_execute_one(None)
         with pytest.raises(HTTPException):
@@ -57,6 +72,8 @@ class TestCrearActividad:
 
     @pytest.mark.asyncio
     async def test_persiste_metricas_enriquecidas(self):
+        """Verifica que persiste metricas enriquecidas."""
+        # Verifica que persiste metricas enriquecidas.
         usuario = _make_usuario(total_metros=1000, total_calorias=50)
         db = AsyncMock()
         db.execute = _mock_execute_one(usuario)
@@ -64,7 +81,10 @@ class TestCrearActividad:
         db.commit = AsyncMock()
         db.refresh = AsyncMock()
 
-        with patch('services.activities_service.calculos.calcular_puntos_nivel', return_value=15):
+        with patch(
+            "services.activities_service.calculos.calcular_puntos_nivel",
+            return_value=15,
+        ):
             resultado = await activities_service.crear_actividad(db, 1, _make_datos())
 
         actividad = db.add.call_args[0][0]
@@ -74,8 +94,8 @@ class TestCrearActividad:
         assert actividad.ritmo_medio_movimiento == 336
         assert actividad.ritmo_medio_total == 360
         assert actividad.ritmo_maximo == 290
-        assert resultado['velocidad_max_x100'] == 1840
-        assert resultado['ritmo_maximo'] == 290
-        assert resultado['nuevo_total_puntos'] == 15
+        assert resultado["velocidad_max_x100"] == 1840
+        assert resultado["ritmo_maximo"] == 290
+        assert resultado["nuevo_total_puntos"] == 15
         assert usuario.total_metros == 6000
         assert usuario.total_calorias == 350

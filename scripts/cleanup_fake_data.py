@@ -1,3 +1,7 @@
+# scripts/cleanup_fake_data.py
+
+"""Incluye un script de apoyo para tareas del proyecto."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,14 +16,13 @@ from sqlalchemy import delete, func, or_, select  # noqa: E402
 
 import database  # noqa: E402
 
-
 """
 Script para borrar exclusivamente los datos creados por scripts/seed_fake_data.py.
 
 Qué elimina:
-- Actividades de los usuarios fake
+- Actividades de los usuarios simulados
 - Sesiones refresh de esos usuarios
-- Los propios usuarios fake
+- Los propios usuarios simulados
 
 Usuarios objetivo:
 - Emails: prueba01@prueba.com ... prueba20@prueba.com
@@ -59,6 +62,8 @@ USERNAMES_FAKE = [
 
 
 async def cleanup_fake_data() -> None:
+    """Limpia los datos simulados de prueba."""
+    # Eliminar los datos simulados creados para las pruebas.
     if database.AsyncSessionLocal is None:
         database._init_db_objects()
 
@@ -82,7 +87,7 @@ async def cleanup_fake_data() -> None:
         filas = result.all()
 
         if not filas:
-            print("No se han encontrado usuarios fake para borrar.")
+            print("No se han encontrado usuarios simulados para borrar.")
             return
 
         user_ids = [fila.id for fila in filas]
@@ -129,9 +134,7 @@ async def cleanup_fake_data() -> None:
             )
 
             await db.execute(
-                delete(database.Usuario).where(
-                    database.Usuario.id.in_(user_ids)
-                )
+                delete(database.Usuario).where(database.Usuario.id.in_(user_ids))
             )
 
             await db.commit()
@@ -148,6 +151,7 @@ async def cleanup_fake_data() -> None:
 
 
 async def main() -> None:
+    """Gestiona principal."""
     await cleanup_fake_data()
 
 

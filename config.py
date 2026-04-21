@@ -1,11 +1,14 @@
 # config.py
 
+"""Define la configuración de la aplicación."""
+
 from pydantic import ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # Base de Datos
+    """Agrupa la configuración de la aplicación."""
     DB_USER: str
     DB_PASSWORD: str
     DB_HOST: str
@@ -72,7 +75,7 @@ class Settings(BaseSettings):
     EMAIL_MAX_RETRIES: int = 3
     EMAIL_RETRY_BASE_DELAY_SECONDS: float = 1.0
 
-    # JWT hardening (mismo issuer/audience para TODOS los JWT)
+    # Endurecimiento de JWT (mismo emisor/audiencia para todos los JWT)
     JWT_ISSUER: str = "moveon_api"
     JWT_AUDIENCE: str = "moveon_app"
 
@@ -94,7 +97,7 @@ class Settings(BaseSettings):
     TRUST_PROXY_WAN_CIDRS: str = ""  # ej: "203.0.113.0/24,198.51.100.22/32"
     TRUST_PROXY_HEADER_ORDER: str = "x-forwarded-for,x-real-ip"
 
-    # Security headers
+    # Cabeceras de seguridad
     ENABLE_SECURITY_HEADERS: bool = False
     SEC_HEADERS_RESPECT_X_FORWARDED_PROTO: bool = False
     SEC_HEADERS_HSTS_SECONDS: int = 31536000
@@ -105,7 +108,7 @@ class Settings(BaseSettings):
     SEC_HEADERS_PERMISSIONS_POLICY: str = "geolocation=(), microphone=(), camera=()"
     SEC_HEADERS_CONTENT_SECURITY_POLICY: str = ""  # opcional (en APIs suele ir vacío)
 
-    # Rate Limit
+    # Límite de tasa
     ENABLE_RATE_LIMIT_IP: bool = True  # SlowAPI (por IP)
     ENABLE_RATE_LIMIT_ID: bool = True  # In-memory (por email/usuario)
 
@@ -188,6 +191,7 @@ class Settings(BaseSettings):
     @field_validator("PUBLIC_BASE_URL", mode="before")
     @classmethod
     def validar_public_base_url(cls, v: object) -> str:
+        """Valida public base URL."""
         if v in (None, ""):
             return ""
 
@@ -211,6 +215,7 @@ class Settings(BaseSettings):
     )
     @classmethod
     def validar_secretos_fuertes(cls, v: object, info: ValidationInfo) -> str:
+        """Valida secretos fuertes."""
         if not isinstance(v, str):
             raise ValueError(f"{info.field_name} debe ser un string")
 
@@ -244,6 +249,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validar_secretos_distintos(self):
+        """Valida secretos distintos."""
+        # Valida secretos distintos.
         secretos = [
             self.APP_SESSION_SECRET,
             self.ACCESS_TOKEN_SECRET,
@@ -268,5 +275,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
-
-

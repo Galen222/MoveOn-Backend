@@ -1,5 +1,6 @@
-
 # services/access_service.py
+
+"""Implementa la lógica de negocio de este servicio."""
 
 from __future__ import annotations
 
@@ -29,11 +30,13 @@ logger = logging.getLogger("app.auth")
 
 
 def _ahora_utc() -> datetime:
+    """Devuelve la fecha y hora actual en UTC."""
     return datetime.now(timezone.utc)
 
 
 def _normalizar_utc(dt: datetime) -> datetime:
     # Por compatibilidad si SQLAlchemy devuelve naive datetime
+    """Normaliza utc."""
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
@@ -47,6 +50,7 @@ def _hash_refresh_token(token: str) -> str:
 
 
 async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
+    """Gestiona revocar familia refresco."""
     ahora = _ahora_utc()
 
     await db.execute(
@@ -75,6 +79,8 @@ async def buscar_por_identificador(db: AsyncSession, identificador: str):
 
 
 async def buscar_usuario_por_id(db: AsyncSession, usuario_id: int):
+    """Gestiona buscar usuario por identificador."""
+    # Gestiona buscar usuario por identificador.
     usuario = (
         await db.execute(
             select(database.Usuario).where(database.Usuario.id == usuario_id)
@@ -98,6 +104,7 @@ async def crear_sesion_login(db: AsyncSession, usuario: database.Usuario):
     - refresh token (largo)
     - registro de refresh en DB (hash)
     """
+    # Construye sesion login.
     ahora = _ahora_utc()
     jti = uuid.uuid4().hex
     familia_id = uuid.uuid4().hex
@@ -156,12 +163,16 @@ def _hash_codigo_recuperacion(codigo: str) -> str:
 
 
 def _mensaje_recuperacion_generico(locale: str) -> str:
+    """Gestiona mensaje recuperacion generico."""
     if locale == "en":
-        return "If the account supports recovery, you will receive instructions by email."
+        return (
+            "If the account supports recovery, you will receive instructions by email."
+        )
     return "Si la cuenta admite recuperación, recibirás instrucciones por correo."
 
 
 def _safe_log_usuario_id(usuario: object) -> int | None:
+    """Gestiona safe log usuario identificador."""
     valor = getattr(usuario, "id", None)
     return valor if isinstance(valor, int) and valor > 0 else None
 
@@ -176,6 +187,7 @@ async def _usuario_tiene_vinculo_google(db: AsyncSession, usuario_id: object) ->
     - Si el resultado de ``db.execute`` no expone ``scalar_one_or_none()`` de forma
       válida, se considera que no existe vínculo.
     """
+    # Gestiona usuario tiene vinculo google.
     if not isinstance(usuario_id, int) or usuario_id <= 0:
         return False
 
@@ -230,6 +242,7 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     usuario_id_token = int(usuario_id_token)
 
     async def _commit_or_rollback():
+        """Gestiona commit or rollback."""
         try:
             await db.commit()
         except Exception:
@@ -390,6 +403,8 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
 async def _limpiar_sesiones_refresh_usuario(
     db: AsyncSession, usuario_id: int, older_than_days: Optional[int] = None
 ):
+    """Normaliza sesiones refresco usuario."""
+    # Normaliza sesiones refresco usuario.
     if older_than_days is None:
         older_than_days = int(settings.REFRESH_SESSION_CLEANUP_DAYS)
 
@@ -697,5 +712,3 @@ async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
     )
 
     return {"estatus": "success", "mensaje": "Contraseña actualizada correctamente"}
-
-

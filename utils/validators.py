@@ -1,5 +1,7 @@
 # utils/validators.py
 
+"""Incluye utilidades auxiliares de la aplicación."""
+
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -30,7 +32,7 @@ def validar_nombre_real_logica(v: str) -> str:
             "Error: El nombre real es demasiado corto", "REAL_NAME_TOO_SHORT"
         )
 
-    # Límite superior para evitar payloads absurdamente grandes
+    # Límite superior para evitar carga útils absurdamente grandes
     if len(v) > 80:
         raise AppValidationError(
             "Error: El nombre real no puede superar los 80 caracteres",
@@ -113,6 +115,7 @@ def validar_peso_logica(v: float) -> float:
 
 
 def validar_fecha_ruta_logica(v: datetime) -> datetime:
+    """Valida fecha ruta logica."""
     if v:
         ahora = datetime.now(timezone.utc)
 
@@ -196,10 +199,9 @@ def validar_polilinea_logica(v: str) -> str:
     return v
 
 
-
-
-
-def validar_duracion_no_negativa_logica(v: int, field_name: str, error_prefix: str) -> int:
+def validar_duracion_no_negativa_logica(
+    v: int, field_name: str, error_prefix: str
+) -> int:
     """Valida duraciones no negativas con máximo operativo de 24 horas."""
     if v < 0:
         raise AppValidationError(

@@ -1,9 +1,11 @@
 # tests/test_ip_rate_limit.py
-#
-# Tests para ip_rate_limit.py.
+
+"""Contiene pruebas automatizadas de este módulo."""
+
+# Pruebas para ip_rate_limit.py.
 # Cubre: detección de proxy confiable (LAN/WAN), extracción de IP
 # desde headers y resolución final de get_client_ip.
-#
+
 # Estrategia: parchear los módulo-level globals (LAN_NETS, WAN_NETS, WAN_IPS)
 # y settings en lugar de importar con variables de entorno alternativas,
 # para no depender del orden de importación de pytest.
@@ -12,12 +14,10 @@ from ipaddress import ip_network
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-
 import ip_rate_limit
 
-
 # ─────────────────────────────────────────────
-# Helper
+# Ayudante
 # ─────────────────────────────────────────────
 
 
@@ -28,6 +28,7 @@ class FakeRequest:
     """
 
     def __init__(self, host: str, headers: dict | None = None):
+        """Inicializa la instancia."""
         self.client = SimpleNamespace(host=host)
         self.headers = headers or {}
 
@@ -38,7 +39,10 @@ class FakeRequest:
 
 
 class TestConnFromTrustedProxy:
+    """Agrupa pruebas relacionadas con conn from trusted proxy."""
+
     def test_sin_proxy_configurado_retorna_false(self):
+        """Verifica que sin proxy configurado retorna false."""
         request = FakeRequest("1.2.3.4")
         with patch.object(
             ip_rate_limit.settings, "TRUST_PROXY_LAN", False
@@ -46,6 +50,7 @@ class TestConnFromTrustedProxy:
             assert ip_rate_limit.conn_from_trusted_proxy(request) is False  # type: ignore[arg-type]
 
     def test_ip_en_red_lan_confiable_retorna_true(self):
+        """Verifica que IP en red lan confiable retorna true."""
         request = FakeRequest("192.168.1.50")
         with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), patch(
             "ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]
@@ -53,6 +58,7 @@ class TestConnFromTrustedProxy:
             assert ip_rate_limit.conn_from_trusted_proxy(request) is True  # type: ignore[arg-type]
 
     def test_ip_fuera_de_red_lan_retorna_false(self):
+        """Verifica que IP fuera de red lan retorna false."""
         request = FakeRequest("10.0.0.1")
         with patch.object(ip_rate_limit.settings, "TRUST_PROXY_LAN", True), patch(
             "ip_rate_limit.LAN_NETS", [ip_network("192.168.0.0/16")]
@@ -60,6 +66,7 @@ class TestConnFromTrustedProxy:
             assert ip_rate_limit.conn_from_trusted_proxy(request) is False  # type: ignore[arg-type]
 
     def test_ip_wan_exacta_en_whitelist_retorna_true(self):
+        """Verifica que IP wan exacta en whitelist retorna true."""
         request = FakeRequest("203.0.113.10")
         with patch.object(
             ip_rate_limit.settings, "TRUST_PROXY_LAN", False
@@ -71,6 +78,7 @@ class TestConnFromTrustedProxy:
             assert ip_rate_limit.conn_from_trusted_proxy(request) is True  # type: ignore[arg-type]
 
     def test_ip_wan_en_cidr_retorna_true(self):
+        """Verifica que IP wan en cidr retorna true."""
         request = FakeRequest("198.51.100.5")
         with patch.object(
             ip_rate_limit.settings, "TRUST_PROXY_LAN", False
@@ -82,6 +90,7 @@ class TestConnFromTrustedProxy:
             assert ip_rate_limit.conn_from_trusted_proxy(request) is True  # type: ignore[arg-type]
 
     def test_ip_wan_fuera_de_cidr_retorna_false(self):
+        """Verifica que IP wan fuera de cidr retorna false."""
         request = FakeRequest("1.1.1.1")
         with patch.object(
             ip_rate_limit.settings, "TRUST_PROXY_LAN", False
@@ -114,6 +123,8 @@ class TestConnFromTrustedProxy:
 
 
 class TestExtractIpFromHeaders:
+    """Agrupa pruebas relacionadas con extract IP from headers."""
+
     def test_extrae_primera_ip_de_x_forwarded_for_lista(self):
         """X-Forwarded-For puede llegar con múltiples IPs separadas por coma."""
         request = FakeRequest(
@@ -124,6 +135,7 @@ class TestExtractIpFromHeaders:
         assert ip == "1.2.3.4"
 
     def test_extrae_ip_de_x_real_ip(self):
+        """Verifica que extrae IP de x real IP."""
         request = FakeRequest("proxy", headers={"x-real-ip": "9.9.9.9"})
         with patch("ip_rate_limit.HEADER_ORDER", ["x-real-ip"]):
             ip = ip_rate_limit._extract_ip_from_headers(request)  # type: ignore[arg-type]
@@ -141,6 +153,7 @@ class TestExtractIpFromHeaders:
         assert ip == "2.2.2.2"
 
     def test_sin_headers_retorna_none(self):
+        """Verifica que sin headers retorna none."""
         request = FakeRequest("proxy", headers={})
         with patch("ip_rate_limit.HEADER_ORDER", ["x-forwarded-for", "x-real-ip"]):
             ip = ip_rate_limit._extract_ip_from_headers(request)  # type: ignore[arg-type]
@@ -158,6 +171,7 @@ class TestExtractIpFromHeaders:
         assert ip == "5.5.5.5"
 
     def test_todos_los_headers_invalidos_retorna_none(self):
+        """Verifica que todos los headers invalidos retorna none."""
         request = FakeRequest("proxy", headers={"x-forwarded-for": "basura"})
         with patch("ip_rate_limit.HEADER_ORDER", ["x-forwarded-for"]):
             ip = ip_rate_limit._extract_ip_from_headers(request)  # type: ignore[arg-type]
@@ -170,6 +184,8 @@ class TestExtractIpFromHeaders:
 
 
 class TestGetClientIp:
+    """Agrupa pruebas relacionadas con get client IP."""
+
     def test_sin_proxy_usa_ip_del_socket(self):
         """Si no es proxy confiable, se ignoran los headers y se usa el socket."""
         request = FakeRequest("1.2.3.4", headers={"x-forwarded-for": "5.5.5.5"})

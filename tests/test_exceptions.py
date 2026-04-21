@@ -1,9 +1,11 @@
 # tests/test_exceptions.py
-#
-# Tests para exceptions.py.
-# Cubre: error_response, manejador_http_exception,
+
+"""Contiene pruebas automatizadas de este módulo."""
+
+# Pruebas para exceptions.py.
+# Cubre: error_respuesta, manejador_http_exception,
 # manejador_excepcion_no_controlada y manejador_validacion_personalizado.
-#
+
 # Para el manejador de validación usamos una app FastAPI real con TestClient,
 # que es la forma más fiable de disparar un RequestValidationError real.
 
@@ -22,13 +24,13 @@ from exceptions import (
     manejador_validacion_personalizado,
 )
 
-
 # ─────────────────────────────────────────────
-# Helper
+# Ayudante
 # ─────────────────────────────────────────────
 
 
 def _fake_request():
+    """Crea un simulacro de request."""
     req = MagicMock()
     req.method = "GET"
     req.url.path = "/test"
@@ -36,16 +38,20 @@ def _fake_request():
 
 
 def _body(resp) -> dict:
+    """Gestiona body."""
     return json.loads(resp.body)
 
 
 # ─────────────────────────────────────────────
-# error_response
+# error_respuesta
 # ─────────────────────────────────────────────
 
 
 class TestErrorResponse:
+    """Agrupa pruebas relacionadas con error response."""
+
     def test_formato_basico_sin_detail(self):
+        """Verifica que formato basico sin detail."""
         resp = error_response(400, "algo malo")
         body = _body(resp)
 
@@ -56,6 +62,7 @@ class TestErrorResponse:
         assert "detail" not in body
 
     def test_incluye_detail_y_normaliza_error_code(self):
+        """Verifica que incluye detail y normaliza error code."""
         detalle = [{"columna": "email", "mensaje": "inválido"}]
         resp = error_response(422, "Solicitud inválida", detail=detalle)
         body = _body(resp)
@@ -70,17 +77,20 @@ class TestErrorResponse:
         ]
 
     def test_no_incluye_detail_cuando_es_none(self):
+        """Verifica que no incluye detail cuando es none."""
         resp = error_response(400, "error", detail=None)
         body = _body(resp)
         assert "detail" not in body
 
     def test_propaga_headers_personalizados(self):
+        """Verifica que propaga headers personalizados."""
         headers = {"x-app-session-expired": "1"}
         resp = error_response(403, "token expirado", headers=headers)
 
         assert resp.headers.get("x-app-session-expired") == "1"
 
     def test_distintos_status_codes(self):
+        """Verifica que distintos status codes."""
         for code in [400, 401, 403, 404, 429, 500]:
             resp = error_response(code, "mensaje")
             assert resp.status_code == code
@@ -93,7 +103,10 @@ class TestErrorResponse:
 
 
 class TestManejadorHttpException:
+    """Agrupa pruebas relacionadas con manejador HTTP exception."""
+
     def test_string_detail_se_convierte_a_mensaje(self):
+        """Verifica que string detail se convierte a mensaje."""
         exc = HTTPException(status_code=404, detail="Error: recurso no encontrado")
         resp = manejador_http_exception(_fake_request(), exc)
         body = _body(resp)
@@ -105,6 +118,7 @@ class TestManejadorHttpException:
         assert "detail" not in body
 
     def test_string_detail_400_prioriza_codigo_semantico_sobre_bad_request(self):
+        """Verifica que string detail 400 prioriza codigo semantico sobre bad request."""
         exc = HTTPException(status_code=400, detail="Error: El email ya está en uso")
         resp = manejador_http_exception(_fake_request(), exc)
         body = _body(resp)
@@ -114,6 +128,8 @@ class TestManejadorHttpException:
         assert body["error_code"] == "BAD_REQUEST"
 
     def test_list_detail_genera_formato_con_detail(self):
+        """Verifica que list detail genera formato con detail."""
+        # Verifica que list detail genera formato con detail.
         detalle = [{"columna": "password", "mensaje": "muy corta"}]
         exc = HTTPException(status_code=422, detail=detalle)
         resp = manejador_http_exception(_fake_request(), exc)
@@ -131,6 +147,7 @@ class TestManejadorHttpException:
         ]
 
     def test_detail_dict_estructurado_preserva_error_code(self):
+        """Verifica que detail dict estructurado preserva error code."""
         exc = HTTPException(
             status_code=409,
             detail={
@@ -146,6 +163,7 @@ class TestManejadorHttpException:
         assert body["error_code"] == "EMAIL_ALREADY_IN_USE"
 
     def test_detail_de_tipo_desconocido_devuelve_mensaje_generico(self):
+        """Verifica que detail de tipo desconocido devuelve mensaje generico."""
         exc = HTTPException(status_code=500, detail={"unexpected": "dict"})
         resp = manejador_http_exception(_fake_request(), exc)
         body = _body(resp)
@@ -166,6 +184,7 @@ class TestManejadorHttpException:
         assert resp.headers.get("x-app-session-expired") == "1"
 
     def test_401_preserva_status_code(self):
+        """Verifica que 401 preserva status code."""
         exc = HTTPException(status_code=401, detail="Error: no autorizado")
         resp = manejador_http_exception(_fake_request(), exc)
         assert resp.status_code == 401
@@ -177,7 +196,10 @@ class TestManejadorHttpException:
 
 
 class TestManejadorExcepcionNoControlada:
+    """Agrupa pruebas relacionadas con manejador excepcion no controlada."""
+
     def test_devuelve_500_con_mensaje_generico(self):
+        """Verifica que devuelve 500 con mensaje generico."""
         resp = manejador_excepcion_no_controlada(
             _fake_request(), ValueError("algo interno")
         )
@@ -191,11 +213,14 @@ class TestManejadorExcepcionNoControlada:
         assert "algo interno" not in body["mensaje"]
 
     def test_funciona_con_distintos_tipos_de_excepcion(self):
+        """Verifica que funciona con distintos tipos de excepcion."""
         for exc in [RuntimeError("x"), KeyError("k"), Exception("genérica")]:
             resp = manejador_excepcion_no_controlada(_fake_request(), exc)
             assert resp.status_code == 500
 
     def test_loggea_error_global_con_campos_estructurados(self):
+        """Verifica que loggea error global con campos estructurados."""
+        # Verifica que loggea error global con campos estructurados.
         fake_logger = MagicMock()
 
         with patch(
@@ -229,22 +254,28 @@ class TestManejadorValidacionPersonalizado:
     """
 
     def _build_app(self):
+        """Construye la aplicación de prueba."""
+        # Crear la aplicación de prueba y registrar sus manejadores.
         app = FastAPI()
         app.add_exception_handler(
             RequestValidationError, manejador_validacion_personalizado
         )
 
         class Payload(BaseModel):
+            """Representa payload."""
+
             edad: int
             email: str
 
         @app.post("/test")
         async def endpoint(datos: Payload):
+            """Gestiona endpoint."""
             return datos
 
         return app
 
     def test_error_pydantic_devuelve_422_con_estatus_error(self):
+        """Verifica que error pydantic devuelve 422 con estatus error."""
         client = TestClient(self._build_app(), raise_server_exceptions=False)
         response = client.post(
             "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
@@ -256,6 +287,7 @@ class TestManejadorValidacionPersonalizado:
         assert body["error_code"] == "VALIDATION_ERROR"
 
     def test_mensaje_es_solicitud_invalida(self):
+        """Verifica que mensaje es solicitud invalida."""
         client = TestClient(self._build_app(), raise_server_exceptions=False)
         response = client.post(
             "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
@@ -264,6 +296,8 @@ class TestManejadorValidacionPersonalizado:
         assert response.json()["mensaje"] == "Solicitud inválida"
 
     def test_detail_contiene_columna_mensaje_y_error_code(self):
+        """Verifica que detail contiene columna mensaje y error code."""
+        # Verifica que detail contiene columna mensaje y error code.
         client = TestClient(self._build_app(), raise_server_exceptions=False)
         response = client.post(
             "/test", json={"edad": "no-es-int", "email": "ok@test.com"}
@@ -281,6 +315,7 @@ class TestManejadorValidacionPersonalizado:
         assert "error_code" in primer_error
 
     def test_columna_identifica_el_campo_correcto(self):
+        """Verifica que columna identifica el campo correcto."""
         client = TestClient(self._build_app(), raise_server_exceptions=False)
         response = client.post(
             "/test", json={"edad": "no-es-int", "email": "ok@test.com"}

@@ -1,5 +1,7 @@
 # logging_config.py
 
+"""Módulo relacionado con registro configuración."""
+
 import json
 import logging
 import sys
@@ -15,13 +17,11 @@ except Exception:
 from config import settings
 from middlewares.request_context import get_request_id
 
-
 RESET = "\033[0m"
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
 CYAN = "\033[36m"
-
 
 _STANDARD_LOG_RECORD_KEYS = {
     "name",
@@ -53,10 +53,13 @@ _STANDARD_LOG_RECORD_KEYS = {
 
 
 def _color(text: str, color: str) -> str:
+    """Gestiona color."""
     return f"{color}{text}{RESET}"
 
 
 def _level_prefix(levelname: str) -> str:
+    """Gestiona level prefix."""
+    # Gestiona level prefix.
     plain = f"{levelname}:".ljust(10)
 
     if levelname == "INFO":
@@ -76,6 +79,7 @@ def _level_prefix(levelname: str) -> str:
 
 
 def _format_extra(key: str, value: Any) -> str:
+    """Gestiona format extra."""
     if key == "status_code":
         try:
             code = int(value)
@@ -92,7 +96,10 @@ def _format_extra(key: str, value: Any) -> str:
 
 
 class RequestIdFilter(logging.Filter):
+    """Filtro para request identificador."""
+
     def filter(self, record: logging.LogRecord) -> bool:
+        """Gestiona filter."""
         record.request_id = get_request_id()
         return True
 
@@ -104,6 +111,8 @@ class JsonPipeFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        """Gestiona format."""
+        # Gestiona format.
         timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
         message = record.getMessage()
         request_id = getattr(record, "request_id", "-")
@@ -125,6 +134,7 @@ class JsonPipeFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
     def _get_extras(self, record: logging.LogRecord) -> dict[str, Any]:
+        """Obtiene extras."""
         extras: dict[str, Any] = {}
 
         for key, value in record.__dict__.items():
@@ -138,10 +148,12 @@ class JsonPipeFormatter(logging.Formatter):
 class ConsolePipeFormatter(logging.Formatter):
     """
     Emite texto plano para consola interactiva con formato tipo uvicorn:
-    INFO:     2026-03-08 13:10:00 | app.main | aplicacion_iniciada | request_id=abc123
+    INFO:     2026-03-08 13:10:00 | app.main | aplicacion_iniciada | petición_id=abc123
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        """Gestiona format."""
+        # Gestiona format.
         timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
         message = record.getMessage()
         request_id = getattr(record, "request_id", "-")
@@ -166,6 +178,7 @@ class ConsolePipeFormatter(logging.Formatter):
         return out
 
     def _get_extras(self, record: logging.LogRecord) -> dict[str, Any]:
+        """Obtiene extras."""
         extras: dict[str, Any] = {}
 
         for key, value in record.__dict__.items():
@@ -177,6 +190,8 @@ class ConsolePipeFormatter(logging.Formatter):
 
 
 def setup_logging() -> None:
+    """Gestiona setup registro."""
+    # Gestiona setup registro.
     handler = logging.StreamHandler(sys.stdout)
     handler.addFilter(RequestIdFilter())
 

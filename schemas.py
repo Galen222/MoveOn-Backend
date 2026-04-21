@@ -54,6 +54,7 @@ class Registro(BaseModel):
     @classmethod
     def validar_campos_requeridos_registro(cls, values: Any) -> Any:
         """Revisa que se reciban todos los campos obligatorios."""
+        # Valida campos requeridos registro.
         if isinstance(values, dict):
             if "nombre_usuario" not in values or not values["nombre_usuario"]:
                 raise AppValidationError(
@@ -78,6 +79,7 @@ class Registro(BaseModel):
     @classmethod
     def validar_nombre_usuario(cls, valor: str) -> str:
         # Quitar espacios.
+        """Valida nombre usuario."""
         valor = valor.strip()
         # Validación de longitud mínima.
         if len(valor) < 5:
@@ -102,6 +104,7 @@ class Registro(BaseModel):
     @field_validator("nombre_real")
     @classmethod
     def validar_nombre_real_registro(cls, v):
+        """Valida nombre real registro."""
         if v is None:
             return v
         v = v.strip()
@@ -129,6 +132,7 @@ class Registro(BaseModel):
     @field_validator("password")
     @classmethod
     def validar_password_registro(cls, v):
+        """Valida password registro."""
         return validators.validar_password_logica(v)
 
     @field_validator("fecha_nacimiento", mode="wrap")
@@ -145,6 +149,7 @@ class Registro(BaseModel):
     @field_validator("fecha_nacimiento")
     @classmethod
     def validar_fecha_nacimiento_registro(cls, v):
+        """Valida fecha nacimiento registro."""
         return validators.validar_fecha_nacimiento_logica(v)
 
     @field_validator("genero", mode="wrap")
@@ -169,6 +174,7 @@ class Registro(BaseModel):
     @field_validator("altura")
     @classmethod
     def validar_altura_registro(cls, v):
+        """Valida altura registro."""
         return validators.validar_altura_logica(v)
 
     @field_validator("peso", mode="wrap")
@@ -185,6 +191,7 @@ class Registro(BaseModel):
     @field_validator("peso")
     @classmethod
     def validar_peso_registro(cls, v):
+        """Valida peso registro."""
         return validators.validar_peso_logica(v)
 
     @field_validator("provincia", mode="wrap")
@@ -212,6 +219,7 @@ class Registro(BaseModel):
     @field_validator("acepta_terminos")
     @classmethod
     def validar_acepta_terminos(cls, v: bool) -> bool:
+        """Valida acepta terminos."""
         if not v:
             raise AppValidationError(
                 "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte",
@@ -222,6 +230,7 @@ class Registro(BaseModel):
     @field_validator("fecha_aceptacion_terminos", mode="wrap")
     @classmethod
     def validar_fecha_aceptacion_terminos_custom(cls, v, handler):
+        """Valida fecha aceptacion terminos custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -232,6 +241,7 @@ class Registro(BaseModel):
     @field_validator("fecha_aceptacion_terminos")
     @classmethod
     def validar_fecha_aceptacion_terminos(cls, v: datetime) -> datetime:
+        """Valida fecha aceptacion terminos."""
         from datetime import timedelta, timezone
 
         ahora = datetime.now(timezone.utc)
@@ -246,6 +256,7 @@ class Registro(BaseModel):
     @field_validator("version_terminos")
     @classmethod
     def validar_version_terminos(cls, v: str) -> str:
+        """Valida version terminos."""
         v = v.strip()
         if not v:
             raise AppValidationError(
@@ -256,22 +267,29 @@ class Registro(BaseModel):
 
 
 class RespuestaRegistro(BaseModel):
+    """Representa respuesta registro."""
+
     estatus: str
     mensaje: str
     nombre_usuario: str
 
 
 class ProveedorAuthSocial(str, Enum):
+    """Representa proveedor autenticación social."""
+
     GOOGLE = "google"
 
 
 class LoginSocial(BaseModel):
+    """Representa login social."""
+
     provider: ProveedorAuthSocial
     token: str
 
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_login_social(cls, values: Any) -> Any:
+        """Valida campos requeridos login social."""
         if isinstance(values, dict):
             if "provider" not in values or not values["provider"]:
                 raise AppValidationError(
@@ -288,6 +306,7 @@ class LoginSocial(BaseModel):
     @field_validator("token", mode="before")
     @classmethod
     def limpiar_token_social(cls, valor: Any) -> Any:
+        """Normaliza token social."""
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -300,6 +319,8 @@ class LoginSocial(BaseModel):
 
 
 class RegistroSocial(BaseModel):
+    """Representa registro social."""
+
     provider: ProveedorAuthSocial
     token: str
     nombre_usuario: str = Field(..., min_length=5, max_length=50)
@@ -312,6 +333,8 @@ class RegistroSocial(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_registro_social(cls, values: Any) -> Any:
+        """Valida campos requeridos registro social."""
+        # Valida campos requeridos registro social.
         if isinstance(values, dict):
             if "provider" not in values or not values["provider"]:
                 raise AppValidationError(
@@ -338,6 +361,7 @@ class RegistroSocial(BaseModel):
     @field_validator("token", mode="before")
     @classmethod
     def limpiar_token_registro_social(cls, valor: Any) -> Any:
+        """Normaliza token registro social."""
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -351,6 +375,8 @@ class RegistroSocial(BaseModel):
     @field_validator("nombre_usuario")
     @classmethod
     def validar_nombre_usuario_social(cls, valor: str) -> str:
+        """Valida nombre usuario social."""
+        # Valida nombre usuario social.
         valor = valor.strip()
         if len(valor) < 5:
             raise AppValidationError(
@@ -372,6 +398,7 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_nacimiento", mode="wrap")
     @classmethod
     def validar_fecha_nacimiento_social_custom(cls, v, handler):
+        """Valida fecha nacimiento social custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -382,11 +409,13 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_nacimiento")
     @classmethod
     def validar_fecha_nacimiento_social(cls, v):
+        """Valida fecha nacimiento social."""
         return validators.validar_fecha_nacimiento_logica(v)
 
     @field_validator("perfil_visible", mode="wrap")
     @classmethod
     def validar_perfil_visible_social_custom(cls, v, handler):
+        """Valida perfil visible social custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -397,6 +426,7 @@ class RegistroSocial(BaseModel):
     @field_validator("acepta_terminos")
     @classmethod
     def validar_acepta_terminos_social(cls, v: bool) -> bool:
+        """Valida acepta terminos social."""
         if not v:
             raise AppValidationError(
                 "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte",
@@ -407,6 +437,7 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_aceptacion_terminos", mode="wrap")
     @classmethod
     def validar_fecha_aceptacion_terminos_social_custom(cls, v, handler):
+        """Valida fecha aceptacion terminos social custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -417,6 +448,7 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_aceptacion_terminos")
     @classmethod
     def validar_fecha_aceptacion_terminos_social(cls, v: datetime) -> datetime:
+        """Valida fecha aceptacion terminos social."""
         from datetime import timedelta, timezone
 
         ahora = datetime.now(timezone.utc)
@@ -431,6 +463,7 @@ class RegistroSocial(BaseModel):
     @field_validator("version_terminos")
     @classmethod
     def validar_version_terminos_social(cls, v: str) -> str:
+        """Valida version terminos social."""
         v = v.strip()
         if not v:
             raise AppValidationError(
@@ -464,6 +497,7 @@ class Login(BaseModel):
     @field_validator("identificador", mode="before")
     @classmethod
     def limpiar_identificador(cls, valor: Any) -> Any:
+        """Normaliza identificador."""
         if isinstance(valor, str):
             # Quitar espacios.
             valor_limpio = valor.strip()
@@ -476,6 +510,8 @@ class Login(BaseModel):
 
 
 class RespuestaLogin(BaseModel):
+    """Representa respuesta login."""
+
     estatus: str
     nombre_usuario: str
     token_acceso: str
@@ -483,11 +519,14 @@ class RespuestaLogin(BaseModel):
 
 
 class SolicitudRefreshToken(BaseModel):
+    """Representa solicitud refresco token."""
+
     refresh_token: str = Field(...)
 
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_refresh(cls, values: Any) -> Any:
+        """Valida campos requeridos refresco."""
         if isinstance(values, dict):
             if "refresh_token" not in values or not values["refresh_token"]:
                 raise AppValidationError(
@@ -498,6 +537,7 @@ class SolicitudRefreshToken(BaseModel):
     @field_validator("refresh_token", mode="before")
     @classmethod
     def limpiar_refresh_token(cls, valor: Any) -> Any:
+        """Normaliza refresco token."""
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -510,6 +550,8 @@ class SolicitudRefreshToken(BaseModel):
 
 
 class RespuestaRefreshToken(BaseModel):
+    """Representa respuesta refresco token."""
+
     estatus: str
     nombre_usuario: str
     token_acceso: str
@@ -523,6 +565,8 @@ class SolicitudLogout(SolicitudRefreshToken):
 
 
 class RespuestaInformacionPerfil(BaseModel):
+    """Representa respuesta informacion perfil."""
+
     model_config = ConfigDict(from_attributes=True)
 
     nombre_usuario: str
@@ -564,6 +608,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("nombre_real")
     @classmethod
     def validar_nombre_real_actualizacion(cls, v):
+        """Valida nombre real actualizacion."""
         if v is None:
             return v
         v = v.strip()
@@ -591,6 +636,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("password")
     @classmethod
     def validar_password_actualizacion(cls, v):
+        """Valida password actualizacion."""
         return validators.validar_password_logica(v) if v is not None else v
 
     @field_validator("fecha_nacimiento", mode="wrap")
@@ -607,6 +653,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("fecha_nacimiento")
     @classmethod
     def validar_fecha_nacimiento_actualizacion(cls, v):
+        """Valida fecha nacimiento actualizacion."""
         return validators.validar_fecha_nacimiento_logica(v) if v is not None else v
 
     @field_validator("genero", mode="wrap")
@@ -631,6 +678,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("altura")
     @classmethod
     def validar_altura_actualizacion(cls, v):
+        """Valida altura actualizacion."""
         return validators.validar_altura_logica(v)
 
     @field_validator("peso", mode="wrap")
@@ -647,6 +695,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("peso")
     @classmethod
     def validar_peso_actualizacion(cls, v):
+        """Valida peso actualizacion."""
         return validators.validar_peso_logica(v)
 
     @field_validator("provincia", mode="wrap")
@@ -674,6 +723,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("objetivo_semanal_metros")
     @classmethod
     def validar_objetivo_semanal(cls, v: Optional[int]) -> Optional[int]:
+        """Valida objetivo semanal."""
         if v is None:
             return v
         if not isinstance(v, int):
@@ -691,6 +741,7 @@ class ActualizarPerfil(BaseModel):
     @field_validator("objetivo_mensual_metros")
     @classmethod
     def validar_objetivo_mensual(cls, v: Optional[int]) -> Optional[int]:
+        """Valida objetivo mensual."""
         if v is None:
             return v
         if not isinstance(v, int):
@@ -742,6 +793,8 @@ class RespuestaBusquedaUsuariosPaginada(BaseModel):
 
 
 class ReportePerfilInapropiado(BaseModel):
+    """Representa reporte perfil inapropiado."""
+
     nombre_usuario_reportado: str = Field(..., min_length=1, max_length=50)
     reportar_nombre: bool = False
     reportar_foto: bool = False
@@ -750,6 +803,7 @@ class ReportePerfilInapropiado(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos(cls, values: Any) -> Any:
+        """Valida campos requeridos."""
         if isinstance(values, dict):
             if (
                 "nombre_usuario_reportado" not in values
@@ -764,6 +818,7 @@ class ReportePerfilInapropiado(BaseModel):
     @field_validator("nombre_usuario_reportado", mode="before")
     @classmethod
     def limpiar_nombre_usuario_reportado(cls, valor: Any) -> Any:
+        """Normaliza nombre usuario reportado."""
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -777,6 +832,7 @@ class ReportePerfilInapropiado(BaseModel):
     @field_validator("observaciones", mode="before")
     @classmethod
     def limpiar_observaciones(cls, valor: Any) -> Any:
+        """Normaliza observaciones."""
         if valor is None:
             return None
         if isinstance(valor, str):
@@ -786,6 +842,7 @@ class ReportePerfilInapropiado(BaseModel):
 
     @model_validator(mode="after")
     def validar_motivos(self):
+        """Valida motivos."""
         if not self.reportar_nombre and not self.reportar_foto:
             raise AppValidationError(
                 "Error: Debes marcar al menos una opción de reporte",
@@ -837,6 +894,8 @@ class SolicitarPassword(BaseModel):
     @field_validator("locale", mode="before")
     @classmethod
     def validar_locale_solicitar_recuperacion(cls, valor: Any) -> str:
+        """Valida configuración regional solicitar recuperacion."""
+        # Valida configuración regional solicitar recuperacion.
         if not isinstance(valor, str):
             raise AppValidationError(
                 "Error: El idioma debe ser un texto", "LOCALE_MUST_BE_TEXT"
@@ -868,6 +927,7 @@ class ConfirmarPassword(BaseModel):
     @classmethod
     def validar_campos_confirmar_recuperacion(cls, values: Any) -> Any:
         """Revisa que se reciban todos los campos obligatorios."""
+        # Valida campos confirmar recuperacion.
         if isinstance(values, dict):
             if "email" not in values or not values["email"]:
                 raise AppValidationError(
@@ -886,11 +946,13 @@ class ConfirmarPassword(BaseModel):
     @field_validator("nueva_password")
     @classmethod
     def validar_nueva_password_confirmar_recuperacion(cls, v):
+        """Valida nueva password confirmar recuperacion."""
         return validators.validar_password_logica(v)
 
     @field_validator("codigo", mode="before")
     @classmethod
     def limpiar_codigo_confirmar_recuperacion(cls, v) -> Any:
+        """Normaliza codigo confirmar recuperacion."""
         if isinstance(v, str):
             # Quitar espacios delante y detrás.
             valor_limpio = v.strip()
@@ -956,6 +1018,8 @@ class GuardarActividad(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_actividad(cls, values: Any) -> Any:
+        """Valida campos requeridos actividad."""
+        # Valida campos requeridos actividad.
         if isinstance(values, dict):
             required_fields = {
                 "tipo": (
@@ -991,6 +1055,7 @@ class GuardarActividad(BaseModel):
     @field_validator("tipo", mode="wrap")
     @classmethod
     def validar_tipo_actividad_custom(cls, v, handler):
+        """Valida tipo actividad custom."""
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El tipo de actividad no es válido"
         )
@@ -998,6 +1063,7 @@ class GuardarActividad(BaseModel):
     @field_validator("distancia", mode="wrap")
     @classmethod
     def validar_distancia_actividad_custom(cls, v, handler):
+        """Valida distancia actividad custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1008,6 +1074,7 @@ class GuardarActividad(BaseModel):
     @field_validator("distancia")
     @classmethod
     def validar_distancia_actividad(cls, v):
+        """Valida distancia actividad."""
         return validators.validar_distancia_logica(v)
 
     @field_validator(
@@ -1019,6 +1086,7 @@ class GuardarActividad(BaseModel):
     )
     @classmethod
     def validar_duraciones_custom(cls, v, handler):
+        """Valida duraciones custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1029,16 +1097,19 @@ class GuardarActividad(BaseModel):
     @field_validator("duracion_total")
     @classmethod
     def validar_duracion_total(cls, v):
+        """Valida duracion total."""
         return validators.validar_duracion_logica(v)
 
     @field_validator("duracion_movimiento")
     @classmethod
     def validar_duracion_movimiento(cls, v):
+        """Valida duracion movimiento."""
         return validators.validar_duracion_logica(v)
 
     @field_validator("duracion_parado")
     @classmethod
     def validar_duracion_parado(cls, v):
+        """Valida duracion parado."""
         return validators.validar_duracion_no_negativa_logica(
             v, "la duración parada", "STOPPED_DURATION"
         )
@@ -1046,6 +1117,7 @@ class GuardarActividad(BaseModel):
     @field_validator("duracion_pausa_manual")
     @classmethod
     def validar_duracion_pausa_manual(cls, v):
+        """Valida duracion pausa manual."""
         return validators.validar_duracion_no_negativa_logica(
             v, "la duración de pausa manual", "MANUAL_PAUSE_DURATION"
         )
@@ -1053,6 +1125,7 @@ class GuardarActividad(BaseModel):
     @field_validator("calorias_quemadas", mode="wrap")
     @classmethod
     def validar_calorias_actividad_custom(cls, v, handler):
+        """Valida calorias actividad custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1063,11 +1136,13 @@ class GuardarActividad(BaseModel):
     @field_validator("calorias_quemadas")
     @classmethod
     def validar_calorias_actividad(cls, v):
+        """Valida calorias actividad."""
         return validators.validar_calorias_logica(v)
 
     @field_validator("ritmo_medio_movimiento", "ritmo_medio_total", mode="wrap")
     @classmethod
     def validar_ritmos_custom(cls, v, handler):
+        """Valida ritmos custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1078,6 +1153,7 @@ class GuardarActividad(BaseModel):
     @field_validator("ritmo_medio_movimiento")
     @classmethod
     def validar_ritmo_medio_movimiento(cls, v):
+        """Valida ritmo medio movimiento."""
         return validators.validar_ritmo_segundos_km_logica(
             v, "el ritmo medio en movimiento", "MOVING_PACE"
         )
@@ -1085,6 +1161,7 @@ class GuardarActividad(BaseModel):
     @field_validator("ritmo_medio_total")
     @classmethod
     def validar_ritmo_medio_total(cls, v):
+        """Valida ritmo medio total."""
         return validators.validar_ritmo_segundos_km_logica(
             v, "el ritmo medio total", "TOTAL_PACE"
         )
@@ -1092,6 +1169,7 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_media_x100", "velocidad_max_x100", mode="wrap")
     @classmethod
     def validar_velocidades_custom(cls, v, handler):
+        """Valida velocidades custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1102,6 +1180,7 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_media_x100")
     @classmethod
     def validar_velocidad_media(cls, v):
+        """Valida velocidad media."""
         return validators.validar_velocidad_x100_logica(
             v, "la velocidad media", "AVERAGE_SPEED"
         )
@@ -1109,6 +1188,7 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_max_x100")
     @classmethod
     def validar_velocidad_max(cls, v):
+        """Valida velocidad max."""
         return validators.validar_velocidad_x100_logica(
             v, "la velocidad máxima", "MAX_SPEED"
         )
@@ -1116,6 +1196,7 @@ class GuardarActividad(BaseModel):
     @field_validator("auto_pausas", "pausas_manuales", "alertas_velocidad", mode="wrap")
     @classmethod
     def validar_contadores_custom(cls, v, handler):
+        """Valida contadores custom."""
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1126,6 +1207,7 @@ class GuardarActividad(BaseModel):
     @field_validator("auto_pausas")
     @classmethod
     def validar_auto_pausas(cls, v):
+        """Valida auto pausas."""
         return validators.validar_contador_tracking_logica(
             v, "las auto pausas", "AUTO_PAUSE_COUNT"
         )
@@ -1133,6 +1215,7 @@ class GuardarActividad(BaseModel):
     @field_validator("pausas_manuales")
     @classmethod
     def validar_pausas_manuales(cls, v):
+        """Valida pausas manuales."""
         return validators.validar_contador_tracking_logica(
             v, "las pausas manuales", "MANUAL_PAUSE_COUNT"
         )
@@ -1140,6 +1223,7 @@ class GuardarActividad(BaseModel):
     @field_validator("alertas_velocidad")
     @classmethod
     def validar_alertas_velocidad(cls, v):
+        """Valida alertas velocidad."""
         return validators.validar_contador_tracking_logica(
             v, "las alertas de velocidad", "SPEED_ALERT_COUNT"
         )
@@ -1147,6 +1231,7 @@ class GuardarActividad(BaseModel):
     @field_validator("fecha_ruta", mode="wrap")
     @classmethod
     def validar_fecha_ruta_actividad_custom(cls, v, handler):
+        """Valida fecha ruta actividad custom."""
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El formato de fecha no es válido"
         )
@@ -1154,17 +1239,21 @@ class GuardarActividad(BaseModel):
     @field_validator("fecha_ruta")
     @classmethod
     def validar_fecha_ruta_actividad(cls, v):
+        """Valida fecha ruta actividad."""
         return validators.validar_fecha_ruta_logica(v)
 
     @field_validator("ruta_polilinea", mode="before")
     @classmethod
     def validar_polilinea_actividad(cls, v):
+        """Valida polilinea actividad."""
         if v == "":
             return None
         return validators.validar_polilinea_logica(v)
 
     @model_validator(mode="after")
     def validar_consistencia_temporal(self):
+        """Valida consistencia temporal."""
+        # Valida consistencia temporal.
         if self.duracion_movimiento > self.duracion_total:
             raise AppValidationError(
                 "Error: La duración en movimiento no puede superar la duración total",
@@ -1217,7 +1306,7 @@ class EventoDiagnosticoActividad(BaseModel):
     """
     Evento individual de la línea temporal de diagnóstico.
 
-    Cada evento representa un cambio relevante del tracking: creación del servicio,
+    Cada evento representa un cambio relevante del seguimiento: creación del servicio,
     auto-pausa, reanudación, guardado, destrucción, etc.
     """
 
@@ -1228,6 +1317,7 @@ class EventoDiagnosticoActividad(BaseModel):
     @field_validator("tipo")
     @classmethod
     def validar_tipo(cls, valor: str) -> str:
+        """Valida tipo."""
         valor = valor.strip()
         if not valor:
             raise AppValidationError(
@@ -1239,6 +1329,7 @@ class EventoDiagnosticoActividad(BaseModel):
     @field_validator("detalle")
     @classmethod
     def validar_detalle(cls, valor: Optional[str]) -> Optional[str]:
+        """Valida detalle."""
         if valor is None:
             return None
         valor = valor.strip()
@@ -1247,10 +1338,10 @@ class EventoDiagnosticoActividad(BaseModel):
 
 class GuardarActividadDiagnostico(BaseModel):
     """
-    Payload del endpoint de diagnóstico de actividad.
+    Carga útil del endpoint de diagnóstico de actividad.
 
     Se utiliza solo para builds internas con telemetría automática activada.
-    No sustituye al payload de ``GuardarActividad`` y no afecta al cálculo de
+    No sustituye al carga útil de ``GuardarActividad`` y no afecta al cálculo de
     puntos, métricas agregadas ni ranking.
     """
 
@@ -1301,6 +1392,7 @@ class GuardarActividadDiagnostico(BaseModel):
     )
     @classmethod
     def limpiar_textos_opcionales(cls, valor: Optional[str]) -> Optional[str]:
+        """Normaliza textos opcionales."""
         if valor is None:
             return None
         valor = valor.strip()
@@ -1324,6 +1416,7 @@ class GuardarActividadDiagnostico(BaseModel):
     )
     @classmethod
     def validar_no_negativos(cls, valor: int) -> int:
+        """Valida no negativos."""
         if valor < 0:
             raise AppValidationError(
                 "Error: Los valores del diagnóstico no pueden ser negativos",
@@ -1334,6 +1427,7 @@ class GuardarActividadDiagnostico(BaseModel):
     @model_validator(mode="after")
     def validar_consistencia(self):
         # Validación mínima para no persistir un breakdown temporal imposible.
+        """Valida consistencia."""
         if self.moving_seconds > self.elapsed_seconds:
             raise AppValidationError(
                 "Error: El tiempo en movimiento no puede superar el tiempo total",
@@ -1356,6 +1450,8 @@ class RespuestaGuardarActividadDiagnostico(BaseModel):
 
 
 class RespuestaObtenerActividad(BaseModel):
+    """Representa respuesta obtener actividad."""
+
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -1381,6 +1477,7 @@ class RespuestaObtenerActividad(BaseModel):
 
 
 class RespuestaObtenerActividadesPaginada(BaseModel):
+    """Representa respuesta obtener actividades paginada."""
 
     items: List[RespuestaObtenerActividad]
     total: int
@@ -1390,12 +1487,16 @@ class RespuestaObtenerActividadesPaginada(BaseModel):
 
 
 class RespuestaBorrarActividad(BaseModel):
+    """Representa respuesta borrar actividad."""
+
     estatus: str
     mensaje: str
     nuevo_total_puntos: int
 
 
 class ObtenerRanking(BaseModel):
+    """Representa obtener ranking."""
+
     posicion: int
     nombre_usuario: str
     foto_perfil: Optional[str] = None
@@ -1405,5 +1506,7 @@ class ObtenerRanking(BaseModel):
 
 
 class RespuestaGenerica(BaseModel):
+    """Representa respuesta generica."""
+
     estatus: str
     mensaje: str

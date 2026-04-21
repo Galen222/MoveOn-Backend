@@ -1,5 +1,7 @@
 # middlewares/security_headers.py
 
+"""Implementa middleware relacionado con la aplicación."""
+
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -8,10 +10,14 @@ from ip_rate_limit import conn_from_trusted_proxy
 
 
 class SecurityHeadersMiddleware:
+    """Middleware para security headers."""
+
     def __init__(self, app: ASGIApp):
+        """Inicializa la instancia."""
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Procesa la llamada de la instancia."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -19,6 +25,7 @@ class SecurityHeadersMiddleware:
         request = Request(scope, receive=receive)
 
         async def send_wrapper(message: Message) -> None:
+            """Envía wrapper."""
             if (
                 message["type"] == "http.response.start"
                 and settings.ENABLE_SECURITY_HEADERS
@@ -38,7 +45,7 @@ class SecurityHeadersMiddleware:
                     if xf_proto:
                         is_https = xf_proto.split(",")[0].strip().lower() == "https"
 
-                # HSTS solo si la request original fue HTTPS
+                # HSTS solo si la petición original fue HTTPS
                 if is_https and settings.SEC_HEADERS_HSTS_SECONDS > 0:
                     hsts = f"max-age={int(settings.SEC_HEADERS_HSTS_SECONDS)}"
                     if settings.SEC_HEADERS_HSTS_INCLUDE_SUBDOMAINS:

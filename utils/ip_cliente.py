@@ -1,4 +1,6 @@
-# utils/client_ip.py
+# utils/ip_cliente.py
+
+"""Incluye utilidades auxiliares de la aplicación."""
 
 from __future__ import annotations
 
@@ -9,7 +11,6 @@ from fastapi import Request
 from starlette.requests import Request as StarletteRequest
 from starlette.types import Scope
 
-
 # Tipo para el callback que decide si la conexión actual viene
 # de un proxy que nosotros consideramos confiable.
 TrustedProxyChecker = Callable[[Request], bool]
@@ -17,14 +18,14 @@ TrustedProxyChecker = Callable[[Request], bool]
 
 def get_socket_client_ip(request: Request) -> str:
     """
-    Obtiene la IP del socket TCP asociada a la request.
+    Obtiene la IP del socket TCP asociada a la petición.
 
     <p>Este helper es deliberadamente defensivo: si Starlette no puede aportar
-    un objeto <code>request.client</code>, devuelve <code>"-"</code> en lugar
+    un objeto <code>petición.client</code>, devuelve <code>"-"</code> en lugar
     de lanzar una excepción. Eso permite reutilizarlo en logs, rate limiting y
     middlewares sin tener que repetir ternarios en cada llamada.</p>
 
-    @param request Request HTTP de FastAPI / Starlette.
+    @param petición Request HTTP de FastAPI / Starlette.
     @return La IP del socket si existe; en caso contrario, <code>"-"</code>.
     """
     return request.client.host if request.client else "-"
@@ -56,10 +57,11 @@ def extract_ip_from_headers(
     primer valor, que es el cliente original. Si el valor no es una IP válida,
     se ignora y se prueba la siguiente cabecera configurada.</p>
 
-    @param headers Cabeceras HTTP disponibles en la request.
+    @param headers Cabeceras HTTP disponibles en la petición.
     @param header_order Orden de prioridad de cabeceras a inspeccionar.
     @return La primera IP válida encontrada, o <code>None</code> si no hay ninguna.
     """
+    # Gestiona extract IP from headers.
     for header in header_order:
         raw = headers.get(header)
         if not raw:
@@ -83,7 +85,7 @@ def get_client_ip(
     header_order: Sequence[str],
 ) -> str:
     """
-    Resuelve la IP cliente real de una request HTTP.
+    Resuelve la IP cliente real de una petición HTTP.
 
     <p>La estrategia es la siguiente:</p>
     <ol>
@@ -97,7 +99,7 @@ def get_client_ip(
     <p>La decisión de confianza del proxy se inyecta mediante callback para no
     acoplar esta utilidad a un módulo concreto como <code>ip_rate_limit.py</code>.</p>
 
-    @param request Request HTTP de FastAPI / Starlette.
+    @param petición Request HTTP de FastAPI / Starlette.
     @param is_trusted_proxy Función que decide si la conexión actual viene de un proxy confiable.
     @param header_order Orden de cabeceras a inspeccionar cuando hay proxy confiable.
     @return La IP cliente resuelta de forma segura.

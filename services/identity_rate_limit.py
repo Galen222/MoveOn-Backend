@@ -1,5 +1,7 @@
 # services/identity_rate_limit.py
 
+"""Implementa la lógica de negocio de este servicio."""
+
 from __future__ import annotations
 
 import time
@@ -15,7 +17,10 @@ logger = logging.getLogger("app.security")
 
 
 class IdentityRateLimitExceeded(Exception):
+    """Representa identidad rate limit exceeded."""
+
     def __init__(self, mensaje: str = "Demasiadas peticiones. Inténtalo más tarde."):
+        """Inicializa la instancia."""
         super().__init__(mensaje)
         self.mensaje = mensaje
 
@@ -33,6 +38,8 @@ _BUCKETS_LOCK = RLock()
 
 
 def _parse_limit(limit_str: str) -> Optional[Tuple[int, int]]:
+    """Analiza limit."""
+    # Analiza limit.
     s = (limit_str or "").strip()
     if not s:
         return None
@@ -60,6 +67,7 @@ def _parse_limit(limit_str: str) -> Optional[Tuple[int, int]]:
 
 
 def _purge_old(now: float | None = None) -> None:
+    """Gestiona purge old."""
     with _BUCKETS_LOCK:
         if now is None:
             _BUCKETS.expire()
@@ -68,6 +76,7 @@ def _purge_old(now: float | None = None) -> None:
 
 
 def check_identity_limit(scope: str, identity: str, limit_str: str) -> None:
+    """Valida identidad limit."""
     if not settings.ENABLE_RATE_LIMIT_ID:
         return
 

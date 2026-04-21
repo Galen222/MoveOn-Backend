@@ -1,3 +1,5 @@
+# exceptions.py
+
 """Contrato centralizado de errores del backend.
 
 Reglas:
@@ -29,6 +31,7 @@ _GENERIC_ERROR_CODES_BY_STATUS: dict[int, str] = {
 
 
 def _normalize_error_code(error_code: str | None) -> str | None:
+    """Normaliza error code."""
     if not isinstance(error_code, str) or not error_code.strip():
         return None
     normalized = re.sub(r"[^A-Za-z0-9]+", "_", error_code).strip("_")
@@ -39,6 +42,7 @@ class AppValidationError(ValueError):
     """ValueError con ``error_code`` explícito para validadores Pydantic."""
 
     def __init__(self, mensaje: str, error_code: str):
+        """Inicializa la instancia."""
         super().__init__(mensaje)
         self.error_code = _normalize_error_code(error_code) or "VALIDATION_ERROR"
 
@@ -55,6 +59,7 @@ class AppHTTPException(HTTPException):
         headers: Mapping[str, str] | None = None,
         detail: Any | None = None,
     ) -> None:
+        """Inicializa la instancia."""
         super().__init__(
             status_code=status_code,
             detail=detail if detail is not None else mensaje,
@@ -74,6 +79,7 @@ def app_http_exception(
     headers: Mapping[str, str] | None = None,
     detail: Any | None = None,
 ) -> AppHTTPException:
+    """Gestiona app HTTP exception."""
     return AppHTTPException(
         status_code=status_code,
         mensaje=mensaje,
@@ -84,6 +90,7 @@ def app_http_exception(
 
 
 def _first_detail_error_code(detail: list[dict[str, Any]] | None) -> str | None:
+    """Gestiona first detail error code."""
     if not isinstance(detail, list):
         return None
     for item in detail:
@@ -97,6 +104,7 @@ def _first_detail_error_code(detail: list[dict[str, Any]] | None) -> str | None:
 def _normalize_detail(
     detail: list[dict[str, Any]] | None, default_error_code: str
 ) -> list[dict[str, Any]] | None:
+    """Normaliza detail."""
     if detail is None:
         return None
     normalized: list[dict[str, Any]] = []
@@ -117,6 +125,7 @@ def _resolve_error_code(
     explicit_error_code: str | None,
     detail: list[dict[str, Any]] | None = None,
 ) -> str:
+    """Gestiona resolve error code."""
     explicit = _normalize_error_code(explicit_error_code)
     if explicit:
         return explicit
@@ -133,6 +142,7 @@ def error_response(
     headers: Mapping[str, str] | None = None,
     error_code: str | None = None,
 ) -> JSONResponse:
+    """Gestiona error response."""
     resolved = _resolve_error_code(status_code, error_code, detail)
     normalized_detail = _normalize_detail(detail, resolved)
     content: dict[str, Any] = {
@@ -146,6 +156,8 @@ def error_response(
 
 
 def _limpiar_mensaje_validacion(error: dict[str, Any]) -> str:
+    """Normaliza mensaje validacion."""
+    # Normaliza mensaje validacion.
     tipo = error.get("type", "")
     ctx = error.get("ctx") or {}
     mensaje_original = str(error.get("msg", "") or "")
@@ -164,6 +176,8 @@ def _limpiar_mensaje_validacion(error: dict[str, Any]) -> str:
 
 
 def manejador_validacion_personalizado(request: Request, exc: Any) -> JSONResponse:
+    """Gestiona manejador validacion personalizado."""
+    # Gestiona manejador validacion personalizado.
     errores_limpios: list[dict[str, Any]] = []
     if hasattr(exc, "errors"):
         for error in exc.errors():
@@ -188,6 +202,8 @@ def manejador_validacion_personalizado(request: Request, exc: Any) -> JSONRespon
 
 
 def manejador_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
+    """Gestiona manejador HTTP exception."""
+    # Gestiona manejador HTTP exception.
     explicit = _normalize_error_code(getattr(exc, "error_code", None))
     public_message = getattr(exc, "public_message", None)
     if isinstance(exc.detail, str):
@@ -235,6 +251,7 @@ def manejador_http_exception(request: Request, exc: HTTPException) -> JSONRespon
 
 
 def manejador_excepcion_no_controlada(request: Request, exc: Exception) -> JSONResponse:
+    """Gestiona manejador excepcion no controlada."""
     logging.getLogger("app.error").exception(
         "excepcion_no_controlada",
         extra={"method": request.method, "path": request.url.path},

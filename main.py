@@ -43,6 +43,7 @@ logger = logging.getLogger("app.main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inicializar base de datos sin bloquear el arranque si PostgreSQL está caído.
+    """Gestiona lifespan."""
     try:
         await database.init_db()
     except Exception as exc:
@@ -95,7 +96,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MoveOn API",
     description="Backend de la aplicación MoveOn",
-    version="0.9.7",
+    version="0.9.8",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
@@ -112,19 +113,19 @@ REQUEST_SIZE_LIMITS = {
 # Configurar el limitador (usa la IP del usuario para contar)
 app.state.limiter = limiter
 
-# Middleware de SlowAPI (si no, el rate limit puede no comportarse correctamente)
+# Middleware de SlowAPI (si no, el límite de tasa puede no comportarse correctamente)
 if settings.ENABLE_RATE_LIMIT_IP:
     app.add_middleware(SlowAPIMiddleware)
 
-# Middleware de tamaño del body para rutas JSON sensibles.
+# Middleware de tamaño del cuerpo para rutas JSON sensibles.
 # Se añade aquí para que las respuestas 413 sigan pasando por
-# request_id y cabeceras de seguridad.
+# petición_id y cabeceras de seguridad.
 app.add_middleware(
     RequestSizeLimitMiddleware,
     route_limits=REQUEST_SIZE_LIMITS,
 )
 
-# Middleware de contexto/request_id
+# Middleware de contexto/petición_id
 app.add_middleware(RequestContextMiddleware)
 
 # Middleware de Seguridad
@@ -132,9 +133,11 @@ if settings.ENABLE_SECURITY_HEADERS:
     app.add_middleware(SecurityHeadersMiddleware)
 
 
-# Handler de rate limit IP
+# Manejador del límite de tasa por IP
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Gestiona rate limit handler."""
+    # Gestiona límite de tasa handler.
     headers = getattr(exc, "headers", None) or {}
 
     logger.warning(
@@ -157,9 +160,10 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-# Handler de rate limit por identidad
+# Manejador del límite de tasa por identidad
 @app.exception_handler(IdentityRateLimitExceeded)
 async def identity_rate_limit_handler(request: Request, exc: IdentityRateLimitExceeded):
+    """Gestiona identidad rate limit handler."""
     return error_response(status_code=429, mensaje=exc.mensaje)
 
 
@@ -172,6 +176,7 @@ app.add_exception_handler(RequestValidationError, manejador_validacion_personali
 async def http_exception_handler_wrapper(
     request: Request, exc: Exception
 ) -> JSONResponse:
+    """Gestiona HTTP exception handler wrapper."""
     if isinstance(exc, HTTPException):
         return manejador_http_exception(request, exc)
     return manejador_excepcion_no_controlada(request, exc)
@@ -180,6 +185,7 @@ async def http_exception_handler_wrapper(
 async def generic_exception_handler_wrapper(
     request: Request, exc: Exception
 ) -> JSONResponse:
+    """Gestiona generic exception handler wrapper."""
     return manejador_excepcion_no_controlada(request, exc)
 
 
@@ -196,17 +202,21 @@ app.include_router(activities.router)
 @app.get("/")
 @rate_limit(settings.RL_ROOT)
 async def home(request: Request):
+    """Devuelve la respuesta principal del servicio."""
     return {"estado": "en linea", "aplicacion": "MoveOn API"}
 
 
 @app.get("/healthz", include_in_schema=False)
 @app.head("/healthz", include_in_schema=False)
 async def healthz():
+    """Devuelve el estado básico de salud del servicio."""
     return {"status": "ok"}
 
 
 @app.get("/readyz", include_in_schema=False)
 async def readyz(db: AsyncSession = Depends(database.obtener_db)):
+    """Devuelve el estado de preparación del servicio."""
+    # Devuelve el estado de preparación del servicio.
     try:
         await db.execute(text("SELECT 1"))
 
@@ -232,6 +242,7 @@ async def readyz(db: AsyncSession = Depends(database.obtener_db)):
 @app.get("/favicon.ico", include_in_schema=False)
 @rate_limit(settings.RL_FAVICON)
 async def favicon(request: Request):
+    """Devuelve el favicon de la aplicación."""
     if not os.path.exists("favicon.ico"):
         raise app_http_exception(
             status_code=404,

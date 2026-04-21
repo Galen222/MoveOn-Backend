@@ -1,36 +1,45 @@
 # tests/test_email_templates.py
-#
-# Tests para services/email_templates.py.
+
+"""Contiene pruebas automatizadas de este módulo."""
+
+# Pruebas para services/email_templates.py.
 # Verifica que la plantilla HTML contiene los datos dinámicos correctos.
 
 from services.email_templates import recuperacion_password_template
 
 
 class TestRecuperacionPasswordTemplate:
+    """Agrupa pruebas relacionadas con recuperacion password template."""
+
     def test_contiene_codigo(self):
+        """Verifica que contiene codigo."""
         html = recuperacion_password_template("123456", 15)
         assert "123456" in html
 
     def test_contiene_minutos(self):
+        """Verifica que contiene minutos."""
         html = recuperacion_password_template("999999", 10)
         assert "10" in html
 
     def test_es_html_valido_basico(self):
+        """Verifica que es html valido basico."""
         html = recuperacion_password_template("000000", 5)
         assert "<!DOCTYPE html>" in html
         assert "<html" in html
         assert "</html>" in html
 
     def test_contiene_titulo_olvidaste_password(self):
+        """Verifica que contiene titulo olvidaste password."""
         html = recuperacion_password_template("123456", 15)
         assert "Olvidaste tu contraseña" in html or "olvidaste" in html.lower()
 
     def test_contiene_referencia_logo_cid(self):
-        """La plantilla referencia el logo inline por CID."""
+        """La plantilla referencia el logo embebido por CID."""
         html = recuperacion_password_template("123456", 15)
         assert "cid:moveon_logo" in html
 
     def test_contiene_copyright_moveon(self):
+        """Verifica que contiene copyright moveon."""
         html = recuperacion_password_template("123456", 15)
         assert "MoveOn" in html
 

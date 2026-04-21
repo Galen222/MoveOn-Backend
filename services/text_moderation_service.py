@@ -1,5 +1,7 @@
 # services/text_moderation_service.py
 
+"""Implementa la lógica de negocio de este servicio."""
+
 from __future__ import annotations
 
 import logging
@@ -56,17 +58,20 @@ _HIGH_RISK_RESERVED_TOKENS = {
 
 
 def _normalizar_texto(texto: str | None) -> str:
+    """Normaliza texto."""
     if texto is None:
         return ""
     return " ".join(str(texto).strip().split())
 
 
 def _quitar_acentos(texto: str) -> str:
+    """Gestiona quitar acentos."""
     texto = unicodedata.normalize("NFKD", texto)
     return "".join(ch for ch in texto if not unicodedata.combining(ch))
 
 
 def _normalizar_frase(texto: str | None) -> str:
+    """Normaliza frase."""
     texto = _normalizar_texto(texto).lower()
     texto = _quitar_acentos(texto)
     texto = _MULTISPACE_RE.sub(" ", texto)
@@ -74,21 +79,25 @@ def _normalizar_frase(texto: str | None) -> str:
 
 
 def _normalizar_username(texto: str | None) -> str:
+    """Normaliza username."""
     texto = _normalizar_frase(texto).translate(_LEET_TRANSLATION)
     return "".join(ch for ch in texto if ch.isalnum())
 
 
 def _parse_csv(value: str | None) -> list[str]:
+    """Analiza csv."""
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _moderar_activado() -> bool:
+    """Gestiona moderar activado."""
     return bool(settings.TEXT_MODERATION_ENABLED)
 
 
 def _bloqueo_payload(field: FieldType) -> tuple[str, str]:
+    """Gestiona bloqueo payload."""
     if field == "username":
         return (
             "Error: El nombre de usuario contiene lenguaje inapropiado o no permitido",
@@ -101,6 +110,7 @@ def _bloqueo_payload(field: FieldType) -> tuple[str, str]:
 
 
 def _reserved_tokens() -> list[str]:
+    """Gestiona reserved tokens."""
     return [
         _normalizar_username(token)
         for token in _parse_csv(settings.TEXT_MODERATION_RESERVED_USERNAME_TOKENS)
@@ -114,6 +124,8 @@ def _load_dictionary_cached(
     languages_csv: str,
     ignore_csv: str,
 ) -> dict[str, frozenset[str]]:
+    """Gestiona load dictionary cached."""
+    # Gestiona load dictionary cached.
     base_dir = Path(dictionary_dir)
     if not base_dir.exists():
         raise FileNotFoundError(f"No existe el directorio de diccionarios: {base_dir}")
@@ -150,7 +162,7 @@ def _load_dictionary_cached(
 
         for raw_line in contenido.splitlines():
             line = raw_line.strip()
-            if not line or line.startswith("#"):
+            if not line or line.startswith("# "):
                 continue
 
             term = _normalizar_frase(line)
@@ -178,6 +190,7 @@ def _load_dictionary_cached(
 
 
 def _load_dictionary() -> dict[str, frozenset[str]]:
+    """Gestiona load dictionary."""
     return _load_dictionary_cached(
         settings.TEXT_MODERATION_DICTIONARY_DIR,
         settings.TEXT_MODERATION_DICTIONARY_LANGS,
@@ -186,6 +199,8 @@ def _load_dictionary() -> dict[str, frozenset[str]]:
 
 
 def _match_reserved_username(texto: str) -> str | None:
+    """Gestiona match reserved username."""
+    # Gestiona match reserved username.
     username = _normalizar_username(texto)
     if not username:
         return None
@@ -207,6 +222,8 @@ def _match_reserved_username(texto: str) -> str | None:
 
 
 def _match_username_dictionary(texto: str) -> str | None:
+    """Gestiona match username dictionary."""
+    # Gestiona match username dictionary.
     username = _normalizar_username(texto)
     if not username:
         return None
@@ -232,11 +249,14 @@ def _match_username_dictionary(texto: str) -> str | None:
 
 
 def _tokenizar_nombre_real(texto: str) -> list[str]:
+    """Gestiona tokenizar nombre real."""
     normalizado = _normalizar_frase(texto)
     return [token for token in _REAL_NAME_TOKEN_SPLIT_RE.split(normalizado) if token]
 
 
 def _match_real_name_dictionary(texto: str) -> str | None:
+    """Gestiona match real name dictionary."""
+    # Gestiona match real name dictionary.
     normalizado = _normalizar_frase(texto)
     if not normalizado:
         return None
@@ -254,6 +274,8 @@ def _match_real_name_dictionary(texto: str) -> str | None:
 
 
 async def _validar(texto: str, *, field: FieldType) -> None:
+    """Gestiona validar."""
+    # Gestiona validar.
     texto = _normalizar_texto(texto)
     if not texto:
         return
@@ -344,8 +366,10 @@ async def _validar(texto: str, *, field: FieldType) -> None:
 
 
 async def validar_nombre_usuario(texto: str) -> None:
+    """Valida nombre usuario."""
     await _validar(texto, field="username")
 
 
 async def validar_nombre_real(texto: str) -> None:
+    """Valida nombre real."""
     await _validar(texto, field="real_name")

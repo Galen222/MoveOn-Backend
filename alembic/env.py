@@ -1,3 +1,7 @@
+# alembic/env.py
+
+"""Configura la ejecución de migraciones de Alembic."""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +26,7 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
+    """Ejecuta las migraciones en modo sin conexión."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -38,6 +42,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    """Ejecuta las migraciones con la conexión recibida."""
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -50,6 +55,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
+    """Ejecuta las migraciones usando una conexión activa."""
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

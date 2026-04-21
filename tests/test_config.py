@@ -1,14 +1,16 @@
 # tests/test_config.py
-#
-# Tests para los validators de config.py (Settings).
+
+"""Contiene pruebas automatizadas de este módulo."""
+
+# Pruebas para los validadores de config.py (Settings).
 # Cubre: parse_cors_origins, validar_public_base_url,
-#        validar_secretos_fuertes, validar_secretos_distintos.
-#
+# validar_secretos_fuertes, validar_secretos_distintos.
+
 # Estrategia:
-# - Los validators se testean DIRECTAMENTE (son classmethods) para cubrir
-#   todos los tipos de entrada (None, list, int, etc.), ya que os.environ
-#   solo acepta strings y pydantic-settings intenta JSON-decodear tipos complejos.
-# - Settings se construye solo para tests de integración con valores string-compatibles.
+# - Los validadores se testean DIRECTAMENTE (son classmethods) para cubrir
+# todos los tipos de entrada (None, list, int, etc.), ya que os.environ
+# solo acepta strings y pydantic-settings intenta JSON-decodear tipos complejos.
+# - Settings se construye solo para pruebas de integración con valores string-compatibles.
 
 import os
 import pytest
@@ -17,14 +19,14 @@ from pydantic import ValidationError, ValidationInfo
 
 from config import Settings
 
-
 # ─────────────────────────────────────────────
-# Helper: entorno mínimo válido
+# Ayudante: entorno mínimo válido
 # ─────────────────────────────────────────────
 
 
 def _env(**overrides) -> dict:
     """Devuelve un dict con todos los campos requeridos válidos (solo strings)."""
+    # Gestiona env.
     base = {
         "DB_USER": "test",
         "DB_PASSWORD": "test",
@@ -54,7 +56,7 @@ def _build_settings(**overrides) -> Settings:
 
 
 def _fake_info(field_name: str) -> ValidationInfo:
-    """Crea un ValidationInfo fake para los validators que lo requieren."""
+    """Crea un ValidationInfo simulado para los validadores que lo requieren."""
     info = MagicMock(spec=ValidationInfo)
     info.field_name = field_name
     return info
@@ -66,35 +68,45 @@ def _fake_info(field_name: str) -> ValidationInfo:
 
 
 class TestValidarPublicBaseUrl:
+    """Agrupa pruebas relacionadas con validar public base URL."""
+
     def test_vacio_devuelve_string_vacio(self):
+        """Verifica que vacio devuelve string vacio."""
         resultado = Settings.validar_public_base_url("")
         assert resultado == ""
 
     def test_none_devuelve_string_vacio(self):
+        """Verifica que none devuelve string vacio."""
         resultado = Settings.validar_public_base_url(None)
         assert resultado == ""
 
     def test_url_https_valida_se_acepta(self):
+        """Verifica que URL https valida se acepta."""
         resultado = Settings.validar_public_base_url("https://api.moveon.com")
         assert resultado == "https://api.moveon.com"
 
     def test_url_http_valida_se_acepta(self):
+        """Verifica que URL HTTP valida se acepta."""
         resultado = Settings.validar_public_base_url("http://localhost:8000")
         assert resultado == "http://localhost:8000"
 
     def test_elimina_barra_final(self):
+        """Verifica que elimina barra final."""
         resultado = Settings.validar_public_base_url("https://api.moveon.com/")
         assert resultado == "https://api.moveon.com"
 
     def test_elimina_multiples_barras_finales(self):
+        """Verifica que elimina multiples barras finales."""
         resultado = Settings.validar_public_base_url("https://api.moveon.com///")
         assert not resultado.endswith("/")
 
     def test_sin_esquema_lanza_error(self):
+        """Verifica que sin esquema lanza error."""
         with pytest.raises(ValueError, match="http://"):
             Settings.validar_public_base_url("api.moveon.com")
 
     def test_tipo_no_string_lanza_error(self):
+        """Verifica que tipo no string lanza error."""
         with pytest.raises(ValueError, match="string"):
             Settings.validar_public_base_url(12345)
 
@@ -110,7 +122,10 @@ class TestValidarPublicBaseUrl:
 
 
 class TestValidarSecretosFuertes:
+    """Agrupa pruebas relacionadas con validar secretos fuertes."""
+
     def test_secreto_de_32_chars_se_acepta(self):
+        """Verifica que secreto de 32 chars se acepta."""
         secreto = "abcdefghijklmnopqrstuvwxyz123456"  # 32 chars, >8 únicos
         resultado = Settings.validar_secretos_fuertes(
             secreto, _fake_info("APP_SESSION_SECRET")
@@ -118,6 +133,7 @@ class TestValidarSecretosFuertes:
         assert resultado == secreto
 
     def test_secreto_corto_lanza_error(self):
+        """Verifica que secreto corto lanza error."""
         with pytest.raises(ValueError, match="32 caracteres"):
             Settings.validar_secretos_fuertes("corto", _fake_info("APP_SESSION_SECRET"))
 
@@ -129,11 +145,13 @@ class TestValidarSecretosFuertes:
             )
 
     def test_secreto_7_chars_unicos_lanza_error(self):
+        """Verifica que secreto 7 chars unicos lanza error."""
         secreto = "abcdefg" * 5  # 35 chars, 7 únicos
         with pytest.raises(ValueError, match="entropía"):
             Settings.validar_secretos_fuertes(secreto, _fake_info("APP_SESSION_SECRET"))
 
     def test_secreto_8_chars_unicos_se_acepta(self):
+        """Verifica que secreto 8 chars unicos se acepta."""
         secreto = "abcdefgh" * 4  # 32 chars, 8 únicos
         resultado = Settings.validar_secretos_fuertes(
             secreto, _fake_info("APP_SESSION_SECRET")
@@ -148,6 +166,7 @@ class TestValidarSecretosFuertes:
             )
 
     def test_tipo_no_string_lanza_error(self):
+        """Verifica que tipo no string lanza error."""
         with pytest.raises(ValueError, match="string"):
             Settings.validar_secretos_fuertes(12345, _fake_info("APP_SESSION_SECRET"))
 
@@ -176,7 +195,10 @@ class TestValidarSecretosFuertes:
 
 
 class TestValidarSecretosDistintos:
+    """Agrupa pruebas relacionadas con validar secretos distintos."""
+
     def test_secretos_identicos_lanza_error(self):
+        """Verifica que secretos identicos lanza error."""
         mismo = "secreto-identico-para-todos-los-campos!"
         with pytest.raises(ValidationError, match="distintos"):
             _build_settings(
@@ -188,6 +210,7 @@ class TestValidarSecretosDistintos:
             )
 
     def test_dos_secretos_iguales_lanza_error(self):
+        """Verifica que dos secretos iguales lanza error."""
         duplicado = "secreto-duplicado-entre-dos-campos!!"
         with pytest.raises(ValidationError, match="distintos"):
             _build_settings(

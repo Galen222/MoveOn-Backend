@@ -1,3 +1,7 @@
+# services/email_service.py
+
+"""Implementa la lógica de negocio de este servicio."""
+
 import asyncio
 import logging
 from pathlib import Path
@@ -29,6 +33,8 @@ REPORTES_DESTINO = (
 
 
 def _es_error_transitorio(exc: Exception) -> bool:
+    """Indica si error transitorio."""
+    # Indica si error transitorio.
     if isinstance(
         exc,
         (
@@ -60,13 +66,18 @@ def _es_error_transitorio(exc: Exception) -> bool:
 
 
 def _normalizar_locale(locale: str) -> str:
-    normalizado = locale.strip().lower().replace("_", "-") if isinstance(locale, str) else ""
+    """Normaliza configuración regional."""
+    normalizado = (
+        locale.strip().lower().replace("_", "-") if isinstance(locale, str) else ""
+    )
     if normalizado.startswith("en"):
         return "en"
     return "es"
 
 
 def _adjuntar_logo_inline(msg: EmailMessage, email_destino: str) -> None:
+    """Adjunta el logotipo embebido."""
+    # Adjunta logo embebido.
     logo_path = Path(__file__).resolve().parents[1] / "assets" / "email" / "moveon.png"
 
     if logo_path.exists():
@@ -108,6 +119,8 @@ def _construir_mensaje_recuperacion(
     smtp_username: str,
     locale: str,
 ) -> EmailMessage:
+    """Construye mensaje recuperacion."""
+    # Construye mensaje recuperacion.
     locale_normalizado = _normalizar_locale(locale)
 
     msg = EmailMessage()
@@ -139,6 +152,8 @@ def _construir_mensaje_aviso_google(
     smtp_username: str,
     locale: str,
 ) -> EmailMessage:
+    """Construye mensaje aviso google."""
+    # Construye mensaje aviso google.
     locale_normalizado = _normalizar_locale(locale)
 
     msg = EmailMessage()
@@ -163,7 +178,9 @@ def _construir_mensaje_aviso_google(
             "Vuelve a la app y pulsa 'Continuar con Google' para iniciar sesión."
         )
 
-    html_content = email_templates.aviso_recuperacion_google_template(locale_normalizado)
+    html_content = email_templates.aviso_recuperacion_google_template(
+        locale_normalizado
+    )
     msg.add_alternative(html_content, subtype="html")
     _adjuntar_logo_inline(msg, email_destino)
     return msg
@@ -177,6 +194,8 @@ def _construir_mensaje_reporte_perfil(
     observaciones: str | None,
     smtp_username: str,
 ) -> EmailMessage:
+    """Construye mensaje reporte perfil."""
+    # Construye mensaje reporte perfil.
     msg = EmailMessage()
     msg["Subject"] = "Reporte de perfil inapropiado"
     msg["From"] = formataddr(("MoveOn App", smtp_username))
@@ -221,6 +240,8 @@ async def _enviar_mensaje(
     evento_error_transitorio: str,
     evento_agotado: str,
 ) -> bool:
+    """Envía mensaje."""
+    # Envía mensaje.
     smtp_server = settings.EMAIL_HOST
     smtp_port = settings.EMAIL_PORT
     smtp_username = settings.EMAIL_USER
@@ -310,6 +331,8 @@ async def enviar_codigo_recuperacion(
     minutos: int,
     locale: str,
 ) -> bool:
+    """Envía codigo recuperacion."""
+    # Envía codigo recuperacion.
     msg = _construir_mensaje_recuperacion(
         email_destino,
         codigo,
@@ -331,6 +354,7 @@ async def enviar_aviso_recuperacion_google(
     email_destino: str,
     locale: str,
 ) -> bool:
+    """Envía aviso recuperacion google."""
     msg = _construir_mensaje_aviso_google(
         email_destino,
         settings.EMAIL_USER,
@@ -353,6 +377,8 @@ async def enviar_reporte_perfil_inapropiado(
     reportar_foto: bool,
     observaciones: str | None,
 ) -> bool:
+    """Envía reporte perfil inapropiado."""
+    # Envía reporte perfil inapropiado.
     msg = _construir_mensaje_reporte_perfil(
         usuario_reportante=usuario_reportante,
         usuario_reportado=usuario_reportado,

@@ -1,3 +1,6 @@
+# scripts/seed_aportillo.py
+
+"""Incluye un script de apoyo para tareas del proyecto."""
 
 from __future__ import annotations
 
@@ -90,7 +93,7 @@ PLANTILLAS = [
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
         "ruta_polilinea": "skuuFvgoUfEcQzE{T~HoQjQgPjZoNjWoI~AgBfRcHnFiLo@sNgG{MiJwG{EsS",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490#map=15/40.41430/-3.68490",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490# map=15/40.41430/-3.68490",
     },
     {
         "nombre": "Madrid Río progresivo",
@@ -108,7 +111,7 @@ PLANTILLAS = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310#map=15/40.40820/-3.70310",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310# map=15/40.40820/-3.70310",
     },
     {
         "nombre": "Casa de Campo fondo",
@@ -126,7 +129,7 @@ PLANTILLAS = [
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
         "ruta_polilinea": "_mtuFnowUgJwQgOwLkMgOcL_SnKwQ~RkC~RzE~MnP~HvVoAvVsI~MkH~C",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000#map=15/40.41440/-3.73000",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000# map=15/40.41440/-3.73000",
     },
     {
         "nombre": "Dehesa recovery walk",
@@ -144,7 +147,7 @@ PLANTILLAS = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "oo~uFvouUgJcVcGgYg@k[~DaYzJwVmFsLaQ_CoTuImPeRkEmUw@qYfGaY~QmPvUmGjWbLrTfU|QhYdBxZgI~XqOzToVjNmVfGkR{DcNqIgP}A_N{@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750#map=15/40.46070/-3.70750",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750# map=15/40.46070/-3.70750",
     },
     {
         "nombre": "Capricho paseo largo",
@@ -162,7 +165,7 @@ PLANTILLAS = [
         "pausas_manuales": 2,
         "alertas_velocidad": 0,
         "ruta_polilinea": "wj|uFvc}ToFwQkCgT?gTbEuRnJmOtPuHpXeA|XcFjUcKjNuOjGqQ~@oR_DgQiJmNmPcIvUcD|W~@vWbEyT~HoP|LmJpQeCxQ?lQeDzEoP{@wLwG",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640#map=15/40.44990/-3.58640",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640# map=15/40.44990/-3.58640",
     },
     {
         "nombre": "Tío Pío series",
@@ -180,7 +183,7 @@ PLANTILLAS = [
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
         "ruta_polilinea": "_houF~sgU_IwL{JwL_IgOrDgT~M_IvQR~MrIvGvQg@~RkHfOgJbGkHR",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880#map=15/40.38800/-3.64880",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880# map=15/40.38800/-3.64880",
     },
 ]
 
@@ -276,7 +279,7 @@ def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
         alertas = 0
 
     return {
-        "nombre": f"{base['nombre']} #{indice + 1}",
+        "nombre": f"{base['nombre']} # {indice + 1}",
         "tipo": base["tipo"],
         "distancia": distancia,
         "duracion_movimiento": duracion_mov,
@@ -296,20 +299,19 @@ def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
     }
 
 
-
-
 def derivar_ritmo_maximo(
     ritmo_medio_movimiento: int,
     velocidad_max_x100: int,
     tipo: TipoActividad,
 ) -> int:
-    """Deriva un ritmo máximo razonable para datos seed.
+    """Deriva un ritmo máximo razonable para datos semilla.
 
     El backend persistente ahora guarda ritmo máximo además del ritmo medio.
-    En los seeds evitamos valores imposibles partiendo de la velocidad máxima
+    En los semillas evitamos valores imposibles partiendo de la velocidad máxima
     y acotando el resultado para que sea mejor que el ritmo medio en movimiento,
     pero sin producir picos absurdos por ruido.
     """
+    # Gestiona derivar ritmo maximo.
     ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
     velocidad_max_x100 = max(1, int(velocidad_max_x100))
 
@@ -319,14 +321,19 @@ def derivar_ritmo_maximo(
     es_correr = tipo == TipoActividad.CORRER
     mejora_maxima = 60 if es_correr else 90
     ratio_minimo = 0.72 if es_correr else 0.80
-    suelo = max(int(round(ritmo_medio_movimiento * ratio_minimo)), ritmo_medio_movimiento - mejora_maxima)
+    suelo = max(
+        int(round(ritmo_medio_movimiento * ratio_minimo)),
+        ritmo_medio_movimiento - mejora_maxima,
+    )
     techo = max(1, ritmo_medio_movimiento - (15 if es_correr else 10))
 
     candidato = min(pace_desde_velocidad_max, techo)
     return max(1, min(candidato, techo) if candidato >= suelo else suelo)
 
+
 def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
-    """Convierte el diccionario del seed en un payload validado."""
+    """Convierte el diccionario de la semilla en una carga útil validada."""
+    # Construye actividad.
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
 
     return schemas.GuardarActividad(
@@ -339,11 +346,14 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
         calorias_quemadas=int(ruta["calorias_quemadas"]),
         ritmo_medio_movimiento=int(ruta["ritmo_medio_movimiento"]),
         ritmo_medio_total=int(ruta["ritmo_medio_total"]),
-        ritmo_maximo=int(ruta.get("ritmo_maximo") or derivar_ritmo_maximo(
-            int(ruta["ritmo_medio_movimiento"]),
-            int(ruta["velocidad_max_x100"]),
-            ruta["tipo"],
-        )),
+        ritmo_maximo=int(
+            ruta.get("ritmo_maximo")
+            or derivar_ritmo_maximo(
+                int(ruta["ritmo_medio_movimiento"]),
+                int(ruta["velocidad_max_x100"]),
+                ruta["tipo"],
+            )
+        ),
         velocidad_media_x100=int(ruta["velocidad_media_x100"]),
         velocidad_max_x100=int(ruta["velocidad_max_x100"]),
         auto_pausas=int(ruta["auto_pausas"]),
@@ -382,6 +392,7 @@ async def actividad_ya_existe(db, usuario_id: int, ruta: dict) -> bool:
 
 async def crear_actividades_aportillo() -> None:
     """Inicializa la BD y crea 30 actividades completas para aportillo."""
+    # Construye actividades aportillo.
     await database.init_db()
 
     if database.AsyncSessionLocal is None:
@@ -407,7 +418,7 @@ async def crear_actividades_aportillo() -> None:
             try:
                 if await actividad_ya_existe(db, usuario.id, ruta):
                     print(
-                        f"[SKIP] {usuario.nombre_usuario}: actividad #{indice} ya existe "
+                        f"[SKIP] {usuario.nombre_usuario}: actividad # {indice} ya existe "
                         f"({ruta['nombre']} - {ruta['fecha_ruta'].isoformat()})"
                     )
                     total_omitidas += 1
@@ -426,7 +437,7 @@ async def crear_actividades_aportillo() -> None:
             except Exception as exc:
                 total_omitidas += 1
                 print(
-                    f"[SKIP] {usuario.nombre_usuario}: actividad #{indice} "
+                    f"[SKIP] {usuario.nombre_usuario}: actividad # {indice} "
                     f"({ruta['nombre']}) -> {exc}"
                 )
 
@@ -442,5 +453,3 @@ async def crear_actividades_aportillo() -> None:
 
 if __name__ == "__main__":
     asyncio.run(crear_actividades_aportillo())
-
-

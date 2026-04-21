@@ -1,10 +1,13 @@
 # domain/enums.py
 
+"""Define elementos del dominio compartido."""
+
 from enum import Enum
 
 
 class ProvinciaEspaña(str, Enum):
     # Andalucía
+    """Representa provincias de España."""
     ALMERIA = "Almería"
     CADIZ = "Cádiz"
     CORDOBA = "Córdoba"
@@ -94,12 +97,16 @@ class ProvinciaEspaña(str, Enum):
 
 
 class GeneroUsuario(str, Enum):
+    """Representa genero usuario."""
+
     HOMBRE = "Hombre"
     MUJER = "Mujer"
     OTRO = "Otro"
 
 
 class TipoActividad(str, Enum):
+    """Representa tipo actividad."""
+
     CAMINAR = "Caminar"
     CORRER = "Correr"
 

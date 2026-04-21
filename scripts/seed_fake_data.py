@@ -1,3 +1,7 @@
+# scripts/seed_fake_data.py
+
+"""Incluye un script de apoyo para tareas del proyecto."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,7 +14,10 @@ if str(PROJECT_ROOT) not in sys.path:
 import asyncio  # noqa: E402
 import random  # noqa: E402
 from datetime import date, datetime, timedelta, timezone  # noqa: E402
-from typing import TypedDict  # noqa: E402
+from collections.abc import Awaitable, Callable  # noqa: E402
+from typing import Any, TypedDict, cast  # noqa: E402
+
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from pydantic import AnyHttpUrl  # noqa: E402
 from sqlalchemy import and_, func, select  # noqa: E402
@@ -21,11 +28,29 @@ from domain.enums import GeneroUsuario, ProvinciaEspaña, TipoActividad  # noqa:
 from services import activities_service, user_service  # noqa: E402
 
 
+RegistrarNuevoUsuarioAsync = Callable[
+    [AsyncSession, schemas.Registro],
+    Awaitable[dict[str, Any]],
+]
+CrearActividadAsync = Callable[
+    [AsyncSession, int, schemas.GuardarActividad],
+    Awaitable[dict[str, Any]],
+]
+
+registrar_nuevo_usuario_async = cast(
+    RegistrarNuevoUsuarioAsync,
+    user_service.registrar_nuevo_usuario,
+)
+crear_actividad_async = cast(
+    CrearActividadAsync,
+    activities_service.crear_actividad,
+)
+
 """
-Seed de datos fake para MoveOn.
+Semilla de datos simulados para MoveOn.
 
 Crea:
-- 20 usuarios fake:
+- 20 usuarios simulados:
   prueba01@prueba.com ... prueba20@prueba.com
   password: Prueba01- ... Prueba20-
 - 15 actividades base completas con todos los campos del esquema actual
@@ -34,7 +59,6 @@ Crea:
 - Nombres reales ajustados para no chocar con la moderación local
 - Idempotente: si ya existe un usuario o actividad seed, no la duplica
 """
-
 
 VERSION_TERMINOS = "1.0"
 TOTAL_USUARIOS = 20
@@ -47,6 +71,8 @@ random.seed(SEED)
 
 
 class RutaSeed(TypedDict):
+    """Representa ruta semilla."""
+
     nombre: str
     tipo: TipoActividad
     distancia: int
@@ -67,6 +93,7 @@ class RutaSeed(TypedDict):
 
 
 def provincia_safe(*names: str) -> ProvinciaEspaña:
+    """Gestiona provincia safe."""
     for name in names:
         if hasattr(ProvinciaEspaña, name):
             return getattr(ProvinciaEspaña, name)
@@ -75,29 +102,136 @@ def provincia_safe(*names: str) -> ProvinciaEspaña:
 
 USUARIOS_BASE = [
     ("carlosmartin01", "Carlos Martin", GeneroUsuario.HOMBRE, provincia_safe("MADRID")),
-    ("luciafernandez02", "Lucia Fernandez", GeneroUsuario.MUJER, provincia_safe("BARCELONA")),
-    ("javiersanchez03", "Javier Sanchez", GeneroUsuario.HOMBRE, provincia_safe("VALENCIA")),
+    (
+        "luciafernandez02",
+        "Lucia Fernandez",
+        GeneroUsuario.MUJER,
+        provincia_safe("BARCELONA"),
+    ),
+    (
+        "javiersanchez03",
+        "Javier Sanchez",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("VALENCIA"),
+    ),
     ("martalopez04", "Marta Lopez", GeneroUsuario.MUJER, provincia_safe("SEVILLA")),
-    ("alejandroruiz05", "Alejandro Ruiz", GeneroUsuario.HOMBRE, provincia_safe("MÁLAGA", "MALAGA")),
+    (
+        "alejandroruiz05",
+        "Alejandro Ruiz",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("MÁLAGA", "MALAGA"),
+    ),
     ("paulagomez06", "Paula Gomez", GeneroUsuario.MUJER, provincia_safe("MURCIA")),
-    ("danieltorres07", "Daniel Torres", GeneroUsuario.HOMBRE, provincia_safe("ZARAGOZA")),
-    ("elenanavarro08", "Elena Navarro", GeneroUsuario.MUJER, provincia_safe("ALICANTE")),
-    ("sergioromero09", "Sergio Romero", GeneroUsuario.HOMBRE, provincia_safe("CÁDIZ", "CADIZ")),
-    ("claudiacastro10", "Claudia Castro", GeneroUsuario.MUJER, provincia_safe("GRANADA")),
-    ("adrianortega11", "Adrian Ortega", GeneroUsuario.HOMBRE, provincia_safe("CÓRDOBA", "CORDOBA")),
-    ("nereamolina12", "Nerea Molina", GeneroUsuario.MUJER, provincia_safe("VALLADOLID")),
-    ("ivandelgado13", "Ivan Delgado", GeneroUsuario.HOMBRE, provincia_safe("A_CORUÑA", "A_CORUNA")),
+    (
+        "danieltorres07",
+        "Daniel Torres",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("ZARAGOZA"),
+    ),
+    (
+        "elenanavarro08",
+        "Elena Navarro",
+        GeneroUsuario.MUJER,
+        provincia_safe("ALICANTE"),
+    ),
+    (
+        "sergioromero09",
+        "Sergio Romero",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("CÁDIZ", "CADIZ"),
+    ),
+    (
+        "claudiacastro10",
+        "Claudia Castro",
+        GeneroUsuario.MUJER,
+        provincia_safe("GRANADA"),
+    ),
+    (
+        "adrianortega11",
+        "Adrian Ortega",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("CÓRDOBA", "CORDOBA"),
+    ),
+    (
+        "nereamolina12",
+        "Nerea Molina",
+        GeneroUsuario.MUJER,
+        provincia_safe("VALLADOLID"),
+    ),
+    (
+        "ivandelgado13",
+        "Ivan Delgado",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("A_CORUÑA", "A_CORUNA"),
+    ),
     ("lauravega14", "Laura Vega", GeneroUsuario.MUJER, provincia_safe("TOLEDO")),
-    ("pablogil15", "Pablo Gil", GeneroUsuario.HOMBRE, provincia_safe("GUIPÚZCOA", "GUIPUZCOA")),
-    ("saraherrera16", "Sara Herrera", GeneroUsuario.MUJER, provincia_safe("LEÓN", "LEON")),
+    (
+        "pablogil15",
+        "Pablo Gil",
+        GeneroUsuario.HOMBRE,
+        provincia_safe("GUIPÚZCOA", "GUIPUZCOA"),
+    ),
+    (
+        "saraherrera16",
+        "Sara Herrera",
+        GeneroUsuario.MUJER,
+        provincia_safe("LEÓN", "LEON"),
+    ),
     ("rubenleon17", "Ruben Leon", GeneroUsuario.HOMBRE, provincia_safe("TARRAGONA")),
     ("andrearios18", "Andrea Rios", GeneroUsuario.MUJER, provincia_safe("BADAJOZ")),
     ("davidcruz19", "David Cruz", GeneroUsuario.HOMBRE, provincia_safe("CANTABRIA")),
-    ("noeliacano20", "Noelia Cano", GeneroUsuario.MUJER, provincia_safe("VIZCAYA", "BIZKAIA")),
+    (
+        "noeliacano20",
+        "Noelia Cano",
+        GeneroUsuario.MUJER,
+        provincia_safe("VIZCAYA", "BIZKAIA"),
+    ),
 ]
 
-ALTURAS = [178, 165, 182, 168, 176, 163, 180, 170, 183, 167, 179, 164, 181, 169, 177, 166, 184, 171, 175, 168]
-PESOS = [78.5, 58.2, 82.0, 61.4, 76.8, 57.9, 80.6, 60.5, 84.1, 59.8, 77.3, 56.7, 79.5, 62.1, 74.9, 58.8, 83.3, 63.0, 75.4, 60.9]
+ALTURAS = [
+    178,
+    165,
+    182,
+    168,
+    176,
+    163,
+    180,
+    170,
+    183,
+    167,
+    179,
+    164,
+    181,
+    169,
+    177,
+    166,
+    184,
+    171,
+    175,
+    168,
+]
+PESOS = [
+    78.5,
+    58.2,
+    82.0,
+    61.4,
+    76.8,
+    57.9,
+    80.6,
+    60.5,
+    84.1,
+    59.8,
+    77.3,
+    56.7,
+    79.5,
+    62.1,
+    74.9,
+    58.8,
+    83.3,
+    63.0,
+    75.4,
+    60.9,
+]
 FECHAS_NACIMIENTO = [
     date(1991, 2, 14),
     date(1994, 7, 3),
@@ -139,7 +273,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "}_ilFf}qUe@qA_A_Bg@q@w@qA_AiAw@w@q@e@u@_Ay@uA_AuAe@q@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.4153&mlon=-3.6844#map=15/40.4153/-3.6844",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.4153&mlon=-3.6844# map=15/40.4153/-3.6844",
     },
     {
         "nombre": "Madrid Río 5K",
@@ -158,7 +292,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 0,
         "alertas_velocidad": 1,
         "ruta_polilinea": "u_thFzvtUe@w@i@cAq@oAw@cBy@qA_@u@q@aA_AkAu@{Aq@cA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.4038&mlon=-3.7223#map=15/40.4038/-3.7223",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.4038&mlon=-3.7223# map=15/40.4038/-3.7223",
     },
     {
         "nombre": "Turia 6.4K",
@@ -177,7 +311,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "gq{hFf`zVe@u@i@w@k@cAc@u@w@oA_AqAq@kAg@u@u@cAi@w@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=39.4746&mlon=-0.3860#map=15/39.4746/-0.3860",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=39.4746&mlon=-0.3860# map=15/39.4746/-0.3860",
     },
     {
         "nombre": "Playa Málaga 7K",
@@ -196,7 +330,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 2,
         "ruta_polilinea": "okbpF|~nUg@u@u@_Aw@kA_AiAw@qAe@w@a@u@c@w@u@_A_AgB",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.7197&mlon=-4.4106#map=15/36.7197/-4.4106",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.7197&mlon=-4.4106# map=15/36.7197/-4.4106",
     },
     {
         "nombre": "Murcia centro 3.6K",
@@ -215,7 +349,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "gwjkFjykWi@w@u@aA_AiAq@w@w@aAc@u@i@w@q@aA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=37.9849&mlon=-1.1280#map=15/37.9849/-1.1280",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=37.9849&mlon=-1.1280# map=15/37.9849/-1.1280",
     },
     {
         "nombre": "Ebro 8.1K",
@@ -234,7 +368,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 2,
         "ruta_polilinea": "wjjsFf`oXg@u@q@_Aa@u@u@aA_AiAq@w@i@u@o@aA_AiA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=41.6561&mlon=-0.8773#map=15/41.6561/-0.8773",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=41.6561&mlon=-0.8773# map=15/41.6561/-0.8773",
     },
     {
         "nombre": "Alicante puerto 4.8K",
@@ -253,7 +387,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "i}yrEtofYc@u@o@aA_AiAq@w@w@aAc@u@q@aAc@u@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=38.3452&mlon=-0.4810#map=15/38.3452/-0.4810",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=38.3452&mlon=-0.4810# map=15/38.3452/-0.4810",
     },
     {
         "nombre": "Granada 5.5K",
@@ -272,7 +406,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 0,
         "alertas_velocidad": 1,
         "ruta_polilinea": "eulkFjzzUc@u@w@_Am@w@u@aA_AkAq@w@i@u@w@aA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=37.1765&mlon=-3.5986#map=15/37.1765/-3.5986",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=37.1765&mlon=-3.5986# map=15/37.1765/-3.5986",
     },
     {
         "nombre": "Valladolid 6K",
@@ -291,7 +425,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "sxbmFj~kYe@u@i@w@u@aA_AiAq@w@i@u@w@aAq@w@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=41.6523&mlon=-4.7245#map=15/41.6523/-4.7245",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=41.6523&mlon=-4.7245# map=15/41.6523/-4.7245",
     },
     {
         "nombre": "Coruña 9K",
@@ -310,7 +444,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 2,
         "ruta_polilinea": "ixnjFz~aZa@u@u@aA_AiAq@w@w@aAa@u@u@aA_AiAw@aA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=43.3623&mlon=-8.4115#map=15/43.3623/-8.4115",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=43.3623&mlon=-8.4115# map=15/43.3623/-8.4115",
     },
     {
         "nombre": "Toledo ribera 4.4K",
@@ -329,7 +463,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "m_xiFjxzVe@u@q@aA_AiAw@aAq@w@i@u@u@aAq@w@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=39.8628&mlon=-4.0273#map=15/39.8628/-4.0273",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=39.8628&mlon=-4.0273# map=15/39.8628/-4.0273",
     },
     {
         "nombre": "Donostia 7.4K",
@@ -348,7 +482,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 2,
         "ruta_polilinea": "wqmoFnyqYg@u@u@aA_AiAq@w@q@aAe@u@u@aA_AiA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=43.3183&mlon=-1.9812#map=15/43.3183/-1.9812",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=43.3183&mlon=-1.9812# map=15/43.3183/-1.9812",
     },
     {
         "nombre": "León casco 3.9K",
@@ -367,7 +501,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "iuhmFf`rXe@u@q@aA_AiAw@aAe@u@q@aAc@u@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=42.5987&mlon=-5.5671#map=15/42.5987/-5.5671",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=42.5987&mlon=-5.5671# map=15/42.5987/-5.5671",
     },
     {
         "nombre": "Tarragona litoral 6.8K",
@@ -386,7 +520,7 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 2,
         "ruta_polilinea": "sllnF~qgYg@u@u@_Aa@u@w@aA_AiAq@w@w@aAq@w@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=41.1189&mlon=1.2445#map=15/41.1189/1.2445",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=41.1189&mlon=1.2445# map=15/41.1189/1.2445",
     },
     {
         "nombre": "Santander 5.2K",
@@ -405,20 +539,23 @@ RUTAS_BASE: list[RutaSeed] = [
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
         "ruta_polilinea": "qjcnFnlqYe@u@u@aA_AkAw@aAq@w@e@u@u@aAq@w@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=43.4623&mlon=-3.8099#map=15/43.4623/-3.8099",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=43.4623&mlon=-3.8099# map=15/43.4623/-3.8099",
     },
 ]
 
 
 def ahora_utc() -> datetime:
+    """Gestiona ahora utc."""
     return datetime.now(UTC)
 
 
 def fecha_aceptacion_base(indice: int) -> datetime:
+    """Gestiona fecha aceptacion base."""
     return datetime(2026, 1, 1, 9, 0, tzinfo=UTC) + timedelta(days=indice)
 
 
 def fecha_actividad(indice_usuario: int, indice_actividad: int) -> datetime:
+    """Gestiona fecha actividad."""
     base = datetime(2026, 1, 5, 7, 30, tzinfo=UTC)
     return base + timedelta(
         days=(indice_usuario * 3) + indice_actividad,
@@ -427,10 +564,12 @@ def fecha_actividad(indice_usuario: int, indice_actividad: int) -> datetime:
 
 
 def generar_password(indice: int) -> str:
+    """Genera password."""
     return f"Prueba{indice:02d}-"
 
 
 def generar_email(indice: int) -> str:
+    """Genera correo electrónico."""
     return f"prueba{indice:02d}@prueba.com"
 
 
@@ -439,16 +578,20 @@ def derivar_objetivo_semanal(
     altura: int,
     peso: float,
 ) -> int:
+    """Gestiona derivar objetivo semanal."""
     base = 45000 if tipo_preferente == TipoActividad.CAMINAR else 60000
     ajuste = ((altura - 160) * 200) + int((peso - 60) * 150)
     return max(10000, min(2000000, base + ajuste))
 
 
 def derivar_objetivo_mensual(objetivo_semanal: int) -> int:
+    """Gestiona derivar objetivo mensual."""
     return max(10000, min(2000000, objetivo_semanal * 4))
 
 
 def construir_registro(indice: int) -> schemas.Registro:
+    """Construye registro."""
+    # Construye registro.
     username, nombre_real, genero, provincia = USUARIOS_BASE[indice - 1]
 
     return schemas.Registro(
@@ -468,7 +611,11 @@ def construir_registro(indice: int) -> schemas.Registro:
     )
 
 
-def construir_actividad(ruta: RutaSeed, fecha_ruta: datetime) -> schemas.GuardarActividad:
+def construir_actividad(
+    ruta: RutaSeed, fecha_ruta: datetime
+) -> schemas.GuardarActividad:
+    """Construye actividad."""
+    # Construye actividad.
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
 
     ruta_mapa_url: AnyHttpUrl | None = None
@@ -499,6 +646,7 @@ def construir_actividad(ruta: RutaSeed, fecha_ruta: datetime) -> schemas.Guardar
 
 
 async def obtener_usuario_existente(db, email: str, username: str):
+    """Obtiene usuario existente."""
     result = await db.execute(
         select(database.Usuario).where(
             and_(
@@ -511,6 +659,7 @@ async def obtener_usuario_existente(db, email: str, username: str):
 
 
 async def obtener_o_crear_usuario(db, indice: int):
+    """Obtiene o crear usuario."""
     registro = construir_registro(indice)
 
     existente = await obtener_usuario_existente(
@@ -523,7 +672,7 @@ async def obtener_o_crear_usuario(db, indice: int):
 
     # Firma correcta del servicio actual:
     # registrar_nuevo_usuario(db, datos)
-    await user_service.registrar_nuevo_usuario(db, registro)
+    await registrar_nuevo_usuario_async(db, registro)
 
     usuario = await obtener_usuario_existente(
         db,
@@ -551,6 +700,7 @@ async def obtener_o_crear_usuario(db, indice: int):
 
 
 async def contar_actividades_usuario(db, usuario_id: int) -> int:
+    """Gestiona contar actividades usuario."""
     result = await db.execute(
         select(database.Actividad.id).where(database.Actividad.usuario_id == usuario_id)
     )
@@ -564,6 +714,7 @@ async def actividad_ya_existe(
     distancia: int,
     fecha_ruta: datetime,
 ) -> bool:
+    """Gestiona actividad ya existe."""
     result = await db.execute(
         select(database.Actividad.id).where(
             and_(
@@ -578,6 +729,7 @@ async def actividad_ya_existe(
 
 
 async def crear_actividades_faltantes(db, usuario, indice_usuario: int) -> int:
+    """Construye actividades faltantes."""
     total_actual = await contar_actividades_usuario(db, usuario.id)
     faltan = max(0, ACTIVIDADES_POR_USUARIO - total_actual)
     if faltan == 0:
@@ -605,13 +757,15 @@ async def crear_actividades_faltantes(db, usuario, indice_usuario: int) -> int:
 
         # Firma correcta del servicio actual:
         # crear_actividad(db, usuario_actual_id, datos)
-        await activities_service.crear_actividad(db, usuario.id, payload)
+        await crear_actividad_async(db, usuario.id, payload)
         creadas += 1
 
     return creadas
 
 
 async def seed_fake_data() -> None:
+    """Carga datos simulados de prueba."""
+    # Poblar la base de datos con datos simulados de prueba.
     if database.AsyncSessionLocal is None:
         database._init_db_objects()
 
@@ -644,6 +798,7 @@ async def seed_fake_data() -> None:
 
 
 async def main() -> None:
+    """Gestiona principal."""
     await seed_fake_data()
 
 

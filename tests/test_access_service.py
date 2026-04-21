@@ -1,13 +1,12 @@
-#
-# Sustituye a:
-#   - test_access_service_refresh.py
-#   - test_access_service_password_recovery.py
-#
+# tests/test_access_service.py
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 # Cubre todas las funciones públicas de services/access_service.py:
-#   buscar_por_identificador, crear_sesion_login,
-#   refrescar_sesion, cerrar_sesion,
-#   generar_codigo_recuperacion, resetear_password,
-#   _hash_refresh_token, _hash_codigo_recuperacion.
+# buscar_por_identificador, crear_sesion_login,
+# refrescar_sesion, cerrar_sesion,
+# generar_codigo_recuperacion, resetear_password,
+# _hash_refresh_token, _hash_codigo_recuperacion.
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,13 +19,13 @@ import database
 import schemas
 from services import access_service
 
-
 # ─────────────────────────────────────────────
-# Helpers
+# Ayudantes
 # ─────────────────────────────────────────────
 
 
 def _ahora() -> datetime:
+    """Devuelve la fecha y hora actual."""
     return datetime.now(timezone.utc)
 
 
@@ -38,6 +37,7 @@ def _make_sesion(
     expira_en: datetime | None = None,
     usuario_id: int = 1,
 ) -> MagicMock:
+    """Construye una sesión simulada."""
     sesion = MagicMock(spec=database.SesionRefresh)
     sesion.jti = jti
     sesion.familia_id = familia_id
@@ -51,6 +51,7 @@ def _make_sesion(
 
 
 def _make_usuario(nombre_usuario: str = "pepe", usuario_id: int = 1) -> MagicMock:
+    """Construye un usuario simulado."""
     usuario = MagicMock(spec=database.Usuario)
     usuario.id = usuario_id
     usuario.nombre_usuario = nombre_usuario
@@ -63,8 +64,11 @@ def _make_usuario(nombre_usuario: str = "pepe", usuario_id: int = 1) -> MagicMoc
 
 
 class TestBuscarPorIdentificador:
+    """Agrupa pruebas relacionadas con buscar por identificador."""
+
     @pytest.mark.asyncio
     async def test_identificador_existente_devuelve_usuario(self):
+        """Verifica que identificador existente devuelve usuario."""
         usuario = _make_usuario("pepe")
         db = AsyncMock()
         db.execute = AsyncMock(
@@ -78,6 +82,7 @@ class TestBuscarPorIdentificador:
 
     @pytest.mark.asyncio
     async def test_identificador_inexistente_devuelve_none(self):
+        """Verifica que un identificador inexistente devuelve None."""
         db = AsyncMock()
         db.execute = AsyncMock(
             return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
@@ -121,8 +126,12 @@ class TestBuscarPorIdentificador:
 
 
 class TestCrearSesionLogin:
+    """Agrupa pruebas relacionadas con crear sesion login."""
+
     @pytest.mark.asyncio
     async def test_guarda_hash_y_llama_limpiar(self):
+        """Verifica que guarda hash y llama limpiar."""
+        # Verifica que guarda hash y llama limpiar.
         usuario = _make_usuario("pepe", usuario_id=99)
         db = AsyncMock()
         db.commit = AsyncMock()
@@ -155,8 +164,11 @@ class TestCrearSesionLogin:
 
 
 class TestRefrescarSesionErrores:
+    """Agrupa pruebas relacionadas con refrescar sesion errores."""
+
     @pytest.mark.asyncio
     async def test_token_jwt_invalido_rechazado_sin_tocar_bd(self):
+        """Verifica que token JWT invalido rechazado sin tocar bd."""
         db = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -167,6 +179,7 @@ class TestRefrescarSesionErrores:
 
     @pytest.mark.asyncio
     async def test_sesion_no_encontrada_lanza_401(self):
+        """Verifica que sesion no encontrada lanza 401."""
         jti, familia = "jti-miss-001", "fam-miss-001"
         rt = auth.crear_token_refresh(1, jti, familia)
 
@@ -182,6 +195,8 @@ class TestRefrescarSesionErrores:
 
     @pytest.mark.asyncio
     async def test_token_revocado_lanza_401_reutilizado(self):
+        """Verifica que token revocado lanza 401 reutilizado."""
+        # Verifica que token revocado lanza 401 reutilizado.
         jti, familia = "jti-rotado-001", "familia-001"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -206,6 +221,8 @@ class TestRefrescarSesionErrores:
 
     @pytest.mark.asyncio
     async def test_token_revocado_invoca_revocar_familia(self):
+        """Verifica que token revocado invoca revocar familia."""
+        # Verifica que token revocado invoca revocar familia.
         jti, familia = "jti-reuse-101", "familia-reuse-101"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -231,6 +248,7 @@ class TestRefrescarSesionErrores:
 
     @pytest.mark.asyncio
     async def test_hash_manipulado_revoca_familia_y_lanza_401(self):
+        """Verifica que hash manipulado revoca familia y lanza 401."""
         jti, familia = "jti-manipulado-002", "familia-002"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -256,6 +274,8 @@ class TestRefrescarSesionErrores:
 
     @pytest.mark.asyncio
     async def test_sesion_expirada_en_bd_lanza_401(self):
+        """Verifica que sesion expirada en bd lanza 401."""
+        # Verifica que sesion expirada en bd lanza 401.
         jti, familia = "jti-expirado-004", "familia-004"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -278,6 +298,8 @@ class TestRefrescarSesionErrores:
 
     @pytest.mark.asyncio
     async def test_usuario_no_encontrado_revoca_sesion_y_lanza_401(self):
+        """Verifica que usuario no encontrado revoca sesion y lanza 401."""
+        # Verifica que usuario no encontrado revoca sesion y lanza 401.
         jti, familia = "jti-user-miss-102", "fam-user-miss-102"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -310,8 +332,12 @@ class TestRefrescarSesionErrores:
 
 
 class TestRefrescarSesionExito:
+    """Agrupa pruebas relacionadas con refrescar sesion exito."""
+
     @pytest.mark.asyncio
     async def test_rotacion_exitosa_devuelve_nuevos_tokens(self):
+        """Verifica que rotacion exitosa devuelve nuevos tokens."""
+        # Verifica que rotacion exitosa devuelve nuevos tokens.
         jti, familia = "jti-valido-005", "familia-005"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -342,6 +368,8 @@ class TestRefrescarSesionExito:
 
     @pytest.mark.asyncio
     async def test_rotacion_marca_sesion_anterior_como_revocada(self):
+        """Verifica que rotacion marca sesion anterior como revocada."""
+        # Verifica que rotacion marca sesion anterior como revocada.
         jti, familia = "jti-valido-006", "familia-006"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -374,8 +402,12 @@ class TestRefrescarSesionExito:
 
 
 class TestCerrarSesion:
+    """Agrupa pruebas relacionadas con cerrar sesion."""
+
     @pytest.mark.asyncio
     async def test_logout_normal_revoca_sesion(self):
+        """Verifica que logout normal revoca sesion."""
+        # Verifica que logout normal revoca sesion.
         jti, familia = "jti-logout-001", "familia-logout-001"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -398,6 +430,8 @@ class TestCerrarSesion:
 
     @pytest.mark.asyncio
     async def test_logout_idempotente_sesion_ya_revocada(self):
+        """Verifica que logout idempotente sesion ya revocada."""
+        # Verifica que logout idempotente sesion ya revocada.
         jti, familia = "jti-logout-002", "familia-logout-002"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -420,6 +454,7 @@ class TestCerrarSesion:
 
     @pytest.mark.asyncio
     async def test_logout_token_invalido_responde_success(self):
+        """Verifica que logout token invalido responde success."""
         db = AsyncMock()
         resultado = await access_service.cerrar_sesion(db, "token.invalido.jwt")
 
@@ -428,6 +463,7 @@ class TestCerrarSesion:
 
     @pytest.mark.asyncio
     async def test_logout_sesion_no_encontrada_responde_success(self):
+        """Verifica que logout sesion no encontrada responde success."""
         rt = auth.crear_token_refresh(1, "jti-logout-003", "fam-003")
 
         db = AsyncMock()
@@ -440,6 +476,7 @@ class TestCerrarSesion:
 
     @pytest.mark.asyncio
     async def test_logout_hash_manipulado_no_revoca_la_sesion(self):
+        """Verifica que logout hash manipulado no revoca la sesion."""
         jti, familia = "jti-logout-004", "fam-004"
         rt = auth.crear_token_refresh(1, jti, familia)
         sesion = _make_sesion(
@@ -467,8 +504,12 @@ class TestCerrarSesion:
 
 
 class TestGenerarCodigoRecuperacion:
+    """Agrupa pruebas relacionadas con generar codigo recuperacion."""
+
     @pytest.mark.asyncio
     async def test_email_existente_guarda_hash_y_programa_envio(self):
+        """Verifica que correo electrónico existente guarda hash y programa envio."""
+        # Verifica que correo electrónico existente guarda hash y programa envio.
         usuario = MagicMock()
         usuario.codigo_recuperacion = None
         usuario.codigo_expiracion = None
@@ -503,6 +544,8 @@ class TestGenerarCodigoRecuperacion:
 
     @pytest.mark.asyncio
     async def test_email_inexistente_no_hace_commit_ni_programa_envio(self):
+        """Verifica que correo electrónico inexistente no hace commit ni programa envio."""
+        # Verifica que correo electrónico inexistente no hace commit ni programa envio.
         db = AsyncMock()
         db.execute = AsyncMock(
             return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
@@ -525,6 +568,7 @@ class TestGenerarCodigoRecuperacion:
     @pytest.mark.asyncio
     async def test_respuesta_identica_email_exista_o_no(self):
         """No debe filtrarse si el email está registrado o no."""
+        # Verifica que respuesta identica correo electrónico exista o no.
         db_existe = AsyncMock()
         db_existe.execute = AsyncMock(
             return_value=MagicMock(
@@ -550,6 +594,8 @@ class TestGenerarCodigoRecuperacion:
 
     @pytest.mark.asyncio
     async def test_cuenta_google_no_genera_codigo_y_programa_aviso(self):
+        """Verifica que cuenta google no genera codigo y programa aviso."""
+        # Verifica que cuenta google no genera codigo y programa aviso.
         usuario = MagicMock()
         usuario.id = 12
         usuario.codigo_recuperacion = None
@@ -589,8 +635,12 @@ class TestGenerarCodigoRecuperacion:
 
 
 class TestResetearPassword:
+    """Agrupa pruebas relacionadas con resetear password."""
+
     @pytest.mark.asyncio
     async def test_codigo_correcto_actualiza_password_y_revoca_refresh_tokens(self):
+        """Verifica que codigo correcto actualiza password y revoca refresco tokens."""
+        # Verifica que codigo correcto actualiza password y revoca refresco tokens.
         usuario = MagicMock()
         usuario.id = 7
         usuario.codigo_expiracion = _ahora() + timedelta(minutes=10)
@@ -614,6 +664,7 @@ class TestResetearPassword:
         )
 
         async def fake_run_in_threadpool(fn, *args, **kwargs):
+            """Crea un simulacro de run in threadpool."""
             return "hash-nuevo"
 
         with patch(
@@ -631,6 +682,8 @@ class TestResetearPassword:
 
     @pytest.mark.asyncio
     async def test_codigo_expirado_lanza_400_y_no_hace_commit(self):
+        """Verifica que codigo expirado lanza 400 y no hace commit."""
+        # Verifica que codigo expirado lanza 400 y no hace commit.
         usuario = MagicMock()
         usuario.id = 7
         usuario.codigo_expiracion = _ahora() - timedelta(minutes=1)
@@ -657,6 +710,8 @@ class TestResetearPassword:
 
     @pytest.mark.asyncio
     async def test_codigo_o_email_invalidos_lanza_400(self):
+        """Verifica que codigo o correo electrónico invalidos lanza 400."""
+        # Verifica que codigo o correo electrónico invalidos lanza 400.
         db = AsyncMock()
         db.execute = AsyncMock(
             return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
@@ -703,6 +758,7 @@ class TestResetearPassword:
 
     @pytest.mark.asyncio
     async def test_cuenta_google_con_codigo_existente_se_bloquea_y_limpia_otp(self):
+        """Verifica que cuenta google con codigo existente se bloquea y limpia otp."""
         usuario = MagicMock()
         usuario.id = 7
         usuario.codigo_expiracion = _ahora() + timedelta(minutes=10)
@@ -739,13 +795,17 @@ class TestResetearPassword:
 
 
 class TestFuncionesHash:
+    """Agrupa pruebas relacionadas con funciones hash."""
+
     def test_hash_refresh_determinista(self):
+        """Verifica que hash refresco determinista."""
         rt = auth.crear_token_refresh(1, "jti-h1", "fam-h1")
         assert access_service._hash_refresh_token(
             rt
         ) == access_service._hash_refresh_token(rt)
 
     def test_hash_refresh_distinto_por_token(self):
+        """Verifica que hash refresco distinto por token."""
         rt1 = auth.crear_token_refresh(1, "jti-1", "fam")
         rt2 = auth.crear_token_refresh(1, "jti-2", "fam")
         assert access_service._hash_refresh_token(
@@ -753,20 +813,24 @@ class TestFuncionesHash:
         ) != access_service._hash_refresh_token(rt2)
 
     def test_hash_refresh_longitud_64(self):
+        """Verifica que hash refresco longitud 64."""
         rt = auth.crear_token_refresh(1, "jti-len", "fam-len")
         assert len(access_service._hash_refresh_token(rt)) == 64
 
     def test_hash_codigo_recuperacion_determinista(self):
+        """Verifica que hash codigo recuperacion determinista."""
         assert access_service._hash_codigo_recuperacion(
             "123456"
         ) == access_service._hash_codigo_recuperacion("123456")
 
     def test_hash_codigo_diferente_por_codigo(self):
+        """Verifica que hash codigo diferente por codigo."""
         assert access_service._hash_codigo_recuperacion(
             "123456"
         ) != access_service._hash_codigo_recuperacion("654321")
 
     def test_hash_refresh_y_codigo_usan_secretos_distintos(self):
+        """Verifica que hash refresco y codigo usan secretos distintos."""
         texto = "mismo-texto"
         assert access_service._hash_refresh_token(
             texto

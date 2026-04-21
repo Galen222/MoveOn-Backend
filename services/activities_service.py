@@ -1,6 +1,9 @@
 # services/activities_service.py
 
+"""Implementa la lógica de negocio de este servicio."""
+
 import json
+from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, delete as sa_delete, and_
 from exceptions import app_http_exception
@@ -14,10 +17,11 @@ logger = logging.getLogger("app.activities")
 
 async def crear_actividad(
     db: AsyncSession, usuario_actual_id: int, datos: schemas.GuardarActividad
-):
+) -> dict[str, Any]:
     """
     Busca al usuario y registra una nueva actividad deportiva enriquecida.
     """
+    # Construye actividad.
     usuario = (
         await db.execute(
             select(database.Usuario)
@@ -140,7 +144,7 @@ async def guardar_actividad_diagnostico(
     db: AsyncSession,
     usuario_actual_id: int,
     datos: schemas.GuardarActividadDiagnostico,
-):
+) -> schemas.RespuestaGuardarActividadDiagnostico:
     """
     Guarda telemetría de diagnóstico enviada automáticamente por la app.
 
@@ -149,6 +153,7 @@ async def guardar_actividad_diagnostico(
     - no altera acumulados del perfil
     - no modifica ranking
     """
+    # Guarda actividad diagnostico.
     usuario = (
         await db.execute(
             select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
@@ -245,11 +250,11 @@ async def guardar_actividad_diagnostico(
         },
     )
 
-    return {
-        "estatus": "success",
-        "mensaje": "Diagnóstico de actividad guardado correctamente",
-        "diagnostico_id": diagnostico.id,
-    }
+    return schemas.RespuestaGuardarActividadDiagnostico(
+        estatus="success",
+        mensaje="Diagnóstico de actividad guardado correctamente",
+        diagnostico_id=diagnostico.id,
+    )
 
 
 async def obtener_actividad(
@@ -258,6 +263,8 @@ async def obtener_actividad(
     # Reducimos queries duplicadas: en vez de consultar primero el usuario y luego la actividad,
     # se hace una sola query con OUTER JOIN para seguir distinguiendo entre usuario inexistente
     # y actividad inexistente o que no pertenece a este usuario.
+    """Obtiene actividad."""
+    # Obtiene actividad.
     fila = (
         await db.execute(
             select(database.Usuario.id, database.Actividad)
@@ -313,6 +320,7 @@ async def obtener_actividades(
     Obtiene la lista paginada de actividades del usuario autenticado
     junto con metadata de paginación.
     """
+    # Obtiene actividades.
     usuario_existe = (
         await db.execute(
             select(database.Usuario.id).where(database.Usuario.id == usuario_actual_id)
@@ -384,6 +392,8 @@ async def eliminar_actividad(
 ):
     # Se sigue bloqueando el usuario porque se modifican los acumulados,
     # pero usuario + actividad se recuperan en una sola query.
+    """Elimina actividad."""
+    # Elimina actividad.
     fila = (
         await db.execute(
             select(database.Usuario, database.Actividad)
@@ -478,6 +488,8 @@ async def eliminar_actividad(
 
 
 async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
+    """Elimina actividades."""
+    # Elimina actividades.
     usuario = (
         await db.execute(
             select(database.Usuario)

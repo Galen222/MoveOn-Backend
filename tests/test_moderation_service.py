@@ -1,5 +1,7 @@
 # tests/test_moderation_service.py
 
+"""Contiene pruebas automatizadas de este módulo."""
+
 from __future__ import annotations
 
 import pytest
@@ -14,6 +16,7 @@ def _write_dicts(
     en_words: list[str] | None = None,
     es_words: list[str] | None = None,
 ) -> None:
+    """Gestiona write dicts."""
     (tmp_path / "en.txt").write_text(
         "\n".join(en_words or []),
         encoding="utf-8",
@@ -26,6 +29,7 @@ def _write_dicts(
 
 @pytest.fixture(autouse=True)
 def _reset_cache():
+    """Gestiona reset cache."""
     svc._load_dictionary_cached.cache_clear()
     yield
     svc._load_dictionary_cached.cache_clear()
@@ -33,6 +37,8 @@ def _reset_cache():
 
 @pytest.fixture
 def _base_settings(monkeypatch, tmp_path):
+    """Gestiona base configuración."""
+    # Gestiona base configuración.
     monkeypatch.setattr(svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False)
     monkeypatch.setattr(svc.settings, "TEXT_MODERATION_FAIL_OPEN", False, raising=False)
     monkeypatch.setattr(
@@ -65,8 +71,11 @@ def _base_settings(monkeypatch, tmp_path):
 
 
 class TestValidarNombreUsuario:
+    """Agrupa pruebas relacionadas con validar nombre usuario."""
+
     @pytest.mark.asyncio
     async def test_username_reservado_bloquea(self, _base_settings):
+        """Verifica que username reservado bloquea."""
         _write_dicts(
             _base_settings,
             en_words=["bitch"],
@@ -81,6 +90,7 @@ class TestValidarNombreUsuario:
 
     @pytest.mark.asyncio
     async def test_username_ingles_bloquea(self, _base_settings):
+        """Verifica que username ingles bloquea."""
         _write_dicts(
             _base_settings,
             en_words=["bitch", "whore"],
@@ -94,6 +104,7 @@ class TestValidarNombreUsuario:
 
     @pytest.mark.asyncio
     async def test_username_espanol_con_leetspeak_bloquea(self, _base_settings):
+        """Verifica que username espanol con leetspeak bloquea."""
         _write_dicts(
             _base_settings,
             en_words=["bitch"],
@@ -107,6 +118,7 @@ class TestValidarNombreUsuario:
 
     @pytest.mark.asyncio
     async def test_username_limpio_pasa(self, _base_settings):
+        """Verifica que username limpio pasa."""
         _write_dicts(
             _base_settings,
             en_words=["bitch"],
@@ -117,8 +129,11 @@ class TestValidarNombreUsuario:
 
 
 class TestValidarNombreReal:
+    """Agrupa pruebas relacionadas con validar nombre real."""
+
     @pytest.mark.asyncio
     async def test_nombre_real_con_palabra_espanola_bloquea(self, _base_settings):
+        """Verifica que nombre real con palabra espanola bloquea."""
         _write_dicts(
             _base_settings,
             en_words=["bitch"],
@@ -133,6 +148,7 @@ class TestValidarNombreReal:
 
     @pytest.mark.asyncio
     async def test_nombre_real_con_palabra_inglesa_bloquea(self, _base_settings):
+        """Verifica que nombre real con palabra inglesa bloquea."""
         _write_dicts(
             _base_settings,
             en_words=["bitch", "whore"],
@@ -146,6 +162,7 @@ class TestValidarNombreReal:
 
     @pytest.mark.asyncio
     async def test_nombre_real_limpio_pasa(self, _base_settings):
+        """Verifica que nombre real limpio pasa."""
         _write_dicts(
             _base_settings,
             en_words=["bitch"],
@@ -156,6 +173,7 @@ class TestValidarNombreReal:
 
     @pytest.mark.asyncio
     async def test_frase_exacta_bloquea_nombre_real(self, _base_settings):
+        """Verifica que frase exacta bloquea nombre real."""
         _write_dicts(
             _base_settings,
             en_words=["son of a bitch"],
@@ -169,8 +187,12 @@ class TestValidarNombreReal:
 
 
 class TestErroresDeDiccionario:
+    """Agrupa pruebas relacionadas con errores de diccionario."""
+
     @pytest.mark.asyncio
     async def test_missing_dictionary_fail_open_deja_pasar(self, monkeypatch, tmp_path):
+        """Verifica que missing dictionary fail open deja pasar."""
+        # Verifica que missing dictionary fail open deja pasar.
         monkeypatch.setattr(
             svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False
         )
@@ -208,6 +230,8 @@ class TestErroresDeDiccionario:
     async def test_missing_dictionary_fail_closed_devuelve_503(
         self, monkeypatch, tmp_path
     ):
+        """Verifica que missing dictionary fail closed devuelve 503."""
+        # Verifica que missing dictionary fail closed devuelve 503.
         monkeypatch.setattr(
             svc.settings, "TEXT_MODERATION_ENABLED", True, raising=False
         )

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 import secrets
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import desc, select, update, func
 from sqlalchemy.exc import IntegrityError
@@ -37,11 +37,14 @@ from utils import calculos
 logger = logging.getLogger("app.users")
 
 
-async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
+async def registrar_nuevo_usuario(
+    db: AsyncSession,
+    datos: schemas.Registro,
+) -> dict[str, Any]:
     """
     Registro de nuevo usuario con validación de duplicados.
 
-    Mejora (auditoría V12 #3):
+    Mejora (auditoría V12 # 3):
     - En vez de 2 queries separadas (nombre y email), hacemos 1 sola query OR.
     - Reduce ventanas de carrera y mejora rendimiento.
     - Aun así mantenemos el try/except IntegrityError como red de seguridad (concurrencia).
@@ -70,8 +73,8 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
         await text_moderation_service.validar_nombre_real(nombre_real)
 
     # 1) Detección de duplicados en UNA sola query
-    #    - nombre_usuario case-insensitive
-    #    - email exact match (ya lo normalizamos a lower)
+    # - nombre_usuario case-insensitive
+    # - email exact match (ya lo normalizamos a lower)
     existente = (
         await db.execute(
             select(database.Usuario).where(
@@ -135,7 +138,7 @@ async def registrar_nuevo_usuario(db: AsyncSession, datos: schemas.Registro):
     )
 
     # 5) Persistencia con red de seguridad por si hay concurrencia (race condition)
-    #    Aunque hayamos detectado duplicados, otra request puede colarse entre medias.
+    # Aunque hayamos detectado duplicados, otra petición puede colarse entre medias.
     try:
         db.add(nuevo_usuario)
         await db.commit()
@@ -183,6 +186,7 @@ async def registrar_usuario_social(
 ):
     """Registra o reutiliza un usuario autenticado con proveedor social."""
 
+    # Gestiona registrar usuario social.
     nombre_usuario = datos.nombre_usuario.strip()
     if not nombre_usuario:
         raise app_http_exception(
@@ -206,8 +210,7 @@ async def registrar_usuario_social(
     )
     if vinculo_existente:
         usuario_existente = await obtener_perfil(db, vinculo_existente.usuario_id)
-        social_auth_service.actualizar_metadata_vinculo(
-            vinculo_existente, identidad)
+        social_auth_service.actualizar_metadata_vinculo(vinculo_existente, identidad)
         if not usuario_existente.foto_perfil and identidad.avatar_url:
             usuario_existente.foto_perfil = identidad.avatar_url
             await db.commit()
@@ -330,8 +333,8 @@ async def obtener_perfil(
     db: AsyncSession, usuario_actual_id: int, for_update: bool = False
 ):
     """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
-    query = select(database.Usuario).where(
-        database.Usuario.id == usuario_actual_id)
+    # Obtiene perfil.
+    query = select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
 
     if for_update:
         query = query.with_for_update()
@@ -609,6 +612,7 @@ async def buscar_usuario(
     3. Excluye al usuario autenticado
     4. Paginación configurable (skip/limit)
     """
+    # Gestiona buscar usuario.
     termino = termino_busqueda.strip()
 
     if not termino or len(termino) < 3:
@@ -626,8 +630,7 @@ async def buscar_usuario(
 
     filtros = (
         database.Usuario.perfil_visible.is_(True),
-        database.Usuario.nombre_usuario.ilike(
-            f"%{termino_seguro}%", escape="\\"),
+        database.Usuario.nombre_usuario.ilike(f"%{termino_seguro}%", escape="\\"),
         database.Usuario.id != usuario_actual_id,
     )
 
@@ -681,6 +684,8 @@ async def reportar_perfil_inapropiado(
     usuario_actual_id: int,
     datos: schemas.ReportePerfilInapropiado,
 ):
+    """Gestiona reportar perfil inapropiado."""
+    # Gestiona reportar perfil inapropiado.
     usuario_reportante = await obtener_perfil(db, usuario_actual_id)
 
     nombre_objetivo = datos.nombre_usuario_reportado.strip().lower()
@@ -750,6 +755,7 @@ async def eliminar_cuenta(db: AsyncSession, usuario: database.Usuario):
     (hasta ACCESS_TOKEN_EXPIRE_MINUTES). Para invalidación inmediata haría
     falta una blacklist en memoria.
     """
+    # Elimina cuenta.
     try:
         ahora = datetime.now(timezone.utc)
         await db.execute(
@@ -786,6 +792,7 @@ async def obtener_ranking(db: AsyncSession, provincia: Optional[str] = None):
     usuario puede tener una posición nacional y otra provincial distintas sin
     que la app tenga que inferirlas a partir del índice visual de la lista.
     """
+    # Obtiene ranking.
     query = select(
         database.Usuario.nombre_usuario,
         database.Usuario.foto_perfil,

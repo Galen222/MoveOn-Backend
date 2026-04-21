@@ -1,3 +1,7 @@
+# tests/test_main.py
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,11 +11,13 @@ from config import settings
 
 
 async def _async_noop(*args, **kwargs):
+    """Gestiona async noop."""
     return None
 
 
 @pytest.fixture
 def client(monkeypatch):
+    """Gestiona client."""
     monkeypatch.setattr(database, "init_db", _async_noop)
     monkeypatch.setattr(database, "close_db", _async_noop)
     monkeypatch.setattr(settings, "AUTO_CREATE_TABLES", False)
@@ -26,6 +32,7 @@ def client(monkeypatch):
 
 
 def test_root_devuelve_200_y_estado_en_linea(client):
+    """Verifica que root devuelve 200 y estado en linea."""
     response = client.get("/")
     assert response.status_code == 200
     assert response.json() == {
@@ -35,6 +42,7 @@ def test_root_devuelve_200_y_estado_en_linea(client):
 
 
 def test_favicon_devuelve_200_si_existe(client, tmp_path, monkeypatch):
+    """Verifica que favicon devuelve 200 si existe."""
     favicon_path = tmp_path / "favicon.ico"
     favicon_path.write_bytes(b"\x00\x00\x01\x00")
 
@@ -45,14 +53,20 @@ def test_favicon_devuelve_200_si_existe(client, tmp_path, monkeypatch):
 
 
 def test_healthz_devuelve_200(client):
+    """Verifica que healthz devuelve 200."""
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
 def test_readyz_devuelve_200_si_bd_ok(client):
+    """Verifica que readyz devuelve 200 si bd ok."""
+
     class FakeDB:
+        """Representa fake base de datos."""
+
         async def execute(self, query):
+            """Gestiona execute."""
             return 1
 
     app.dependency_overrides[database.obtener_db] = lambda: FakeDB()
@@ -63,8 +77,13 @@ def test_readyz_devuelve_200_si_bd_ok(client):
 
 
 def test_readyz_devuelve_503_si_bd_falla(client):
+    """Verifica que readyz devuelve 503 si bd falla."""
+
     class FakeDB:
+        """Representa fake base de datos."""
+
         async def execute(self, query):
+            """Gestiona execute."""
             raise Exception("db down")
 
     app.dependency_overrides[database.obtener_db] = lambda: FakeDB()

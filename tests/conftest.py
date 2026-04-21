@@ -1,8 +1,10 @@
 # tests/conftest.py
-#
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 # Variables de entorno para el entorno de test.
 # Los secretos JWT deben tener al menos 32 bytes para HS256 (RFC 7518 §3.2).
-# Secretos más cortos hacen pasar los tests pero generan InsecureKeyLengthWarning.
+# Secretos más cortos hacen pasar los pruebas pero generan InsecureKeyLengthWarning.
 
 import os
 

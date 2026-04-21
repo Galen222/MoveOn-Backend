@@ -1,3 +1,7 @@
+# tests/test_request_size.py
+
+"""Contiene pruebas automatizadas de este módulo."""
+
 from __future__ import annotations
 
 import pytest
@@ -8,6 +12,8 @@ from middlewares.request_size import RequestSizeLimitMiddleware
 
 
 def _build_app() -> FastAPI:
+    """Construye la aplicación de prueba."""
+    # Crear la aplicación de prueba y registrar sus manejadores.
     app = FastAPI()
     app.add_middleware(
         RequestSizeLimitMiddleware,
@@ -21,29 +27,37 @@ def _build_app() -> FastAPI:
 
     @app.post("/login")
     async def login(request: Request):
+        """Gestiona el inicio de sesión del usuario."""
         return {"ok": True, "body": await request.json()}
 
     @app.post("/registro")
     async def registro(request: Request):
+        """Gestiona registro."""
         return {"ok": True, "body": await request.json()}
 
     @app.post("/password/solicitar")
     async def solicitar(request: Request):
+        """Gestiona solicitar."""
         return {"ok": True, "body": await request.json()}
 
     @app.post("/password/confirmar")
     async def confirmar(request: Request):
+        """Gestiona confirmar."""
         return {"ok": True, "body": await request.json()}
 
     @app.post("/perfil/foto")
     async def foto(request: Request):
+        """Gestiona foto."""
         return {"ok": True, "size": len(await request.body())}
 
     return app
 
 
 class TestRequestSizeLimitMiddleware:
+    """Agrupa pruebas relacionadas con request size limit middleware."""
+
     def test_login_pequeno_pasa_y_body_llega_intacto(self):
+        """Verifica que login pequeno pasa y body llega intacto."""
         client = TestClient(_build_app())
         payload = {"identificador": "pepe", "password": "Pass1234"}
 
@@ -53,6 +67,7 @@ class TestRequestSizeLimitMiddleware:
         assert response.json()["body"] == payload
 
     def test_login_grande_devuelve_413_con_json_y_no_store(self):
+        """Verifica que login grande devuelve 413 con JSON y no store."""
         client = TestClient(_build_app())
         payload = {"identificador": "pepe", "password": "x" * 500}
 
@@ -66,6 +81,7 @@ class TestRequestSizeLimitMiddleware:
         assert response.headers["pragma"] == "no-cache"
 
     def test_registro_tiene_limite_distinto(self):
+        """Verifica que registro tiene limite distinto."""
         client = TestClient(_build_app())
         payload = {
             "email": "pepe@example.com",
@@ -78,6 +94,7 @@ class TestRequestSizeLimitMiddleware:
         assert response.status_code == 200
 
     def test_ruta_no_configurada_no_se_limita_con_este_middleware(self):
+        """Verifica que ruta no configurada no se limita con este middleware."""
         client = TestClient(_build_app())
         response = client.post(
             "/perfil/foto",
@@ -91,6 +108,8 @@ class TestRequestSizeLimitMiddleware:
 
 @pytest.mark.asyncio
 async def test_limitacion_streaming_sin_content_length_devuelve_413_y_no_store():
+    """Verifica que limitacion streaming sin content length devuelve 413 y no store."""
+    # Verifica que limitacion streaming sin content length devuelve 413 y no store.
     app = _build_app()
 
     messages = [
@@ -103,6 +122,7 @@ async def test_limitacion_streaming_sin_content_length_devuelve_413_y_no_store()
     ]
 
     async def receive():
+        """Gestiona receive."""
         if messages:
             return messages.pop(0)
         return {"type": "http.request", "body": b"", "more_body": False}
@@ -110,6 +130,7 @@ async def test_limitacion_streaming_sin_content_length_devuelve_413_y_no_store()
     sent = []
 
     async def send(message):
+        """Gestiona send."""
         sent.append(message)
 
     scope = {

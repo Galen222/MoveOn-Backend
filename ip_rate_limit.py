@@ -1,5 +1,7 @@
 # ip_rate_limit.py
 
+"""Módulo relacionado con IP rate limit."""
+
 from __future__ import annotations
 
 from ipaddress import ip_address, ip_network
@@ -19,6 +21,7 @@ from utils.ip_cliente import (
 
 # Parsear listas CSV de configuración.
 def _parse_csv(value: str) -> list[str]:
+    """Analiza csv."""
     if not value:
         return []
     return [x.strip() for x in value.split(",") if x.strip()]
@@ -26,6 +29,7 @@ def _parse_csv(value: str) -> list[str]:
 
 # Compilar rangos CIDR válidos desde env.
 def _compile_networks(cidrs_csv: str) -> list:
+    """Gestiona compile networks."""
     nets = []
     for cidr in _parse_csv(cidrs_csv):
         try:
@@ -38,6 +42,7 @@ def _compile_networks(cidrs_csv: str) -> list:
 
 # Compilar IPs sueltas válidas desde env.
 def _compile_ips(ips_csv: str) -> set[str]:
+    """Gestiona compile ips."""
     out = set()
     for ip in _parse_csv(ips_csv):
         try:
@@ -104,7 +109,7 @@ def _extract_ip_from_headers(request: Request) -> Optional[str]:
 
 def get_client_ip(request: Request) -> str:
     """
-    Key func para SlowAPI.
+    Función de clave para SlowAPI.
     - Si NO estamos detrás de proxy confiable -> IP real del socket.
     - Si SÍ -> usamos headers (XFF/X-Real-IP) según orden en env.
     """

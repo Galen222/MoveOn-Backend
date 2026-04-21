@@ -1,9 +1,15 @@
 # services/email_templates.py
 
+"""Implementa la lógica de negocio de este servicio."""
+
 from html import escape
 
 
-def _base_email_template(*, lang: str, title: str, body_html: str, footer_html: str) -> str:
+def _base_email_template(
+    *, lang: str, title: str, body_html: str, footer_html: str
+) -> str:
+    """Gestiona base correo electrónico template."""
+    # Gestiona base correo electrónico template.
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
@@ -13,7 +19,7 @@ def _base_email_template(*, lang: str, title: str, body_html: str, footer_html: 
         <style>
             body {{
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                color: #333;
+                color: # 333;
                 line-height: 1.6;
                 margin: 0;
                 padding: 0;
@@ -22,14 +28,14 @@ def _base_email_template(*, lang: str, title: str, body_html: str, footer_html: 
                 max-width: 500px;
                 margin: 40px auto;
                 padding: 20px;
-                border: 1px solid #e0e0e0;
+                border: 1px solid # e0e0e0;
                 border-radius: 12px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             }}
             .header {{
                 text-align: center;
                 padding-bottom: 20px;
-                border-bottom: 2px solid #f4f4f4;
+                border-bottom: 2px solid # f4f4f4;
             }}
             .logo-image {{
                 display: block;
@@ -45,22 +51,22 @@ def _base_email_template(*, lang: str, title: str, body_html: str, footer_html: 
             .card {{
                 margin: 25px 0;
                 padding: 20px;
-                background-color: #f8f9fa;
+                background-color: # f8f9fa;
                 border-radius: 8px;
-                border: 1px dashed #007bff;
+                border: 1px dashed # 007bff;
             }}
             .code {{
                 font-size: 35px;
                 font-weight: bold;
                 letter-spacing: 8px;
-                color: #007bff;
+                color: # 007bff;
             }}
             .footer {{
                 font-size: 0.85em;
-                color: #888;
+                color: # 888;
                 text-align: center;
                 padding-top: 20px;
-                border-top: 1px solid #f4f4f4;
+                border-top: 1px solid # f4f4f4;
             }}
         </style>
     </head>
@@ -83,15 +89,18 @@ def _base_email_template(*, lang: str, title: str, body_html: str, footer_html: 
     """
 
 
-def recuperacion_password_template(codigo: str, minutos: int, locale: str = "es") -> str:
+def recuperacion_password_template(
+    codigo: str, minutos: int, locale: str = "es"
+) -> str:
     """Genera la plantilla HTML para el código de recuperación de MoveOn."""
+    # Gestiona recuperacion password template.
     if locale == "en":
         body_html = f"""
                 <p>Use the following verification code to set a new password for your account. This code is single-use.</p>
                 <div class=\"card\">
                     <div class=\"code\">{codigo}</div>
                 </div>
-                <p style=\"font-size: 0.9em; color: #666;\">This code will <strong>expire in {minutos} minute{"s" if minutos != 1 else ""}</strong>.</p>
+                <p style=\"font-size: 0.9em; color: # 666;\">This code will <strong>expire in {minutos} minute{"s" if minutos != 1 else ""}</strong>.</p>
         """
         footer_html = "<p>If you did not request this change, you can safely ignore this email.</p>"
         return _base_email_template(
@@ -106,7 +115,7 @@ def recuperacion_password_template(codigo: str, minutos: int, locale: str = "es"
                 <div class=\"card\">
                     <div class=\"code\">{codigo}</div>
                 </div>
-                <p style=\"font-size: 0.9em; color: #666;\">Este código <strong>expirará en {minutos} minuto{"s" if minutos != 1 else ""}</strong>.</p>
+                <p style=\"font-size: 0.9em; color: # 666;\">Este código <strong>expirará en {minutos} minuto{"s" if minutos != 1 else ""}</strong>.</p>
     """
     footer_html = "<p>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>"
     return _base_email_template(
@@ -119,6 +128,7 @@ def recuperacion_password_template(codigo: str, minutos: int, locale: str = "es"
 
 def aviso_recuperacion_google_template(locale: str = "es") -> str:
     """Genera la plantilla HTML para informar de que la cuenta usa Google."""
+    # Gestiona aviso recuperacion google template.
     if locale == "en":
         body_html = """
                 <p>We received a request to change the password for this email address.</p>
@@ -154,6 +164,8 @@ def reporte_perfil_inapropiado_template(
     reportar_foto: bool,
     observaciones: str | None,
 ) -> str:
+    """Gestiona reporte perfil inapropiado template."""
+    # Gestiona reporte perfil inapropiado template.
     motivos_html = []
     if reportar_nombre:
         motivos_html.append("<li>Nombre de usuario inapropiado</li>")
@@ -171,7 +183,7 @@ def reporte_perfil_inapropiado_template(
         <style>
             body {{
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                color: #333;
+                color: # 333;
                 line-height: 1.6;
                 margin: 0;
                 padding: 0;
@@ -180,14 +192,14 @@ def reporte_perfil_inapropiado_template(
                 max-width: 560px;
                 margin: 40px auto;
                 padding: 20px;
-                border: 1px solid #e0e0e0;
+                border: 1px solid # e0e0e0;
                 border-radius: 12px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             }}
             .header {{
                 text-align: center;
                 padding-bottom: 20px;
-                border-bottom: 2px solid #f4f4f4;
+                border-bottom: 2px solid # f4f4f4;
             }}
             .logo-image {{
                 display: block;
@@ -209,28 +221,28 @@ def reporte_perfil_inapropiado_template(
             .card {{
                 margin: 18px 0;
                 padding: 16px;
-                background-color: #f8f9fa;
+                background-color: # f8f9fa;
                 border-radius: 8px;
-                border: 1px solid #e9ecef;
+                border: 1px solid # e9ecef;
             }}
             .label {{
                 font-size: 12px;
-                color: #666;
+                color: # 666;
                 text-transform: uppercase;
                 letter-spacing: .04em;
                 margin-bottom: 6px;
             }}
             .value {{
                 font-size: 16px;
-                color: #222;
+                color: # 222;
                 font-weight: 600;
             }}
             .footer {{
                 font-size: 0.85em;
-                color: #888;
+                color: # 888;
                 text-align: center;
                 padding-top: 20px;
-                border-top: 1px solid #f4f4f4;
+                border-top: 1px solid # f4f4f4;
             }}
             ul {{
                 margin: 8px 0 0;

@@ -45,7 +45,7 @@ async def registro(
     request: Request, datos: schemas.Registro, db: AsyncSession = Depends(obtener_db)
 ):
     """Registro de nuevo usuario con validación de duplicados."""
-    # Rate-limit adicional por identidad/email (anti-abuso distribuido)
+    # Límite de tasa adicional por identidad/correo electrónico (antiabuso distribuido)
     check_identity_limit("registro", str(datos.email), settings.RL_REGISTRO_ID)
 
     return await user_service.registrar_nuevo_usuario(db, datos)
@@ -153,6 +153,7 @@ async def foto_perfil(
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...),
 ):
+    """Gestiona foto perfil."""
     logger.info(
         "actualizacion_foto_perfil_iniciada",
         extra={
@@ -207,7 +208,7 @@ async def foto_perfil(
             exc_info=True,
         )
 
-        # En tests puede venir db=None; en producción normalmente será una sesión real
+        # En pruebas puede venir db=None; en producción normalmente será una sesión real
         if db is not None and hasattr(db, "rollback"):
             await db.rollback()
 
@@ -314,6 +315,7 @@ async def buscar_perfil(
     Solo devuelve usuarios con perfil público y excluye al usuario autenticado.
     Devuelve resultados paginados con metadata.
     """
+    # Gestiona buscar perfil.
     resultados = await user_service.buscar_usuario(
         db, q, usuario_actual_id, skip, limit
     )

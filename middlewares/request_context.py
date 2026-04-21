@@ -1,5 +1,7 @@
 # middlewares/request_context.py
 
+"""Implementa middleware relacionado con la aplicación."""
+
 import logging
 import time
 import uuid
@@ -10,20 +12,25 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from ip_rate_limit import HEADER_ORDER, conn_from_trusted_proxy
 from utils.ip_cliente import get_client_ip_from_scope
 
-
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 
-# Obtener request_id actual para logging estructurado.
+# Obtener petición_id actual para logging estructurado.
 def get_request_id() -> str:
+    """Obtiene request identificador."""
     return request_id_ctx.get()
 
 
 class RequestContextMiddleware:
+    """Middleware para request context."""
+
     def __init__(self, app: ASGIApp):
+        """Inicializa la instancia."""
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Procesa la llamada de la instancia."""
+        # Procesa la llamada de la instancia.
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -49,6 +56,8 @@ class RequestContextMiddleware:
         status_code = 500
 
         async def send_wrapper(message: Message) -> None:
+            """Envía wrapper."""
+            # Envía wrapper.
             nonlocal status_code
 
             if message["type"] == "http.response.start":

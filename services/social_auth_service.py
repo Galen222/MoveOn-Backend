@@ -1,5 +1,7 @@
 # services/social_auth_service.py
 
+"""Implementa la lógica de negocio de este servicio."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,6 +30,8 @@ _GOOGLE_JWK_CLIENT = PyJWKClient(_GOOGLE_JWKS_URL)
 
 @dataclass(slots=True)
 class SocialIdentity:
+    """Representa social identidad."""
+
     provider: str
     provider_user_id: str
     email: Optional[str]
@@ -39,6 +43,7 @@ class SocialIdentity:
 async def verificar_token_social(
     provider: schemas.ProveedorAuthSocial | str, token: str
 ) -> SocialIdentity:
+    """Gestiona verificar token social."""
     if isinstance(provider, schemas.ProveedorAuthSocial):
         provider_value = provider.value
     else:
@@ -57,6 +62,7 @@ async def verificar_token_social(
 async def buscar_vinculo_social(
     db: AsyncSession, provider: str, provider_user_id: str
 ) -> Optional[database.UsuarioAuthSocial]:
+    """Gestiona buscar vinculo social."""
     return (
         await db.execute(
             select(database.UsuarioAuthSocial).where(
@@ -70,6 +76,7 @@ async def buscar_vinculo_social(
 def actualizar_metadata_vinculo(
     vinculo: database.UsuarioAuthSocial, identidad: SocialIdentity
 ) -> None:
+    """Actualiza metadata vinculo."""
     vinculo.email_social = identidad.email.lower().strip() if identidad.email else None
     vinculo.nombre_social = identidad.nombre.strip() if identidad.nombre else None
     vinculo.avatar_url = identidad.avatar_url.strip() if identidad.avatar_url else None
@@ -80,6 +87,7 @@ def crear_vinculo_social(
     usuario_id: int,
     identidad: SocialIdentity,
 ) -> database.UsuarioAuthSocial:
+    """Construye vinculo social."""
     return database.UsuarioAuthSocial(
         usuario_id=usuario_id,
         provider=identidad.provider,
@@ -91,6 +99,8 @@ def crear_vinculo_social(
 
 
 async def _verificar_google(token: str) -> SocialIdentity:
+    """Gestiona verificar google."""
+    # Gestiona verificar google.
     if not settings.GOOGLE_WEB_CLIENT_ID.strip():
         raise app_http_exception(
             status_code=503,
@@ -160,8 +170,7 @@ async def _verificar_google(token: str) -> SocialIdentity:
             if isinstance(email, str) and email.strip()
             else None
         ),
-        nombre=str(name).strip() if isinstance(
-            name, str) and name.strip() else None,
+        nombre=str(name).strip() if isinstance(name, str) and name.strip() else None,
         avatar_url=(
             str(picture).strip()
             if isinstance(picture, str) and picture.strip()
