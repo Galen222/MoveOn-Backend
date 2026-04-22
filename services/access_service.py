@@ -30,13 +30,34 @@ logger = logging.getLogger("app.auth")
 
 
 def _ahora_utc() -> datetime:
-    """Devuelve la fecha y hora actual en UTC."""
+    """Devuelve el ``datetime`` actual con ``tzinfo=UTC``.
+
+    Se centraliza aquí para que todas las marcas temporales de los
+    refresh tokens (emisión, expiración, revocación, último uso)
+    se calculen contra la misma referencia y sean fáciles de
+    monkey-patchear en tests.
+
+    Returns:
+        Fecha y hora actual en UTC.
+    """
     return datetime.now(timezone.utc)
 
 
 def _normalizar_utc(dt: datetime) -> datetime:
     # Por compatibilidad si SQLAlchemy devuelve naive datetime
-    """Normaliza utc."""
+    """Garantiza que un ``datetime`` tiene ``tzinfo``, asumiendo UTC si no.
+
+    Algunos drivers de SQLAlchemy/PostgreSQL devuelven ``datetime``
+    naive aunque la columna sea ``TIMESTAMPTZ``. Para evitar romper
+    comparaciones posteriores con valores aware, se les adjunta
+    explícitamente ``UTC`` aquí.
+
+    Args:
+        dt: ``datetime`` posiblemente naive leído de la base.
+
+    Returns:
+        El mismo ``datetime`` con ``tzinfo=UTC`` garantizado.
+    """
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
@@ -50,7 +71,20 @@ def _hash_refresh_token(token: str) -> str:
 
 
 async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
-    """Gestiona revocar familia refresco."""
+    """Revoca todos los refresh tokens vivos de una misma familia.
+
+    Una "familia" agrupa los refresh tokens emitidos tras un mismo
+    login: al rotar, cada nuevo refresh hereda la misma ``familia_id``.
+    Si se detecta que un refresh ya rotado vuelve a usarse (indicio de
+    robo), se revoca la familia completa para cortar la cadena.
+
+    No hace commit: lo deja en manos del llamador para que pueda
+    combinar la revocación con otras operaciones en la misma transacción.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        familia_id: id común a todos los refresh tokens derivados del mismo login.
+    """
     ahora = _ahora_utc()
 
     await db.execute(
@@ -64,7 +98,20 @@ async def _revocar_familia_refresh(db: AsyncSession, familia_id: str):
 
 
 async def buscar_por_identificador(db: AsyncSession, identificador: str):
-    """Búsqueda para login (email o nombre de usuario)."""
+    """Busca un usuario por email o por nombre de usuario (case-insensitive).
+
+    Permite que el campo ``identificador`` del login admita cualquiera
+    de los dos: en el formulario el usuario escribe lo que recuerde.
+    La comparación usa ``LOWER(columna)`` para ser case-insensitive
+    incluso cuando los índices son sobre el valor original.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        identificador: cadena que puede ser email o nombre de usuario.
+
+    Returns:
+        Fila ``Usuario`` si existe, ``None`` si no se encuentra ninguna coincidencia.
+    """
     # Email se guarda en minúsculas. Usuario se guarda como lo escribe el usuario, pero se compara case-insensitive.
     identificador_limpio = identificador.strip().lower()
 
@@ -79,7 +126,23 @@ async def buscar_por_identificador(db: AsyncSession, identificador: str):
 
 
 async def buscar_usuario_por_id(db: AsyncSession, usuario_id: int):
-    """Gestiona buscar usuario por identificador."""
+    """Busca un usuario por id, lanzando 404 si no existe.
+
+    Se usa en flujos donde ya tenemos un id validado (sub de un token
+    ya aceptado) pero queremos tratar como error irrecuperable que el
+    usuario haya desaparecido entre emisión del token y esta llamada
+    (p. ej. cuenta borrada hace segundos).
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_id: id numérico del usuario.
+
+    Returns:
+        Fila ``Usuario``.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si no se encuentra el usuario.
+    """
     # Gestiona buscar usuario por identificador.
     usuario = (
         await db.execute(
@@ -163,7 +226,19 @@ def _hash_codigo_recuperacion(codigo: str) -> str:
 
 
 def _mensaje_recuperacion_generico(locale: str) -> str:
-    """Gestiona mensaje recuperacion generico."""
+    """Devuelve la frase neutra de respuesta del endpoint de recuperación.
+
+    El backend responde siempre lo mismo independientemente de si el
+    email existe, está vinculado a Google o no aparece registrado.
+    Centralizar el texto aquí evita discrepancias entre ramas que
+    podrían ser explotadas para enumerar cuentas.
+
+    Args:
+        locale: ``"es"`` o ``"en"``; cualquier otro valor cae a español.
+
+    Returns:
+        Texto localizado del mensaje neutro.
+    """
     if locale == "en":
         return (
             "If the account supports recovery, you will receive instructions by email."
@@ -172,7 +247,19 @@ def _mensaje_recuperacion_generico(locale: str) -> str:
 
 
 def _safe_log_usuario_id(usuario: object) -> int | None:
-    """Gestiona safe log usuario identificador."""
+    """Devuelve el id del usuario si es un entero positivo, o ``None`` si no.
+
+    Se usa para alimentar el campo ``usuario_id`` de los logs
+    estructurados. Blindar esta lectura evita que un ``MagicMock`` en
+    tests, o una fila parcialmente cargada, acaben serializando objetos
+    extraños a los logs.
+
+    Args:
+        usuario: cualquier objeto con (o sin) atributo ``id``.
+
+    Returns:
+        ``id`` entero positivo del usuario, o ``None`` si no es un entero válido.
+    """
     valor = getattr(usuario, "id", None)
     return valor if isinstance(valor, int) and valor > 0 else None
 
@@ -242,7 +329,16 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
     usuario_id_token = int(usuario_id_token)
 
     async def _commit_or_rollback():
-        """Gestiona commit or rollback."""
+        """Commit con rollback automático ante error, manteniendo la transacción consistente.
+
+        Se extrae como función anidada porque este patrón se repite en
+        varios puntos de ``refrescar_sesion`` (revocar, rotar, guardar
+        métricas de uso). Al fallar, deshace la transacción y re-lanza la
+        excepción para que el handler superior responda con un 5xx.
+
+        Raises:
+            Exception: la misma que haya lanzado el commit original, tras hacer rollback.
+        """
         try:
             await db.commit()
         except Exception:
@@ -403,7 +499,23 @@ async def refrescar_sesion(db: AsyncSession, refresh_token: str):
 async def _limpiar_sesiones_refresh_usuario(
     db: AsyncSession, usuario_id: int, older_than_days: Optional[int] = None
 ):
-    """Normaliza sesiones refresco usuario."""
+    """Elimina refresh tokens viejos de un usuario para no acumular basura.
+
+    Borra filas que cumplan simultáneamente:
+
+    - Están revocadas o expiradas.
+    - Y su ``ultimo_uso_en`` es más antiguo que ``older_than_days`` (o
+      ``NULL``, es decir nunca usadas).
+
+    Esto mantiene el histórico reciente útil para auditoría y limita el
+    crecimiento indefinido de la tabla. El llamador decide cuándo
+    ejecutarlo (por ejemplo tras cada login exitoso) y si hace commit.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_id: id del usuario sobre el que se limpia.
+        older_than_days: días de antigüedad mínima para borrar. Si es ``None`` usa ``settings.REFRESH_SESSION_CLEANUP_DAYS``.
+    """
     # Normaliza sesiones refresco usuario.
     if older_than_days is None:
         older_than_days = int(settings.REFRESH_SESSION_CLEANUP_DAYS)
@@ -519,7 +631,37 @@ async def generar_codigo_recuperacion(
     background_tasks: BackgroundTasks,
     locale: str,
 ):
-    """Gestiona la recuperación sin revelar si la cuenta es local, social o inexistente."""
+    """Inicia el flujo de recuperación sin revelar el estado de la cuenta.
+
+    La respuesta es siempre neutra (``_mensaje_recuperacion_generico``),
+    tanto si el email no existe, como si la cuenta es de Google, como
+    si se ha generado un código nuevo. El comportamiento diferencial
+    ocurre solo en el correo enviado:
+
+    - **Email no registrado**: no envía nada, solo registra un log
+      informativo. El atacante no puede enumerar cuentas por el tiempo
+      de respuesta porque no se hace ningún trabajo extra.
+    - **Cuenta vinculada a Google**: limpia cualquier código pendiente y
+      envía el aviso explicando que debe usar "Continuar con Google",
+      para que solo el dueño del buzón vea el tipo de cuenta.
+    - **Cuenta local**: genera un código de 6 dígitos con validez
+      configurable (``RECOVERY_CODE_EXPIRE_MINUTES``) y lo guarda
+      hasheado (``_hash_codigo_recuperacion``) junto con su expiración.
+      Aplica un cooldown de 60 s desde el último envío para no spamear
+      al usuario si pulsa "reenviar" varias veces seguidas.
+
+    El email se envía con ``BackgroundTasks`` para no bloquear la
+    respuesta esperando al SMTP.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        email: email solicitado por el usuario (se normaliza a minúsculas).
+        background_tasks: acumulador de tareas para diferir el envío del email.
+        locale: idioma preferido del usuario, se normaliza vía ``SolicitarPassword`` a ``"es"``/``"en"``.
+
+    Returns:
+        Diccionario ``{"estatus": "success", "mensaje": <texto neutro>}`` independiente de la rama interna.
+    """
     email_normalizado = email.strip().lower()
     locale_normalizado = schemas.SolicitarPassword.model_validate(
         {"email": email_normalizado, "locale": locale}
@@ -634,7 +776,35 @@ async def generar_codigo_recuperacion(
 
 
 async def resetear_password(db: AsyncSession, datos: schemas.ConfirmarPassword):
-    """Valida el OTP y actualiza la contraseña."""
+    """Valida un código de recuperación y actualiza la contraseña del usuario.
+
+    Flujo:
+
+    1. Hashea el código recibido (``_hash_codigo_recuperacion``) y
+       busca al usuario por email con ese hash guardado. Así nunca
+       se compara el código en claro y un dump de la base no basta
+       para suplantar identidades.
+    2. Verifica que el código no haya expirado contra
+       ``codigo_expiracion`` normalizado a UTC.
+    3. Encripta la nueva contraseña con bcrypt y la persiste.
+    4. Limpia los campos de código para que no se pueda reutilizar, y
+       actualiza ``password_changed_at`` con la hora actual: esto
+       invalida automáticamente los access tokens anteriores del
+       usuario (ver ``auth.obtener_usuario_actual``).
+    5. Revoca todas las sesiones de refresh activas para forzar al
+       usuario a hacer login en todos sus dispositivos.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        datos: ``ConfirmarPassword`` con ``email``, ``codigo`` y ``nueva_password``.
+
+    Returns:
+        ``RespuestaGenerica`` confirmando el cambio si todo ha ido bien.
+
+    Raises:
+        AppHTTPException: 400 ``INVALID_RECOVERY_CODE`` si email+código no coinciden con ningún usuario.
+        AppHTTPException: 400 ``RECOVERY_CODE_EXPIRED`` si el código existe pero ha caducado.
+    """
     # Hashear el código recibido para compararlo con el hash guardado
     codigo_hash = _hash_codigo_recuperacion(datos.codigo)
 

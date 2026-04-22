@@ -191,7 +191,22 @@ class Settings(BaseSettings):
     @field_validator("PUBLIC_BASE_URL", mode="before")
     @classmethod
     def validar_public_base_url(cls, v: object) -> str:
-        """Valida public base URL."""
+        """Normaliza y valida la URL pública del backend.
+
+        Admite cadena vacía (se interpreta como "no configurada") para entornos
+        de desarrollo. Si hay valor, recorta espacios y una eventual barra
+        final, y exige que empiece por ``http://`` o ``https://`` para no
+        generar enlaces rotos en los emails del servicio.
+
+        Args:
+            v: valor crudo tal como viene de la variable de entorno.
+
+        Returns:
+            URL normalizada sin barra final, o cadena vacía si no hay valor.
+
+        Raises:
+            ValueError: si el valor no es cadena o no tiene esquema ``http``/``https``.
+        """
         if v in (None, ""):
             return ""
 
@@ -215,7 +230,24 @@ class Settings(BaseSettings):
     )
     @classmethod
     def validar_secretos_fuertes(cls, v: object, info: ValidationInfo) -> str:
-        """Valida secretos fuertes."""
+        """Exige entropía mínima en todos los secretos de firma y hashing.
+
+        Se aplica a los cinco secretos críticos (app session, access,
+        refresh, refresh hash y code hash). Impide arrancar el servicio con
+        valores triviales (``changeme``, ``secret``, ``password``...) o con
+        muy pocos caracteres únicos, protegiendo contra errores de
+        configuración en producción.
+
+        Args:
+            v: valor crudo del secreto tal como viene del entorno.
+            info: contexto de validación de Pydantic, usado para el nombre del campo en el error.
+
+        Returns:
+            El secreto recortado de espacios.
+
+        Raises:
+            ValueError: si el valor no es cadena, es más corto de 32 caracteres, tiene menos de 8 caracteres distintos o coincide con un valor trivial conocido.
+        """
         if not isinstance(v, str):
             raise ValueError(f"{info.field_name} debe ser un string")
 
@@ -249,7 +281,19 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validar_secretos_distintos(self):
-        """Valida secretos distintos."""
+        """Garantiza que los cinco secretos críticos sean distintos entre sí.
+
+        Compartir secretos entre access/refresh/handshake/hash rompería el
+        modelo de confianza: un token firmado con el secreto "equivocado"
+        podría validarse como otro tipo. Este validator corre después de los
+        individuales para que el fallo por duplicados sea claro.
+
+        Returns:
+            La propia instancia de ``Settings`` si la validación pasa.
+
+        Raises:
+            ValueError: si dos o más secretos tienen el mismo valor.
+        """
         # Valida secretos distintos.
         secretos = [
             self.APP_SESSION_SECRET,

@@ -8,7 +8,21 @@ from html import escape
 def _base_email_template(
     *, lang: str, title: str, body_html: str, footer_html: str
 ) -> str:
-    """Gestiona base correo electrónico template."""
+    """Plantilla HTML común usada por todos los emails del servicio.
+
+    Establece el chasis visual (tarjeta centrada, cabecera con logo
+    color primario, footer en gris) de forma que los builders de cada
+    email solo tengan que aportar el cuerpo y el pie.
+
+    Args:
+        lang: código de idioma para el atributo ``lang`` del HTML.
+        title: título mostrado dentro del cuerpo.
+        body_html: HTML específico del mensaje que va en el centro de la tarjeta.
+        footer_html: HTML del pie (antes del copyright), específico del mensaje.
+
+    Returns:
+        Documento HTML completo listo para adjuntar como parte ``text/html``.
+    """
     # Gestiona base correo electrónico template.
     return f"""
     <!DOCTYPE html>
@@ -92,7 +106,21 @@ def _base_email_template(
 def recuperacion_password_template(
     codigo: str, minutos: int, locale: str = "es"
 ) -> str:
-    """Genera la plantilla HTML para el código de recuperación de MoveOn."""
+    """Genera el email con el código de recuperación de contraseña.
+
+    Pluraliza correctamente ``minuto/minutos`` según ``minutos``, y
+    elige entre plantilla inglesa y española según ``locale``. Usa
+    ``_base_email_template`` para mantener el mismo chasis visual que
+    el resto de emails.
+
+    Args:
+        codigo: código numérico que el usuario debe introducir.
+        minutos: minutos de validez del código.
+        locale: ``"es"`` o ``"en"`` (cualquier otro valor cae a español).
+
+    Returns:
+        Documento HTML completo listo para adjuntar al email.
+    """
     # Gestiona recuperacion password template.
     if locale == "en":
         body_html = f"""
@@ -127,7 +155,20 @@ def recuperacion_password_template(
 
 
 def aviso_recuperacion_google_template(locale: str = "es") -> str:
-    """Genera la plantilla HTML para informar de que la cuenta usa Google."""
+    """Genera el email que avisa al usuario de que su cuenta es de Google.
+
+    Se usa cuando alguien pide recuperar la contraseña de una cuenta
+    que en realidad está vinculada a Google. Como no queremos revelar
+    el tipo de cuenta a terceros, en vez de responder de forma especial
+    en el endpoint enviamos este correo al propio dueño explicándole
+    que debe usar "Continuar con Google".
+
+    Args:
+        locale: ``"es"`` o ``"en"``; cualquier otro valor cae a español.
+
+    Returns:
+        Documento HTML completo listo para adjuntar al email.
+    """
     # Gestiona aviso recuperacion google template.
     if locale == "en":
         body_html = """
@@ -164,7 +205,24 @@ def reporte_perfil_inapropiado_template(
     reportar_foto: bool,
     observaciones: str | None,
 ) -> str:
-    """Gestiona reporte perfil inapropiado template."""
+    """Genera el email interno de aviso cuando un usuario reporta a otro.
+
+    No usa ``_base_email_template`` porque el layout es distinto
+    (tarjetas por motivo, observaciones libres) y no hay pie específico.
+    Hace ``html.escape`` de todos los campos que vienen del usuario
+    (nombres, observaciones) para evitar inyección HTML en el correo
+    del equipo de moderación.
+
+    Args:
+        usuario_reportante: nombre del usuario que lanza el reporte.
+        usuario_reportado: nombre del usuario reportado.
+        reportar_nombre: ``True`` si el motivo incluye nombre de usuario.
+        reportar_foto: ``True`` si el motivo incluye foto de perfil.
+        observaciones: texto libre opcional aportado por el reportante.
+
+    Returns:
+        Documento HTML completo listo para enviar al buzón de moderación.
+    """
     # Gestiona reporte perfil inapropiado template.
     motivos_html = []
     if reportar_nombre:

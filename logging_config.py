@@ -53,12 +53,35 @@ _STANDARD_LOG_RECORD_KEYS = {
 
 
 def _color(text: str, color: str) -> str:
-    """Gestiona color."""
+    """Envuelve un texto en códigos ANSI de color y reset.
+
+    Se usa sólo por el formateador de consola. El reset explícito al
+    final impide que el color se quede "pegado" a campos posteriores
+    si el terminal no limpia entre líneas.
+
+    Args:
+        text: texto a colorear.
+        color: código ANSI de apertura (p. ej. ``\033[32m`` para verde).
+
+    Returns:
+        Texto coloreado seguido del código ANSI de reset.
+    """
     return f"{color}{text}{RESET}"
 
 
 def _level_prefix(levelname: str) -> str:
-    """Gestiona level prefix."""
+    """Construye el prefijo de nivel con color y alineación fija (10 cols).
+
+    Imita el estilo de uvicorn: el nivel queda coloreado pero la columna
+    total (``nivel:<espacios>``) siempre tiene 10 caracteres visibles
+    para que el resto de la línea esté alineado.
+
+    Args:
+        levelname: nivel de log estándar de Python (``INFO``, ``WARNING``...).
+
+    Returns:
+        Prefijo coloreado si el nivel es conocido, o la versión sin color si no.
+    """
     # Gestiona level prefix.
     plain = f"{levelname}:".ljust(10)
 
@@ -79,7 +102,19 @@ def _level_prefix(levelname: str) -> str:
 
 
 def _format_extra(key: str, value: Any) -> str:
-    """Gestiona format extra."""
+    """Da formato a un campo "extra" del log para la consola.
+
+    Si el campo es ``status_code`` se colorea en verde para 2xx/3xx y
+    en rojo para 4xx/5xx, para que inspeccionar logs a ojo sea rápido.
+    El resto de campos se emite como ``clave=valor`` sin color.
+
+    Args:
+        key: nombre del campo extra tal como se pasó a ``logger.log(..., extra=...)``.
+        value: valor asociado.
+
+    Returns:
+        Cadena ``clave=valor`` lista para concatenar en la línea de log.
+    """
     if key == "status_code":
         try:
             code = int(value)
@@ -99,7 +134,18 @@ class RequestIdFilter(logging.Filter):
     """Filtro para request identificador."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Gestiona filter."""
+        """Inyecta el ``request_id`` de la petición en curso en cada ``LogRecord``.
+
+        Lo toma del contexto de petición gestionado por ``RequestContextMiddleware``
+        (``contextvar``), de forma que los logs emitidos durante el
+        procesamiento de una petición puedan correlacionarse por su id.
+
+        Args:
+            record: registro de log a enriquecer.
+
+        Returns:
+            ``True`` siempre (el filtro nunca descarta logs; solo añade metadata).
+        """
         record.request_id = get_request_id()
         return True
 
@@ -111,7 +157,20 @@ class JsonPipeFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
-        """Gestiona format."""
+        """Serializa un ``LogRecord`` como JSON para consumo de agregadores.
+
+        Emite un único objeto por línea con ``level``, ``timestamp``,
+        ``logger``, ``message``, ``request_id`` y todos los ``extras`` del
+        record. Si la excepción viene asociada, añade también ``exception``
+        con el traceback formateado. Usa ``default=str`` para que objetos no
+        serializables (p. ej. UUIDs, datetimes, Decimal) no rompan la línea.
+
+        Args:
+            record: registro de log generado por el logger.
+
+        Returns:
+            Cadena JSON con todos los campos relevantes; un solo objeto por línea.
+        """
         # Gestiona format.
         timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
         message = record.getMessage()
@@ -134,7 +193,19 @@ class JsonPipeFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
     def _get_extras(self, record: logging.LogRecord) -> dict[str, Any]:
-        """Obtiene extras."""
+        """Extrae los campos personalizados de un ``LogRecord``.
+
+        Itera sobre ``record.__dict__`` descartando las claves estándar
+        que Python pone en todos los records (thread, module, lineno...),
+        de forma que el resto son los ``extra`` que el llamador pasó a
+        ``logger.log(..., extra={...})``.
+
+        Args:
+            record: registro de log del que se extraen los extras.
+
+        Returns:
+            Diccionario con sólo los campos personalizados del log.
+        """
         extras: dict[str, Any] = {}
 
         for key, value in record.__dict__.items():
@@ -152,7 +223,22 @@ class ConsolePipeFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
-        """Gestiona format."""
+        """Serializa un ``LogRecord`` como línea legible estilo uvicorn.
+
+        Produce algo como:
+
+            INFO:     2026-03-08 13:10:00 | app.main | aplicacion_iniciada | request_id=abc123
+
+        Añade cada extra como ``clave=valor``, saltando los que sean
+        ``None`` para no ensuciar la línea. Si hay excepción asociada,
+        imprime el traceback debajo.
+
+        Args:
+            record: registro de log generado por el logger.
+
+        Returns:
+            Cadena formateada lista para imprimir en consola.
+        """
         # Gestiona format.
         timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
         message = record.getMessage()
@@ -178,7 +264,18 @@ class ConsolePipeFormatter(logging.Formatter):
         return out
 
     def _get_extras(self, record: logging.LogRecord) -> dict[str, Any]:
-        """Obtiene extras."""
+        """Misma extracción de extras que ``JsonPipeFormatter._get_extras``.
+
+        Se duplica en lugar de compartirse por herencia para mantener los
+        dos formateadores totalmente independientes y evitar acoplar el
+        contrato JSON con el de consola.
+
+        Args:
+            record: registro de log del que se extraen los extras.
+
+        Returns:
+            Diccionario con los campos personalizados del log.
+        """
         extras: dict[str, Any] = {}
 
         for key, value in record.__dict__.items():
@@ -190,7 +287,17 @@ class ConsolePipeFormatter(logging.Formatter):
 
 
 def setup_logging() -> None:
-    """Gestiona setup registro."""
+    """Configura el logger ``app`` y sus hijos con el formato elegido.
+
+    Lee ``settings.LOG_FORMAT`` (``console`` o ``json``) y
+    ``settings.LOG_LEVEL`` para decidir formateador y verbosidad. Limpia
+    handlers previos para que llamar varias veces a esta función en
+    tests no duplique salidas, y pone ``propagate=False`` para que los
+    logs de ``app.*`` no se doblen con el root logger.
+
+    Returns:
+        ``None``. El efecto es la configuración global del logging.
+    """
     # Gestiona setup registro.
     handler = logging.StreamHandler(sys.stdout)
     handler.addFilter(RequestIdFilter())

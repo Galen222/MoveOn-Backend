@@ -21,7 +21,18 @@ from utils.ip_cliente import (
 
 # Parsear listas CSV de configuración.
 def _parse_csv(value: str) -> list[str]:
-    """Analiza csv."""
+    """Parte una cadena CSV en lista, descartando elementos vacíos.
+
+    Se usa para leer listas separadas por comas directamente desde
+    variables de entorno (CIDRs, IPs, cabeceras de proxy...). Cadena
+    vacía o ``None`` produce lista vacía, no lanza error.
+
+    Args:
+        value: cadena con valores separados por comas, tal como llega del entorno.
+
+    Returns:
+        Lista con cada elemento ya trimmed; vacía si la entrada no aporta nada útil.
+    """
     if not value:
         return []
     return [x.strip() for x in value.split(",") if x.strip()]
@@ -29,7 +40,18 @@ def _parse_csv(value: str) -> list[str]:
 
 # Compilar rangos CIDR válidos desde env.
 def _compile_networks(cidrs_csv: str) -> list:
-    """Gestiona compile networks."""
+    """Compila un CSV de CIDRs en objetos ``ip_network``.
+
+    Los CIDRs inválidos se ignoran en lugar de lanzar excepción
+    (``fail-soft``): un error de configuración en una entrada no debe
+    impedir que el resto de rangos válidos funcionen al arrancar.
+
+    Args:
+        cidrs_csv: cadena CSV con rangos CIDR (p. ej. ``"10.0.0.0/8, 192.168.0.0/16"``).
+
+    Returns:
+        Lista de ``ip_network`` ya compilados, vacía si todos los CIDRs eran inválidos.
+    """
     nets = []
     for cidr in _parse_csv(cidrs_csv):
         try:
@@ -42,7 +64,18 @@ def _compile_networks(cidrs_csv: str) -> list:
 
 # Compilar IPs sueltas válidas desde env.
 def _compile_ips(ips_csv: str) -> set[str]:
-    """Gestiona compile ips."""
+    """Compila un CSV de IPs sueltas en un conjunto de cadenas canónicas.
+
+    Usa ``set`` para que las comprobaciones de pertenencia sean O(1) en
+    caliente. Las IPs inválidas se descartan silenciosamente para no
+    romper el arranque del servicio ante una entrada mal escrita.
+
+    Args:
+        ips_csv: cadena CSV con IPs (IPv4/IPv6).
+
+    Returns:
+        Conjunto con las IPs válidas ya normalizadas (formato canónico de ``ipaddress``).
+    """
     out = set()
     for ip in _parse_csv(ips_csv):
         try:

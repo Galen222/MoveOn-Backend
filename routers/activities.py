@@ -25,7 +25,22 @@ async def guardar_actividad(
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
-    """Guarda actividad."""
+    """Registra una actividad cerrada con todas sus métricas calculadas.
+
+    El cliente envía la actividad ya terminada (distancia, duraciones
+    desglosadas, ritmos, calorías...). El backend valida rangos con los
+    esquemas Pydantic, persiste la actividad y recalcula puntos globales
+    del usuario.
+
+    Args:
+        request: petición entrante (usada por ``slowapi`` para rate limit).
+        datos: payload con todas las métricas calculadas en el dispositivo.
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado inyectado por ``obtener_usuario_actual``.
+
+    Returns:
+        ``RespuestaObtenerActividad`` con la actividad ya persistida y su id remoto.
+    """
     return await activities_service.crear_actividad(db, usuario_actual_id, datos)
 
 
@@ -105,7 +120,21 @@ async def borrar_actividad(
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
-    """Elimina actividad."""
+    """Elimina una actividad concreta del usuario autenticado.
+
+    La comprobación de pertenencia la hace ``eliminar_actividad`` en el
+    servicio: intentar borrar una actividad ajena devuelve 404 (no 403)
+    para no revelar si la id existe y pertenece a otro usuario.
+
+    Args:
+        request: petición entrante.
+        id_actividad: identificador remoto de la actividad a borrar.
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+
+    Returns:
+        ``RespuestaBorrarActividad`` con los nuevos totales del usuario tras el borrado.
+    """
     return await activities_service.eliminar_actividad(
         db, usuario_actual_id, id_actividad
     )

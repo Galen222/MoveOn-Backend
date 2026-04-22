@@ -13,11 +13,28 @@ class SecurityHeadersMiddleware:
     """Middleware para security headers."""
 
     def __init__(self, app: ASGIApp):
-        """Inicializa la instancia."""
+        """Guarda la app ASGI aguas abajo para inyectar cabeceras en su salida.
+
+        Args:
+            app: siguiente aplicación ASGI en la cadena.
+        """
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Procesa la llamada de la instancia."""
+        """Inyecta cabeceras de seguridad estándar en cada respuesta HTTP.
+
+        Para peticiones no HTTP pasa sin tocar. Para HTTP envuelve ``send``
+        para añadir HSTS (solo si la petición fue HTTPS, respetando
+        ``X-Forwarded-Proto`` únicamente si viene de un proxy confiable),
+        ``X-Content-Type-Options``, ``X-Frame-Options``, ``Referrer-Policy``,
+        ``Permissions-Policy`` y opcionalmente ``Content-Security-Policy``.
+        Los valores concretos vienen de ``settings.SEC_HEADERS_*``.
+
+        Args:
+            scope: contexto ASGI de la conexión.
+            receive: callable ASGI para recibir mensajes del cliente.
+            send: callable ASGI para enviar mensajes al cliente.
+        """
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -25,7 +42,16 @@ class SecurityHeadersMiddleware:
         request = Request(scope, receive=receive)
 
         async def send_wrapper(message: Message) -> None:
-            """Envía wrapper."""
+            """Intercepta ``http.response.start`` para añadir las cabeceras.
+
+            Solo modifica mensajes de inicio de respuesta; el resto pasan sin
+            tocar. Respeta ``settings.ENABLE_SECURITY_HEADERS`` como toggle
+            global, aunque en la práctica el middleware no se monta si está
+            deshabilitado.
+
+            Args:
+                message: mensaje ASGI emitido por la app aguas abajo.
+            """
             if (
                 message["type"] == "http.response.start"
                 and settings.ENABLE_SECURITY_HEADERS

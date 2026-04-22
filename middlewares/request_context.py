@@ -17,7 +17,14 @@ request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 # Obtener petición_id actual para logging estructurado.
 def get_request_id() -> str:
-    """Obtiene request identificador."""
+    """Devuelve el ``request_id`` de la petición actual desde el ``contextvar``.
+
+    Fuera de una petición (arranque, tareas de fondo) devuelve ``"-"`` en
+    lugar de lanzar excepción, para que los logs de arranque no rompan.
+
+    Returns:
+        UUID del request en curso, o ``"-"`` si no hay petición activa.
+    """
     return request_id_ctx.get()
 
 
@@ -25,11 +32,32 @@ class RequestContextMiddleware:
     """Middleware para request context."""
 
     def __init__(self, app: ASGIApp):
-        """Inicializa la instancia."""
+        """Guarda la app ASGI aguas abajo para poder invocarla en ``__call__``.
+
+        Args:
+            app: siguiente aplicación ASGI en la cadena.
+        """
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Procesa la llamada de la instancia."""
+        """Asigna un ``request_id`` a cada petición y registra su resultado.
+
+        Flujo:
+
+        1. Para peticiones no HTTP (websockets, lifespan), delega sin tocar.
+        2. Toma el ``x-request-id`` del cliente si viene, o genera un UUID.
+        3. Publica ese id en ``request_id_ctx`` para que el logger lo use.
+        4. Envuelve ``send`` para inyectar el mismo id en la cabecera de
+           respuesta y emitir un log ``peticion_completada`` al terminar
+           el último chunk, con ``status_code`` y duración real.
+        5. Si la app aguas abajo lanza, registra ``peticion_fallida`` con
+           traceback y re-lanza para que los handlers de FastAPI respondan.
+
+        Args:
+            scope: contexto ASGI de la conexión.
+            receive: callable ASGI para recibir mensajes del cliente.
+            send: callable ASGI para enviar mensajes al cliente.
+        """
         # Procesa la llamada de la instancia.
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -56,7 +84,16 @@ class RequestContextMiddleware:
         status_code = 500
 
         async def send_wrapper(message: Message) -> None:
-            """Envía wrapper."""
+            """Intercepta los mensajes ``send`` para anotar cabecera y log final.
+
+            En ``http.response.start`` añade la cabecera ``x-request-id`` con
+            el id actual (útil para que el cliente correlacione errores). En
+            ``http.response.body`` con ``more_body=False`` emite el log
+            ``peticion_completada`` con ``status_code`` y ``duration_ms``.
+
+            Args:
+                message: mensaje ASGI emitido por la app aguas abajo.
+            """
             # Envía wrapper.
             nonlocal status_code
 

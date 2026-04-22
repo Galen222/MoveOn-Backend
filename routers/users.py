@@ -44,7 +44,21 @@ router = APIRouter(
 async def registro(
     request: Request, datos: schemas.Registro, db: AsyncSession = Depends(obtener_db)
 ):
-    """Registro de nuevo usuario con validación de duplicados."""
+    """Registra un usuario nuevo con email y contraseña.
+
+    Aplica rate limit por identidad (email) para dificultar la creación
+    masiva de cuentas, y delega en ``user_service.registrar_nuevo_usuario``
+    la comprobación de duplicados (email y nombre de usuario), el hash
+    de la contraseña y la inserción.
+
+    Args:
+        request: petición entrante (usada por ``slowapi`` para rate limit).
+        datos: payload con ``nombre_usuario``, ``email``, ``password``, ``fecha_nacimiento`` y evidencia de términos.
+        db: sesión asíncrona de SQLAlchemy.
+
+    Returns:
+        ``RespuestaRegistro`` indicando el éxito del alta.
+    """
     # Límite de tasa adicional por identidad/correo electrónico (antiabuso distribuido)
     check_identity_limit("registro", str(datos.email), settings.RL_REGISTRO_ID)
 
@@ -58,7 +72,23 @@ async def registro_social(
     datos: schemas.RegistroSocial,
     db: AsyncSession = Depends(obtener_db),
 ):
-    """Registro o inicio de sesión con proveedor social verificado por backend."""
+    """Registra o reutiliza una cuenta vinculada a un proveedor social.
+
+    El ``identity_key`` para el rate limit se deriva del email devuelto
+    por el proveedor si existe, y si no del par ``provider:provider_user_id``:
+    así un mismo Google Account queda rate-limiteado coherentemente
+    aunque el email venga oculto.
+
+    Args:
+        request: petición entrante.
+        datos: payload con ``provider``, ``token``, ``nombre_usuario`` elegido y evidencia de términos.
+        db: sesión asíncrona de SQLAlchemy.
+
+    Returns:
+        ``RespuestaLogin`` con los tokens emitidos; permite que el
+        registro social inicie sesión directa sin pasar de nuevo por
+        ``/login/social``.
+    """
     identidad = await social_auth_service.verificar_token_social(
         datos.provider, datos.token
     )
@@ -78,7 +108,26 @@ async def informacion_perfil(
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
-    """Obtiene los datos del perfil."""
+    """Devuelve el perfil completo del usuario autenticado para la pantalla propia.
+
+    Además de los campos del perfil, calcula en el momento:
+
+    - ``puntos`` a partir de ``total_metros`` (``1 km = 1 punto``).
+    - ``foto_perfil`` como URL absoluta lista para usar (``construir_url_foto``
+      resuelve tanto Cloudinary como almacenamiento local).
+    - ``foto_version`` como timestamp de ``foto_fecha_actualizacion`` para
+      invalidar la caché del cliente tras cambios de foto.
+    - Valores por defecto en los objetivos semanales/mensuales cuando
+      aún no hay persistidos.
+
+    Args:
+        request: petición entrante (necesaria para construir URLs absolutas de la foto).
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+
+    Returns:
+        Diccionario con el perfil preparado para el contrato ``RespuestaInformacionPerfil``.
+    """
     usuario = await user_service.obtener_perfil(db, usuario_actual_id)
 
     # Calcular puntos (1 KM = 1 Punto).
@@ -153,7 +202,27 @@ async def foto_perfil(
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
     archivo: UploadFile = File(...),
 ):
-    """Gestiona foto perfil."""
+    """Sube una foto de perfil nueva y reemplaza la anterior.
+
+    Valida y almacena el fichero con ``file_service`` (tamaño, MIME,
+    contenido), actualiza la URL y la marca de tiempo de foto en el
+    perfil, y programa el borrado de la foto anterior en segundo plano
+    para que la respuesta no pague la IO de red/disco de la limpieza.
+
+    Usa ``request`` para registrar el intento en logs con contexto, y
+    los ``background_tasks`` para diferir el borrado hasta después del
+    commit con éxito.
+
+    Args:
+        request: petición entrante.
+        background_tasks: acumulador de tareas diferidas (borrado de la foto vieja).
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+        archivo: fichero subido con la nueva foto.
+
+    Returns:
+        ``RespuestaGenerica`` confirmando la actualización de la foto.
+    """
     logger.info(
         "actualizacion_foto_perfil_iniciada",
         extra={
@@ -263,7 +332,21 @@ async def actualizar_perfil(
     db: AsyncSession = Depends(obtener_db),
     usuario_actual_id: int = Depends(auth.obtener_usuario_actual),
 ):
-    """Permite al usuario modificar su perfil."""
+    """Aplica cambios parciales al perfil del usuario autenticado.
+
+    Sólo se actualizan los campos presentes en ``datos`` (``None`` significa
+    "no tocar"). El perfil se bloquea con ``for_update=True`` para evitar
+    conflictos con sincronizaciones concurrentes desde varios dispositivos.
+
+    Args:
+        request: petición entrante.
+        datos: ``ActualizarPerfil`` con los campos opcionales a modificar.
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+
+    Returns:
+        ``RespuestaGenerica`` confirmando la modificación.
+    """
     usuario = await user_service.obtener_perfil(db, usuario_actual_id, for_update=True)
     return await user_service.actualizar_perfil_usuario(db, usuario, datos)
 

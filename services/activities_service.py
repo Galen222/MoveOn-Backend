@@ -18,8 +18,33 @@ logger = logging.getLogger("app.activities")
 async def crear_actividad(
     db: AsyncSession, usuario_actual_id: int, datos: schemas.GuardarActividad
 ) -> dict[str, Any]:
-    """
-    Busca al usuario y registra una nueva actividad deportiva enriquecida.
+    """Registra una nueva actividad y actualiza los acumulados del usuario.
+
+    Flujo:
+
+    1. Bloquea la fila del usuario con ``with_for_update`` para evitar
+       carreras con otras operaciones (ranking, otra subida concurrente).
+    2. Si el cliente envió ``client_local_id``, busca una actividad ya
+       existente con ese mismo id y la devuelve tal cual: esta clave
+       hace la operación idempotente, de forma que un reintento del
+       cliente Android no duplica actividades.
+    3. Si es nueva, inserta la actividad, actualiza los totales
+       agregados del usuario (metros, calorías, duración, contador)
+       y hace commit dentro de la misma transacción.
+    4. Devuelve el payload con el ``nuevo_total_puntos`` recalculado
+       (``1 km = 1 punto``) para que el cliente pueda actualizar la UI
+       sin una segunda llamada.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado (inyectado por el router).
+        datos: ``GuardarActividad`` con todas las métricas ya calculadas en el dispositivo.
+
+    Returns:
+        Diccionario con la actividad persistida y ``nuevo_total_puntos`` actualizado.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si el id de usuario ya no existe (cuenta borrada entre el login y esta llamada).
     """
     # Construye actividad.
     usuario = (
@@ -311,7 +336,31 @@ async def obtener_actividad(
     # Reducimos queries duplicadas: en vez de consultar primero el usuario y luego la actividad,
     # se hace una sola query con OUTER JOIN para seguir distinguiendo entre usuario inexistente
     # y actividad inexistente o que no pertenece a este usuario.
-    """Obtiene actividad."""
+    """Recupera una actividad concreta verificando pertenencia en una sola query.
+
+    Usa un ``OUTER JOIN`` entre ``Usuario`` y ``Actividad`` filtrado por
+    id de actividad y id de dueño, de modo que:
+
+    - Si el usuario no existe, ``fila`` es ``None`` → 404 con ``USER_NOT_FOUND``.
+    - Si el usuario existe pero la actividad no (o no es suya), la columna
+      de actividad viene a ``None`` → 404 con ``ACTIVITY_NOT_FOUND``.
+
+    Este diseño evita exponer la diferencia entre "no existe" y "no es
+    tuya": ambos casos responden 404 para no permitir enumeración de
+    actividades ajenas.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+        id_actividad: id remoto de la actividad solicitada.
+
+    Returns:
+        Diccionario con el contrato de ``RespuestaObtenerActividad``.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si el usuario no existe.
+        AppHTTPException: 404 ``ACTIVITY_NOT_FOUND`` si la actividad no existe o no pertenece al usuario.
+    """
     # Obtiene actividad.
     fila = (
         await db.execute(
@@ -440,7 +489,29 @@ async def eliminar_actividad(
 ):
     # Se sigue bloqueando el usuario porque se modifican los acumulados,
     # pero usuario + actividad se recuperan en una sola query.
-    """Elimina actividad."""
+    """Borra una actividad del usuario y actualiza los acumulados.
+
+    Sigue el mismo patrón que ``obtener_actividad`` para la verificación:
+    una sola query con ``OUTER JOIN`` y ``with_for_update`` sobre el
+    usuario para evitar carreras en los totales. Tras borrar, resta las
+    métricas de la actividad a los acumulados (metros, calorías,
+    duración, contador) y hace commit en la misma transacción.
+
+    Devuelve el nuevo total de puntos recalculado para que el cliente
+    pueda actualizar la UI sin una segunda llamada.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+        id_actividad: id remoto de la actividad a borrar.
+
+    Returns:
+        Diccionario con ``estatus``, ``mensaje`` y ``nuevo_total_puntos``.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si el usuario no existe.
+        AppHTTPException: 404 ``ACTIVITY_NOT_FOUND`` si la actividad no existe o no pertenece al usuario.
+    """
     # Elimina actividad.
     fila = (
         await db.execute(
@@ -536,7 +607,25 @@ async def eliminar_actividad(
 
 
 async def eliminar_actividades(db: AsyncSession, usuario_actual_id: int):
-    """Elimina actividades."""
+    """Borra todo el historial deportivo del usuario y resetea sus acumulados.
+
+    Se usa desde la pantalla "borrar mis datos" de la app. Cuenta
+    primero cuántas actividades se van a borrar (solo para el log), lanza
+    un único ``DELETE`` sobre la tabla de actividades filtrando por dueño,
+    y pone a cero los acumulados del usuario. Todo en una sola
+    transacción con rollback ante cualquier error para no dejar los
+    contadores descuadrados con la tabla.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+
+    Returns:
+        ``RespuestaGenerica`` confirmando el borrado masivo.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si el usuario no existe.
+    """
     # Elimina actividades.
     usuario = (
         await db.execute(

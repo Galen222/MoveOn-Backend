@@ -33,7 +33,23 @@ REPORTES_DESTINO = (
 
 
 def _es_error_transitorio(exc: Exception) -> bool:
-    """Indica si error transitorio."""
+    """Clasifica una excepción SMTP como transitoria (merece reintento) o no.
+
+    Clasificación:
+
+    - Timeouts, desconexiones y errores de red → transitorios.
+    - Auth, remitente/destinatario rechazados, ``SMTPNotSupported`` →
+      permanentes: reintentar no va a cambiar el resultado.
+    - ``SMTPResponseException`` con código 4xx → transitorio (el 5xx no).
+    - Resto → considerado permanente por defecto para no reintentar
+      en bucle ante errores desconocidos.
+
+    Args:
+        exc: excepción capturada al enviar el correo.
+
+    Returns:
+        ``True`` si procede reintentar el envío; ``False`` si hay que rendirse.
+    """
     # Indica si error transitorio.
     if isinstance(
         exc,
@@ -66,7 +82,17 @@ def _es_error_transitorio(exc: Exception) -> bool:
 
 
 def _normalizar_locale(locale: str) -> str:
-    """Normaliza configuración regional."""
+    """Reduce un locale arbitrario al conjunto cerrado ``{"es", "en"}``.
+
+    Acepta ``en``, ``en-US``, ``en_GB``, etc. para inglés. Cualquier otro
+    valor cae a español, que es el idioma por defecto del servicio.
+
+    Args:
+        locale: locale tal como llega del cliente.
+
+    Returns:
+        ``"en"`` si el locale empieza por inglés, ``"es"`` en cualquier otro caso.
+    """
     normalizado = (
         locale.strip().lower().replace("_", "-") if isinstance(locale, str) else ""
     )
@@ -76,7 +102,18 @@ def _normalizar_locale(locale: str) -> str:
 
 
 def _adjuntar_logo_inline(msg: EmailMessage, email_destino: str) -> None:
-    """Adjunta el logotipo embebido."""
+    """Adjunta el logo de MoveOn como imagen inline (``cid:moveon_logo``).
+
+    Busca ``assets/email/moveon.png`` relativo a la raíz del proyecto.
+    Si no existe, emite un warning en vez de fallar para que el correo
+    se envíe aunque sea sin logo. Si no encuentra parte HTML a la que
+    asociar la imagen también avisa: el mensaje seguiría saliendo como
+    texto plano pero sin referencia al ``cid``.
+
+    Args:
+        msg: mensaje al que añadir el adjunto (se muta in place).
+        email_destino: destinatario, sólo para enriquecer los logs.
+    """
     # Adjunta logo embebido.
     logo_path = Path(__file__).resolve().parents[1] / "assets" / "email" / "moveon.png"
 
@@ -119,7 +156,22 @@ def _construir_mensaje_recuperacion(
     smtp_username: str,
     locale: str,
 ) -> EmailMessage:
-    """Construye mensaje recuperacion."""
+    """Construye el ``EmailMessage`` de recuperación de contraseña.
+
+    Añade versión texto plano y versión HTML con la plantilla del
+    idioma correspondiente, y pega el logo inline. El ``Subject`` y el
+    texto plano se traducen también según ``locale``.
+
+    Args:
+        email_destino: dirección a la que se envía el correo.
+        codigo: código numérico que el usuario debe introducir en la app.
+        minutos: minutos de validez del código; pluraliza en el texto.
+        smtp_username: dirección usada como remitente (``From``).
+        locale: idioma preferido del usuario; se normaliza a ``"es"``/``"en"``.
+
+    Returns:
+        Mensaje listo para enviar con ``_enviar_mensaje``.
+    """
     # Construye mensaje recuperacion.
     locale_normalizado = _normalizar_locale(locale)
 
@@ -152,7 +204,21 @@ def _construir_mensaje_aviso_google(
     smtp_username: str,
     locale: str,
 ) -> EmailMessage:
-    """Construye mensaje aviso google."""
+    """Construye el correo que avisa de que la cuenta usa Google.
+
+    Mismo chasis que el de recuperación pero con el texto adaptado.
+    Se usa cuando alguien intenta recuperar contraseña de una cuenta
+    social: en vez de contestar distinto en el endpoint (y filtrar el
+    tipo de cuenta), se envía este email al dueño.
+
+    Args:
+        email_destino: dirección del correo.
+        smtp_username: dirección usada como remitente.
+        locale: idioma preferido; se normaliza.
+
+    Returns:
+        Mensaje listo para enviar con ``_enviar_mensaje``.
+    """
     # Construye mensaje aviso google.
     locale_normalizado = _normalizar_locale(locale)
 
@@ -194,7 +260,23 @@ def _construir_mensaje_reporte_perfil(
     observaciones: str | None,
     smtp_username: str,
 ) -> EmailMessage:
-    """Construye mensaje reporte perfil."""
+    """Construye el correo interno de reporte de perfil inapropiado.
+
+    Se envía al buzón de moderación (``REPORTES_DESTINO``) en lugar de
+    al usuario. Incluye versión texto plano con un resumen y versión
+    HTML rica con tarjetas por motivo y observaciones escapadas.
+
+    Args:
+        usuario_reportante: nombre del usuario que lanza el reporte.
+        usuario_reportado: nombre del usuario reportado.
+        reportar_nombre: ``True`` si el motivo incluye el nombre.
+        reportar_foto: ``True`` si el motivo incluye la foto.
+        observaciones: texto libre opcional aportado por el reportante.
+        smtp_username: dirección usada como remitente.
+
+    Returns:
+        Mensaje listo para enviar con ``_enviar_mensaje``.
+    """
     # Construye mensaje reporte perfil.
     msg = EmailMessage()
     msg["Subject"] = "Reporte de perfil inapropiado"
@@ -240,7 +322,28 @@ async def _enviar_mensaje(
     evento_error_transitorio: str,
     evento_agotado: str,
 ) -> bool:
-    """Envía mensaje."""
+    """Envía un ``EmailMessage`` con política de reintentos acotada.
+
+    Intenta enviar hasta ``EMAIL_MAX_RETRIES`` veces con backoff. Usa
+    ``_es_error_transitorio`` para decidir si un fallo merece reintento:
+    timeouts y desconexiones reintentan; auth o destinatarios rechazados
+    se abortan de inmediato para no gastar ciclos en algo imposible.
+
+    Cada resultado se registra con un evento distinto (``evento_ok``,
+    ``evento_error_permanente``, ``evento_error_transitorio``,
+    ``evento_agotado``) para poder grepear en logs por tipo de correo.
+
+    Args:
+        msg: mensaje ya construido y con logo adjunto.
+        destino_log: destinatario para registrar en los logs.
+        evento_ok: clave de log al enviar con éxito.
+        evento_error_permanente: clave de log ante errores que no se reintentan.
+        evento_error_transitorio: clave de log por cada reintento tras fallo transitorio.
+        evento_agotado: clave de log cuando se consumen todos los reintentos sin éxito.
+
+    Returns:
+        ``True`` si el envío termina con éxito; ``False`` si se agotan los reintentos o hay un error permanente.
+    """
     # Envía mensaje.
     smtp_server = settings.EMAIL_HOST
     smtp_port = settings.EMAIL_PORT
@@ -331,7 +434,21 @@ async def enviar_codigo_recuperacion(
     minutos: int,
     locale: str,
 ) -> bool:
-    """Envía codigo recuperacion."""
+    """Construye y envía el email con el código de recuperación de contraseña.
+
+    Combina ``_construir_mensaje_recuperacion`` y ``_enviar_mensaje``
+    para que el servicio de acceso no tenga que conocer los detalles
+    de SMTP ni de plantillas.
+
+    Args:
+        email_destino: dirección del usuario que solicitó recuperación.
+        codigo: código numérico generado por el servicio de acceso.
+        minutos: minutos de validez del código (para pluralizar y mostrar).
+        locale: idioma preferido del usuario; se normaliza internamente.
+
+    Returns:
+        ``True`` si el correo se envía con éxito; ``False`` si falla definitivamente.
+    """
     # Envía codigo recuperacion.
     msg = _construir_mensaje_recuperacion(
         email_destino,
@@ -354,7 +471,20 @@ async def enviar_aviso_recuperacion_google(
     email_destino: str,
     locale: str,
 ) -> bool:
-    """Envía aviso recuperacion google."""
+    """Envía el email que avisa al dueño de una cuenta Google sobre
+    la solicitud de recuperación de contraseña.
+
+    No da pistas de si la cuenta existe o no a terceros: el endpoint
+    respondió ya de forma genérica, y aquí sólo el propio dueño del
+    email ve la información del tipo de cuenta en su bandeja.
+
+    Args:
+        email_destino: dirección del usuario que solicitó la recuperación.
+        locale: idioma preferido del usuario; se normaliza internamente.
+
+    Returns:
+        ``True`` si el correo se envía con éxito; ``False`` si falla.
+    """
     msg = _construir_mensaje_aviso_google(
         email_destino,
         settings.EMAIL_USER,
@@ -377,7 +507,21 @@ async def enviar_reporte_perfil_inapropiado(
     reportar_foto: bool,
     observaciones: str | None,
 ) -> bool:
-    """Envía reporte perfil inapropiado."""
+    """Envía el email interno de reporte de perfil al buzón de moderación.
+
+    Reutiliza la misma maquinaria de reintento que el resto de emails,
+    pero el destinatario es siempre ``REPORTES_DESTINO``, no el usuario.
+
+    Args:
+        usuario_reportante: nombre del usuario que lanza el reporte.
+        usuario_reportado: nombre del usuario reportado.
+        reportar_nombre: ``True`` si el motivo incluye el nombre.
+        reportar_foto: ``True`` si el motivo incluye la foto.
+        observaciones: texto libre opcional aportado por el reportante.
+
+    Returns:
+        ``True`` si el correo se envía con éxito; ``False`` si falla.
+    """
     # Envía reporte perfil inapropiado.
     msg = _construir_mensaje_reporte_perfil(
         usuario_reportante=usuario_reportante,

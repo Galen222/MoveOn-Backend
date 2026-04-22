@@ -184,7 +184,32 @@ async def registrar_usuario_social(
     datos: schemas.RegistroSocial,
     identidad: social_auth_service.SocialIdentity,
 ):
-    """Registra o reutiliza un usuario autenticado con proveedor social."""
+    """Registra un usuario nuevo vinculado a un proveedor social verificado.
+
+    Flujo:
+
+    1. Valida y normaliza el ``nombre_usuario`` solicitado (no vacío,
+       moderación de texto para bloquear nombres prohibidos).
+    2. Normaliza el email devuelto por el proveedor a minúsculas.
+    3. Delega en lógica compartida de registro para crear el usuario
+       en la base, añadir la foto de avatar inicial si el proveedor la
+       devolvió, y crear el vínculo ``UsuarioAuthSocial`` correspondiente.
+    4. Emite directamente una sesión de login (access + refresh) para
+       que el cliente no tenga que llamar a ``/login/social`` justo
+       después del registro.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        datos: ``RegistroSocial`` con ``nombre_usuario``, evidencia de términos y el token social.
+        identidad: ``SocialIdentity`` ya verificada por ``social_auth_service``.
+
+    Returns:
+        ``RespuestaLogin`` con los tokens de sesión emitidos para el nuevo usuario.
+
+    Raises:
+        AppHTTPException: 400 ``USERNAME_EMPTY`` si ``nombre_usuario`` está vacío tras recortar.
+        AppHTTPException: 400/409 relativos a duplicados de usuario, email o vínculo social.
+    """
 
     # Gestiona registrar usuario social.
     nombre_usuario = datos.nombre_usuario.strip()
@@ -332,7 +357,27 @@ async def registrar_usuario_social(
 async def obtener_perfil(
     db: AsyncSession, usuario_actual_id: int, for_update: bool = False
 ):
-    """Busca al usuario en la base de datos usando el 'sub' extraído automáticamente del token."""
+    """Carga el perfil del usuario autenticado, opcionalmente bloqueando la fila.
+
+    La bandera ``for_update`` aplica ``SELECT ... FOR UPDATE`` para casos
+    en los que el llamador va a modificar el perfil justo después
+    (``PATCH /perfil/actualizar``): así se evita que dos sincronizaciones
+    concurrentes desde dos dispositivos pisen cambios del otro.
+
+    Para lecturas puras (pantalla de perfil, cabecera del ranking) se
+    llama sin bloqueo para no serializar accesos innecesariamente.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado.
+        for_update: ``True`` si el llamador va a modificar la fila tras leerla.
+
+    Returns:
+        Fila ``database.Usuario`` del usuario.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si el id ya no existe en base de datos.
+    """
     # Obtiene perfil.
     query = select(database.Usuario).where(database.Usuario.id == usuario_actual_id)
 
@@ -685,7 +730,27 @@ async def reportar_perfil_inapropiado(
     usuario_actual_id: int,
     datos: schemas.ReportePerfilInapropiado,
 ):
-    """Gestiona reportar perfil inapropiado."""
+    """Registra un reporte de un usuario contra otro y envía aviso a moderación.
+
+    Comprueba que el usuario reportado exista (búsqueda case-insensitive
+    sobre ``nombre_usuario``) y que no sea el propio reportante (no se
+    puede reportar a uno mismo). Persiste el reporte en la base de datos
+    con los flags de motivo y las observaciones, y delega el aviso al
+    buzón de moderación en ``email_service.enviar_reporte_perfil_inapropiado``.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        usuario_actual_id: id del usuario autenticado que lanza el reporte.
+        datos: ``ReportePerfilInapropiado`` con el nombre del reportado,
+            banderas de motivo y observaciones opcionales.
+
+    Returns:
+        ``RespuestaGenerica`` confirmando que el reporte se ha recibido.
+
+    Raises:
+        AppHTTPException: 404 ``USER_NOT_FOUND`` si el usuario reportado no existe.
+        AppHTTPException: 400 ``CANNOT_REPORT_SELF`` si el usuario se reporta a sí mismo.
+    """
     # Gestiona reportar perfil inapropiado.
     usuario_reportante = await obtener_perfil(db, usuario_actual_id)
 

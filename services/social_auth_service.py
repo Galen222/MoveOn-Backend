@@ -43,7 +43,24 @@ class SocialIdentity:
 async def verificar_token_social(
     provider: schemas.ProveedorAuthSocial | str, token: str
 ) -> SocialIdentity:
-    """Gestiona verificar token social."""
+    """Valida el token de un proveedor social y devuelve la identidad extraída.
+
+    Actúa como dispatcher: actualmente sólo soporta Google, pero deja la
+    puerta abierta a añadir más proveedores sin cambiar a los llamadores.
+    Cualquier ``provider`` distinto responde 400 ``SOCIAL_PROVIDER_INVALID``
+    en lugar de silenciar el caso.
+
+    Args:
+        provider: identificador del proveedor (enum ``ProveedorAuthSocial`` o cadena).
+        token: token emitido por el proveedor (p. ej. id_token de Google).
+
+    Returns:
+        ``SocialIdentity`` con los datos verificados (sub, email, nombre, avatar).
+
+    Raises:
+        AppHTTPException: 400 ``SOCIAL_PROVIDER_INVALID`` si el proveedor no está soportado.
+        AppHTTPException: errores específicos del proveedor si la verificación del token falla.
+    """
     if isinstance(provider, schemas.ProveedorAuthSocial):
         provider_value = provider.value
     else:
@@ -62,7 +79,20 @@ async def verificar_token_social(
 async def buscar_vinculo_social(
     db: AsyncSession, provider: str, provider_user_id: str
 ) -> Optional[database.UsuarioAuthSocial]:
-    """Gestiona buscar vinculo social."""
+    """Busca el vínculo entre un proveedor social y un usuario local.
+
+    Se consulta por el par ``(provider, provider_user_id)`` porque es lo
+    único estable del proveedor: el email puede cambiar y el nombre
+    también, pero el ``sub``/``provider_user_id`` es inmutable.
+
+    Args:
+        db: sesión asíncrona de SQLAlchemy.
+        provider: identificador normalizado del proveedor (p. ej. ``"google"``).
+        provider_user_id: ``sub`` del token verificado por el proveedor.
+
+    Returns:
+        Fila ``UsuarioAuthSocial`` si existe el vínculo, ``None`` si no.
+    """
     return (
         await db.execute(
             select(database.UsuarioAuthSocial).where(
@@ -76,7 +106,17 @@ async def buscar_vinculo_social(
 def actualizar_metadata_vinculo(
     vinculo: database.UsuarioAuthSocial, identidad: SocialIdentity
 ) -> None:
-    """Actualiza metadata vinculo."""
+    """Refresca los datos del vínculo social con lo devuelto por el proveedor.
+
+    Cada login social actualiza el email, el nombre y el avatar cacheados
+    porque el proveedor puede haberlos cambiado. También marca
+    ``ultimo_login_en`` con la hora actual en UTC, útil para
+    auditoría y para decidir expiraciones de vínculos inactivos.
+
+    Args:
+        vinculo: fila ``UsuarioAuthSocial`` existente a refrescar (se muta).
+        identidad: datos recién verificados del proveedor.
+    """
     vinculo.email_social = identidad.email.lower().strip() if identidad.email else None
     vinculo.nombre_social = identidad.nombre.strip() if identidad.nombre else None
     vinculo.avatar_url = identidad.avatar_url.strip() if identidad.avatar_url else None
@@ -87,7 +127,20 @@ def crear_vinculo_social(
     usuario_id: int,
     identidad: SocialIdentity,
 ) -> database.UsuarioAuthSocial:
-    """Construye vinculo social."""
+    """Construye una nueva fila ``UsuarioAuthSocial`` desde una identidad.
+
+    Normaliza email (``lower().strip()``) y recorta espacios en nombre
+    y avatar para homogeneizar la columna. No persiste: el llamador
+    decide cuándo hacer ``add`` y ``commit`` para poder combinar la
+    inserción con otras operaciones en la misma transacción.
+
+    Args:
+        usuario_id: id del usuario local al que se vincula.
+        identidad: datos del proveedor ya verificados.
+
+    Returns:
+        Instancia ``UsuarioAuthSocial`` en memoria lista para ``db.add(...)``.
+    """
     return database.UsuarioAuthSocial(
         usuario_id=usuario_id,
         provider=identidad.provider,
@@ -99,7 +152,37 @@ def crear_vinculo_social(
 
 
 async def _verificar_google(token: str) -> SocialIdentity:
-    """Gestiona verificar google."""
+    """Verifica un ``id_token`` de Google contra la JWKS pública de Google.
+
+    Pasos:
+
+    1. Comprueba que la autenticación con Google está configurada; si no,
+       responde 503 ``GOOGLE_AUTH_NOT_CONFIGURED`` para no confundir al
+       cliente con un 401.
+    2. Descarga la JWK pública apropiada en un threadpool (la llamada es
+       síncrona y hace I/O), y decodifica el JWT exigiendo ``RS256`` y la
+       audiencia ``GOOGLE_WEB_CLIENT_ID``.
+    3. Verifica que el issuer pertenezca al conjunto de emisores válidos
+       de Google (acepta ``accounts.google.com`` con o sin esquema).
+    4. Exige que ``sub`` exista y no esté vacío.
+    5. Si hay ``email`` pero ``email_verified=False``, rechaza la cuenta:
+       no queremos enlazar cuentas de Google con email sin verificar.
+    6. Empaqueta nombre y avatar en el ``SocialIdentity`` devuelto.
+
+    Args:
+        token: ``id_token`` de Google recibido del cliente.
+
+    Returns:
+        ``SocialIdentity`` con los datos canónicos extraídos del token.
+
+    Raises:
+        AppHTTPException: 503 ``GOOGLE_AUTH_NOT_CONFIGURED`` si falta ``GOOGLE_WEB_CLIENT_ID``.
+        AppHTTPException: 401 ``GOOGLE_TOKEN_INVALID_OR_EXPIRED`` si el JWT no valida.
+        AppHTTPException: 503 ``GOOGLE_TOKEN_VERIFICATION_UNAVAILABLE`` ante errores al contactar con la JWKS.
+        AppHTTPException: 401 ``GOOGLE_TOKEN_ISSUER_INVALID`` si el emisor no es de Google.
+        AppHTTPException: 401 ``GOOGLE_TOKEN_MISSING_SUB`` si no hay ``sub``.
+        AppHTTPException: 401 ``GOOGLE_EMAIL_NOT_VERIFIED`` si el email del token no está verificado.
+    """
     # Gestiona verificar google.
     if not settings.GOOGLE_WEB_CLIENT_ID.strip():
         raise app_http_exception(

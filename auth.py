@@ -40,27 +40,69 @@ security_scheme = HTTPBearer()
 
 
 def encriptar_password(password: str) -> str:
-    """Cifra una contraseña de texto plano usando bcrypt."""
+    """Cifra una contraseña en claro usando bcrypt con salt aleatorio por llamada.
+
+    bcrypt genera un salt nuevo cada vez, por lo que cifrar dos veces la
+    misma contraseña produce hashes distintos aunque ambos sean válidos.
+
+    Args:
+        password: contraseña en claro tal como la introdujo el usuario.
+
+    Returns:
+        Hash bcrypt codificado en UTF-8, listo para persistir en la base
+        de datos.
+    """
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def comprobar_password(password_plana: str, password_encriptada: str) -> bool:
-    """Compara una contraseña plana ingresada con el hash almacenado en la base de datos."""
+    """Verifica una contraseña en claro contra el hash bcrypt almacenado.
+
+    La comparación se delega en ``bcrypt.checkpw``, que realiza una
+    comparación en tiempo constante para mitigar ataques de canal lateral
+    por temporización.
+
+    Args:
+        password_plana: contraseña tal como la acaba de introducir el usuario.
+        password_encriptada: hash bcrypt tal como está guardado en la base de datos.
+
+    Returns:
+        ``True`` si la contraseña coincide con el hash; ``False`` en caso contrario.
+    """
     return bcrypt.checkpw(
         password_plana.encode("utf-8"), password_encriptada.encode("utf-8")
     )
 
 
 def _ahora_utc() -> datetime:
-    """Devuelve la fecha y hora actual en UTC."""
+    """Devuelve el ``datetime`` actual con ``tzinfo=UTC``.
+
+    Se centraliza aquí para que todos los JWT (exp/iat) se firmen contra
+    la misma referencia temporal y los tests puedan monkey-patchearla
+    en un único sitio.
+
+    Returns:
+        Fecha y hora actual del sistema en UTC.
+    """
     return datetime.now(timezone.utc)
 
 
 def codifica_jwt(payload: dict, secret: str, expires_delta: timedelta, typ: str) -> str:
-    """
-    Firma un JWT con claims comunes:
-      - exp, iat, iss, aud, typ
+    """Firma un JWT con los claims comunes a todos los tokens de la app.
+
+    Añade automáticamente ``exp``, ``iat``, ``iss``, ``aud`` y ``typ``
+    encima del ``payload`` recibido, de forma que la decodificación
+    correspondiente pueda validar esos mismos claims de manera uniforme.
+
+    Args:
+        payload: claims específicos del token (p. ej. ``sub``, ``jti``, ``fam``).
+        secret: clave secreta con la que se firma el JWT (distinta por tipo).
+        expires_delta: tiempo de vida del token a partir del instante actual.
+        typ: valor del claim ``typ`` (``access``, ``refresh`` o ``app_session``).
+
+    Returns:
+        JWT serializado como cadena codificada con ``ALGORITHM``.
     """
     # Gestiona codifica JWT.
     ahora = _ahora_utc()
@@ -81,13 +123,24 @@ def codifica_jwt(payload: dict, secret: str, expires_delta: timedelta, typ: str)
 
 
 def decodifica_jwt(token: str, secret: str, expected_typ: str) -> dict[str, Any]:
-    """
-    Decodifica y valida un JWT SIEMPRE igual:
-      - firma
-      - exp
-      - iss
-      - aud
-      - typ
+    """Decodifica y valida un JWT aplicando todas las comprobaciones canónicas.
+
+    Verifica firma, expiración, emisor, audiencia y que el claim ``typ``
+    coincida con el esperado. Si el ``typ`` no coincide se lanza una
+    ``AppHTTPException`` 401 explícita en lugar de un simple
+    ``InvalidTokenError`` para poder devolver un ``error_code`` útil.
+
+    Args:
+        token: JWT serializado recibido del cliente.
+        secret: clave secreta con la que se firmó el token (la correspondiente al tipo).
+        expected_typ: valor que debe tener el claim ``typ`` (``access``, ``refresh``...).
+
+    Returns:
+        Diccionario con los claims decodificados.
+
+    Raises:
+        AppHTTPException: si el ``typ`` no coincide con ``expected_typ`` (401).
+        jwt.InvalidTokenError: si la firma, la expiración o los claims de emisor/audiencia no son válidos.
     """
     # Gestiona decodifica JWT.
     payload: dict[str, Any] = jwt.decode(
@@ -110,7 +163,15 @@ def decodifica_jwt(token: str, secret: str, expected_typ: str) -> dict[str, Any]
 
 
 def crear_token_aplicacion() -> str:
-    """Genera un token JWT de corta duración para el apretón de manos inicial."""
+    """Emite el JWT de corta duración que el cliente usa en el handshake.
+
+    El token de ``app_session`` no representa a un usuario: acredita que
+    la petición procede de una instalación legítima de la app. Se firma
+    con su propio secreto y expira según ``APP_SESSION_EXPIRE_MINUTES``.
+
+    Returns:
+        JWT de tipo ``app_session`` listo para enviarse al cliente.
+    """
     # Token "app_session" con el mismo esquema de claims que el resto
     return codifica_jwt(
         payload={},  # no necesitas sub aquí, pero podrías añadir {"sub": "app"} si quieres
@@ -121,7 +182,24 @@ def crear_token_aplicacion() -> str:
 
 
 def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=None)):
-    """Middleware que valida que la petición contenga un token de handshake."""
+    """Dependencia FastAPI que exige un ``x-app-session`` válido en la cabecera.
+
+    Se usa para proteger endpoints públicos (login, registro, recuperación)
+    de peticiones que no vienen desde el cliente oficial. Si el token falta
+    o es inválido/expirado, responde 403 con un ``error_code`` distinto en
+    cada caso para que el cliente pueda distinguirlos y decidir si repite
+    el handshake.
+
+    Args:
+        x_app_session: valor de la cabecera ``x-app-session`` inyectado por FastAPI.
+
+    Returns:
+        El propio token cuando es válido, por si el endpoint quiere usarlo.
+
+    Raises:
+        AppHTTPException: 403 ``SESSION_TOKEN_MISSING`` si la cabecera no está presente.
+        AppHTTPException: 403 ``TOKEN_INVALID_OR_EXPIRED`` si el token es inválido o ha caducado; incluye la cabecera ``x-app-session-expired`` para que el cliente re-handshakee.
+    """
     # Validar presencia del encabezado
     if not x_app_session:
         logger.warning(
@@ -153,7 +231,19 @@ def verificar_sesion_aplicacion(x_app_session: Optional[str] = Header(default=No
 
 
 def crear_token_acceso(datos: dict) -> str:
-    """Genera el token de acceso (corto) para un usuario autenticado correctamente."""
+    """Emite el access token de un usuario autenticado.
+
+    El access token es de vida corta (``ACCESS_TOKEN_EXPIRE_MINUTES``) y
+    contiene los claims necesarios para identificar al usuario en cada
+    petición. La renovación se hace con el refresh token, no pidiendo
+    credenciales de nuevo.
+
+    Args:
+        datos: claims a incrustar en el token; como mínimo debe contener ``sub`` con el id de usuario.
+
+    Returns:
+        JWT de tipo ``access`` firmado con ``ACCESS_TOKEN_SECRET``.
+    """
     return codifica_jwt(
         payload=datos,
         secret=ACCESS_TOKEN_SECRET,
@@ -163,7 +253,21 @@ def crear_token_acceso(datos: dict) -> str:
 
 
 def crear_token_refresh(usuario_id: int, jti: str, familia_id: str) -> str:
-    """Genera el refresh token (largo) con rotación."""
+    """Emite un refresh token con soporte de rotación por familia.
+
+    El ``jti`` identifica al token concreto y el ``fam`` identifica la
+    cadena de refresh tokens emitidos tras un mismo login. Esto permite
+    detectar reutilizaciones (si alguien usa un token antiguo ya rotado
+    se invalida toda la familia) y mitigar robos.
+
+    Args:
+        usuario_id: identificador numérico del usuario dueño del refresh token.
+        jti: identificador único de este refresh concreto, usado para deduplicar/revocar.
+        familia_id: identificador común a todos los refresh tokens derivados del mismo login.
+
+    Returns:
+        JWT de tipo ``refresh`` firmado con ``REFRESH_TOKEN_SECRET``.
+    """
     payload = {"sub": str(usuario_id), "jti": jti, "fam": familia_id}
     return codifica_jwt(
         payload=payload,
@@ -174,7 +278,21 @@ def crear_token_refresh(usuario_id: int, jti: str, familia_id: str) -> str:
 
 
 def decodificar_token_refresh(refresh_token: str) -> dict[str, Any]:
-    """Decodifica y valida un refresh token."""
+    """Decodifica un refresh token y valida todos sus claims.
+
+    Si la firma, la expiración o cualquier otro claim es inválido, lanza
+    una ``AppHTTPException`` 401 con ``error_code`` específico para que el
+    cliente pueda forzar un re-login en lugar de reintentar.
+
+    Args:
+        refresh_token: JWT de refresh tal como lo envió el cliente.
+
+    Returns:
+        Claims decodificados del token (incluye ``sub``, ``jti``, ``fam``).
+
+    Raises:
+        AppHTTPException: 401 ``REFRESH_TOKEN_INVALID_OR_EXPIRED`` si el token no se puede validar.
+    """
     try:
         return decodifica_jwt(refresh_token, REFRESH_TOKEN_SECRET, "refresh")
     except InvalidTokenError:
@@ -193,9 +311,26 @@ async def obtener_usuario_actual(
     res: HTTPAuthorizationCredentials = Depends(security_scheme),
     db: AsyncSession = Depends(database.obtener_db),
 ) -> int:
-    """
-    Extrae el usuario validando el token de acceso.
-    Usa la dependencia de FastAPI para capturar el token del botón Authorize.
+    """Dependencia FastAPI que extrae y valida al usuario del access token.
+
+    Extrae el token del header ``Authorization: Bearer`` usando
+    ``HTTPBearer``, lo decodifica como JWT de tipo ``access`` y, tras
+    comprobar que ``sub`` es un entero válido, verifica además que el
+    token no sea anterior al último cambio de contraseña del usuario
+    (``password_changed_at``). Esto invalida tokens vivos cuando el
+    usuario cambia la contraseña desde otro dispositivo.
+
+    Args:
+        res: credenciales inyectadas por ``HTTPBearer`` (sólo el valor del token, sin ``Bearer``).
+        db: sesión asíncrona de SQLAlchemy inyectada por FastAPI.
+
+    Returns:
+        Identificador numérico del usuario autenticado.
+
+    Raises:
+        AppHTTPException: 401 ``TOKEN_MISSING_VALID_USER`` si ``sub`` no es un entero válido.
+        AppHTTPException: 401 ``SESSION_REVOKED_BY_PASSWORD_CHANGE`` si el token se emitió antes del último cambio de contraseña.
+        AppHTTPException: 401 ``ACCESS_TOKEN_INVALID_OR_EXPIRED`` si el token es inválido o ha caducado.
     """
     # El token ya viene limpio sin la palabra "Bearer" gracias a HTTPAuthorizationCredentials.
     # Obtiene usuario actual.
