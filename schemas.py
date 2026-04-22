@@ -53,7 +53,23 @@ class Registro(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_registro(cls, values: Any) -> Any:
-        """Revisa que se reciban todos los campos obligatorios."""
+        """Comprueba presencia explícita de los campos obligatorios del registro.
+
+        Se ejecuta en ``mode='before'`` porque el mensaje por defecto de
+        Pydantic (``field required``) no tiene ``error_code`` y queremos que
+        cada campo que falta devuelva un código distinto (``USERNAME_REQUIRED``,
+        ``EMAIL_REQUIRED``, etc.) para que el cliente Android pueda resaltar
+        exactamente el campo en rojo.
+
+        Args:
+            values: diccionario crudo de entrada tal como lo recibió Pydantic.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: con código específico por campo ausente (``USERNAME_REQUIRED``, ``EMAIL_REQUIRED``, ``PASSWORD_REQUIRED``, ``BIRTH_DATE_REQUIRED``).
+        """
         # Valida campos requeridos registro.
         if isinstance(values, dict):
             if "nombre_usuario" not in values or not values["nombre_usuario"]:
@@ -79,7 +95,25 @@ class Registro(BaseModel):
     @classmethod
     def validar_nombre_usuario(cls, valor: str) -> str:
         # Quitar espacios.
-        """Valida nombre usuario."""
+        """Valida el nombre de usuario: longitud y alfanumérico estricto.
+
+        Recorta espacios, exige longitud entre 5 y 50 y restringe a
+        ``[A-Za-z0-9]``. Sin espacios ni símbolos: el nombre se usa en URLs
+        públicas (``/perfil/informacion/<nombre>``), menciones y búsqueda
+        case-insensitive, por lo que limitar a alfanumérico simplifica
+        encoding y evita colisiones con caracteres raros.
+
+        Args:
+            valor: nombre de usuario propuesto.
+
+        Returns:
+            El nombre ya recortado si pasa todas las comprobaciones.
+
+        Raises:
+            AppValidationError: ``USERNAME_TOO_SHORT`` si tiene menos de 5 caracteres.
+            AppValidationError: ``USERNAME_TOO_LONG`` si supera los 50.
+            AppValidationError: ``USERNAME_INVALID_FORMAT`` si contiene algo que no sea alfanumérico.
+        """
         valor = valor.strip()
         # Validación de longitud mínima.
         if len(valor) < 5:
@@ -104,7 +138,22 @@ class Registro(BaseModel):
     @field_validator("nombre_real")
     @classmethod
     def validar_nombre_real_registro(cls, v):
-        """Valida nombre real registro."""
+        """Valida el nombre real opcional delegando en la lógica compartida.
+
+        Admite ``None`` porque el campo no es obligatorio en el registro.
+        Si hay valor, lo recorta y delega en ``validators.validar_nombre_real_logica``,
+        que impone longitud, caracteres latinos permitidos, espacios,
+        apóstrofes y guiones (ver ``utils/validators.py``).
+
+        Args:
+            v: nombre real o ``None``.
+
+        Returns:
+            Nombre real recortado, o ``None`` si no se proporcionó.
+
+        Raises:
+            AppValidationError: las que levante ``validar_nombre_real_logica``.
+        """
         if v is None:
             return v
         v = v.strip()
@@ -113,7 +162,19 @@ class Registro(BaseModel):
     @field_validator("email", mode="before")
     @classmethod
     def validar_email_registro(cls, valor: Any) -> Any:
-        """Convierte el email a minúsculas antes de procesar."""
+        """Normaliza el email a minúsculas y recorta espacios antes de parsear.
+
+        Se ejecuta en ``mode='before'`` para que la validación posterior de
+        ``EmailStr`` vea siempre la forma canónica. Trabajar en minúsculas
+        simplifica comparaciones y elimina duplicados espurios
+        (``John@X.com`` vs ``john@x.com``).
+
+        Args:
+            valor: valor crudo del campo ``email``.
+
+        Returns:
+            Cadena en minúsculas recortada, o el valor tal cual si no es cadena.
+        """
         if isinstance(valor, str):
             return valor.lower().strip()
         return valor
@@ -121,7 +182,23 @@ class Registro(BaseModel):
     @field_validator("email", mode="wrap")
     @classmethod
     def validar_email_registro_custom(cls, v, handler):
-        """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
+        """Sustituye el error de ``EmailStr`` por un ``AppValidationError`` con código.
+
+        ``EmailStr`` de Pydantic devuelve un mensaje genérico sin código.
+        Esta envoltura (``mode='wrap'``) captura cualquier error del handler
+        original y lo re-lanza como ``EMAIL_FORMAT_INVALID`` para que el
+        cliente Android detecte el campo problemático programáticamente.
+
+        Args:
+            v: valor a validar.
+            handler: validador original de ``EmailStr`` encadenado por Pydantic.
+
+        Returns:
+            Email ya validado por ``EmailStr`` si la validación pasa.
+
+        Raises:
+            AppValidationError: ``EMAIL_FORMAT_INVALID`` si el formato no es un email válido.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -132,13 +209,43 @@ class Registro(BaseModel):
     @field_validator("password")
     @classmethod
     def validar_password_registro(cls, v):
-        """Valida password registro."""
+        """Aplica la política de contraseñas al campo ``password`` del registro.
+
+        Delega en ``validators.validar_password_logica``, que exige longitud
+        mínima de 8, máximo de 72 bytes UTF-8 (límite de bcrypt), al menos
+        una mayúscula y al menos un dígito.
+
+        Args:
+            v: contraseña en claro tal como la introdujo el usuario.
+
+        Returns:
+            La misma contraseña si pasa todas las comprobaciones.
+
+        Raises:
+            AppValidationError: códigos ``PASSWORD_TOO_SHORT``, ``PASSWORD_TOO_LONG_BYTES``, ``PASSWORD_MISSING_UPPERCASE`` o ``PASSWORD_MISSING_NUMBER``.
+        """
         return validators.validar_password_logica(v)
 
     @field_validator("fecha_nacimiento", mode="wrap")
     @classmethod
     def validar_fecha_nacimiento_registro_custom(cls, v, handler):
-        """Intercepta el formato de fecha para devolver un mensaje en el formato estandar."""
+        """Intercepta el error de parseo de fecha para unificar el mensaje.
+
+        Pydantic acepta varios formatos de fecha pero su error por defecto
+        no trae ``error_code``. Este wrapper fuerza ``VALIDATION_ERROR`` y
+        un mensaje en español que dice explícitamente el formato esperado
+        (``AAAA-MM-DD``).
+
+        Args:
+            v: valor crudo del campo ``fecha_nacimiento``.
+            handler: validador original encadenado por Pydantic.
+
+        Returns:
+            Fecha ya parseada si el handler acepta el formato.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es una fecha válida.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -149,13 +256,42 @@ class Registro(BaseModel):
     @field_validator("fecha_nacimiento")
     @classmethod
     def validar_fecha_nacimiento_registro(cls, v):
-        """Valida fecha nacimiento registro."""
+        """Aplica la regla de edad mínima (18 años) a la fecha de nacimiento.
+
+        Delega en ``validators.validar_fecha_nacimiento_logica``, que además
+        rechaza fechas futuras y calcula la edad por comparación de
+        ``(mes, día)`` para no tener errores de un día alrededor del cumpleaños.
+
+        Args:
+            v: fecha de nacimiento ya parseada.
+
+        Returns:
+            La misma fecha si pasa la regla.
+
+        Raises:
+            AppValidationError: ``BIRTH_DATE_IN_FUTURE`` o ``AGE_RESTRICTION_NOT_MET``.
+        """
         return validators.validar_fecha_nacimiento_logica(v)
 
     @field_validator("genero", mode="wrap")
     @classmethod
     def validar_genero_registro_custom(cls, v, handler):
-        """Intercepta el genero para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo del enum ``GeneroUsuario``.
+
+        Pydantic devolvería "value is not a valid enumeration member", que
+        no es muy útil en una UI. Este wrapper responde con
+        ``VALIDATION_ERROR`` y un texto adaptado.
+
+        Args:
+            v: valor crudo del campo ``genero``.
+            handler: validador original del enum.
+
+        Returns:
+            Valor ya validado por el enum si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no pertenece al enum.
+        """
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El género seleccionado no es válido"
         )
@@ -163,7 +299,22 @@ class Registro(BaseModel):
     @field_validator("altura", mode="wrap")
     @classmethod
     def validar_altura_registro_custom(cls, v, handler):
-        """Intercepta la altura para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de tipo al parsear ``altura`` como entero.
+
+        Si el cliente envía una cadena no numérica o un float, Pydantic
+        falla con un mensaje técnico. Aquí se traduce a un mensaje humano
+        con ``VALIDATION_ERROR``.
+
+        Args:
+            v: valor crudo del campo ``altura``.
+            handler: validador original de enteros.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no se puede interpretar como entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -174,13 +325,41 @@ class Registro(BaseModel):
     @field_validator("altura")
     @classmethod
     def validar_altura_registro(cls, v):
-        """Valida altura registro."""
+        """Aplica el rango humano razonable a la altura (50–300 cm).
+
+        Delega en ``validators.validar_altura_logica``. ``None`` se acepta
+        para permitir no rellenar el campo.
+
+        Args:
+            v: altura en centímetros, o ``None``.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``HEIGHT_OUT_OF_RANGE`` si no está en [50, 300].
+        """
         return validators.validar_altura_logica(v)
 
     @field_validator("peso", mode="wrap")
     @classmethod
     def validar_peso_registro_custom(cls, v, handler):
-        """Intercepta el peso para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de tipo al parsear ``peso`` como número.
+
+        Usa el código específico ``WEIGHT_MUST_BE_KILOGRAM_NUMBER`` (no el
+        genérico ``VALIDATION_ERROR``) para que la UI pueda mostrar un
+        texto específico del campo.
+
+        Args:
+            v: valor crudo del campo ``peso``.
+            handler: validador original.
+
+        Returns:
+            Número ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``WEIGHT_MUST_BE_KILOGRAM_NUMBER`` si no es numérico.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -191,13 +370,41 @@ class Registro(BaseModel):
     @field_validator("peso")
     @classmethod
     def validar_peso_registro(cls, v):
-        """Valida peso registro."""
+        """Aplica el rango humano razonable al peso (20–300 kg).
+
+        Delega en ``validators.validar_peso_logica``. ``None`` se acepta
+        para permitir no rellenar el campo.
+
+        Args:
+            v: peso en kilogramos, o ``None``.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``WEIGHT_OUT_OF_RANGE`` si no está en [20, 300].
+        """
         return validators.validar_peso_logica(v)
 
     @field_validator("provincia", mode="wrap")
     @classmethod
     def validar_provincia_registro_custom(cls, v, handler):
-        """Intercepta el error de Enum para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo del enum ``ProvinciaEspaña``.
+
+        La lista de provincias es cerrada; si el cliente envía algo fuera
+        de ella, este wrapper responde con ``VALIDATION_ERROR`` y un mensaje
+        genérico de "ubicación no válida" en vez del error técnico de enum.
+
+        Args:
+            v: valor crudo del campo ``provincia``.
+            handler: validador original del enum.
+
+        Returns:
+            Valor ya validado por el enum si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no pertenece al enum.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -208,7 +415,22 @@ class Registro(BaseModel):
     @field_validator("perfil_visible", mode="wrap")
     @classmethod
     def validar_perfil_visible_registro_custom(cls, v, handler):
-        """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo del booleano ``perfil_visible``.
+
+        Pydantic acepta varios valores como booleanos (``"true"``, ``1``);
+        si llega algo fuera de esa lista, se traduce el error a
+        ``VALIDATION_ERROR`` con mensaje en español.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            Booleano ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no se puede interpretar como booleano.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -219,7 +441,23 @@ class Registro(BaseModel):
     @field_validator("acepta_terminos")
     @classmethod
     def validar_acepta_terminos(cls, v: bool) -> bool:
-        """Valida acepta terminos."""
+        """Exige aceptación explícita de términos y política de privacidad.
+
+        No basta con que el campo esté presente: tiene que ser ``True``.
+        Es el consentimiento que soporta legalmente el registro; si llega
+        ``False`` (o el cliente manda el campo pero lo desmarcó), se aborta
+        el alta con un código específico para que el cliente muestre el
+        diálogo legal.
+
+        Args:
+            v: valor del checkbox de aceptación.
+
+        Returns:
+            ``True`` si la aceptación es válida.
+
+        Raises:
+            AppValidationError: ``REGISTRATION_CONSENTS_REQUIRED`` si no se aceptan los términos.
+        """
         if not v:
             raise AppValidationError(
                 "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte",
@@ -230,7 +468,22 @@ class Registro(BaseModel):
     @field_validator("fecha_aceptacion_terminos", mode="wrap")
     @classmethod
     def validar_fecha_aceptacion_terminos_custom(cls, v, handler):
-        """Valida fecha aceptacion terminos custom."""
+        """Intercepta errores de parseo ISO-8601 del timestamp de aceptación.
+
+        Pydantic acepta varios formatos de datetime pero queremos un mensaje
+        consistente con el resto de fechas del API (``VALIDATION_ERROR`` y
+        texto claro en español).
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            ``datetime`` ya parseado si el formato es válido.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el formato no es ISO-8601.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -241,7 +494,22 @@ class Registro(BaseModel):
     @field_validator("fecha_aceptacion_terminos")
     @classmethod
     def validar_fecha_aceptacion_terminos(cls, v: datetime) -> datetime:
-        """Valida fecha aceptacion terminos."""
+        """Normaliza a UTC la fecha de aceptación y rechaza valores futuros.
+
+        Si el ``datetime`` llega naive, se asume UTC (es lo que envía la
+        app Android). Se admite hasta 5 minutos de margen futuro para
+        absorber pequeños desajustes de reloj entre el dispositivo y el
+        servidor; a partir de ahí se considera sospechoso y se rechaza.
+
+        Args:
+            v: ``datetime`` ya parseado.
+
+        Returns:
+            El mismo ``datetime`` normalizado a UTC.
+
+        Raises:
+            AppValidationError: ``TERMS_ACCEPTED_AT_IN_FUTURE`` si el instante supera (``ahora + 5 minutos``).
+        """
         from datetime import timedelta, timezone
 
         ahora = datetime.now(timezone.utc)
@@ -256,7 +524,23 @@ class Registro(BaseModel):
     @field_validator("version_terminos")
     @classmethod
     def validar_version_terminos(cls, v: str) -> str:
-        """Valida version terminos."""
+        """Valida que la versión de términos no llegue vacía tras recortar.
+
+        La app Android envía la versión real del documento legal que se
+        mostró al usuario (p. ej. ``"1.2"``). Aquí solo se normaliza y se
+        exige no vacío; la comprobación de que la versión sea *la esperada*
+        queda en manos de otra capa (para no invalidar registros si se
+        cambia la versión en medio del flujo).
+
+        Args:
+            v: cadena con la versión declarada por el cliente.
+
+        Returns:
+            Versión recortada de espacios.
+
+        Raises:
+            AppValidationError: ``TERMS_VERSION_REQUIRED`` si queda vacía tras recortar.
+        """
         v = v.strip()
         if not v:
             raise AppValidationError(
@@ -289,7 +573,23 @@ class LoginSocial(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_login_social(cls, values: Any) -> Any:
-        """Valida campos requeridos login social."""
+        """Comprueba presencia explícita de ``provider`` y ``token``.
+
+        Aunque los campos son obligatorios en la definición, el mensaje por
+        defecto de Pydantic no lleva ``error_code``. Este pre-validador
+        asegura códigos específicos (``SOCIAL_PROVIDER_REQUIRED``,
+        ``SOCIAL_TOKEN_REQUIRED``) para que el cliente sepa qué campo falta.
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: ``SOCIAL_PROVIDER_REQUIRED`` si falta el proveedor.
+            AppValidationError: ``SOCIAL_TOKEN_REQUIRED`` si falta el token.
+        """
         if isinstance(values, dict):
             if "provider" not in values or not values["provider"]:
                 raise AppValidationError(
@@ -306,7 +606,22 @@ class LoginSocial(BaseModel):
     @field_validator("token", mode="before")
     @classmethod
     def limpiar_token_social(cls, valor: Any) -> Any:
-        """Normaliza token social."""
+        """Recorta el token social y rechaza cadenas vacías tras el recorte.
+
+        El cliente puede enviar el token con espacios accidentales al
+        copiar/pegar en builds de desarrollo. Recortar aquí evita que una
+        cadena solo de espacios llegue al verificador de Google como token
+        válido y desperdicie una llamada a JWKS.
+
+        Args:
+            valor: token tal como llega del cliente.
+
+        Returns:
+            Token recortado si es cadena; el valor crudo si no lo es.
+
+        Raises:
+            AppValidationError: ``SOCIAL_TOKEN_EMPTY`` si tras recortar queda vacío.
+        """
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -333,7 +648,22 @@ class RegistroSocial(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_registro_social(cls, values: Any) -> Any:
-        """Valida campos requeridos registro social."""
+        """Comprueba presencia de los obligatorios del registro social.
+
+        Mismo patrón que el registro clásico pero con el subconjunto de
+        campos propios del flujo social: además de ``provider``/``token``
+        exige ``nombre_usuario`` (lo elige el usuario, no viene del proveedor)
+        y ``fecha_nacimiento`` (para comprobar la mayoría de edad).
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: con códigos ``SOCIAL_PROVIDER_REQUIRED``, ``SOCIAL_TOKEN_REQUIRED``, ``USERNAME_REQUIRED`` o ``BIRTH_DATE_REQUIRED`` según qué falte.
+        """
         # Valida campos requeridos registro social.
         if isinstance(values, dict):
             if "provider" not in values or not values["provider"]:
@@ -361,7 +691,21 @@ class RegistroSocial(BaseModel):
     @field_validator("token", mode="before")
     @classmethod
     def limpiar_token_registro_social(cls, valor: Any) -> Any:
-        """Normaliza token registro social."""
+        """Recorta el token social del registro y rechaza cadenas vacías.
+
+        Idéntica lógica a ``LoginSocial.limpiar_token_social`` pero
+        duplicada aquí para no acoplar los dos esquemas; pueden evolucionar
+        de forma independiente si en el futuro los formatos divergen.
+
+        Args:
+            valor: token tal como llega del cliente.
+
+        Returns:
+            Token recortado si es cadena; el valor crudo si no lo es.
+
+        Raises:
+            AppValidationError: ``SOCIAL_TOKEN_EMPTY`` si tras recortar queda vacío.
+        """
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -375,7 +719,22 @@ class RegistroSocial(BaseModel):
     @field_validator("nombre_usuario")
     @classmethod
     def validar_nombre_usuario_social(cls, valor: str) -> str:
-        """Valida nombre usuario social."""
+        """Valida el nombre de usuario elegido en el registro social.
+
+        Replica las reglas de ``Registro.validar_nombre_usuario`` (longitud
+        5–50 y alfanumérico estricto). Se duplica la lógica en vez de
+        extraerla a una función compartida para que cada esquema pueda
+        evolucionar por separado (p. ej. suavizar reglas solo en social).
+
+        Args:
+            valor: nombre de usuario propuesto.
+
+        Returns:
+            Nombre ya recortado si pasa todas las comprobaciones.
+
+        Raises:
+            AppValidationError: ``USERNAME_TOO_SHORT``, ``USERNAME_TOO_LONG`` o ``USERNAME_INVALID_FORMAT`` según el fallo.
+        """
         # Valida nombre usuario social.
         valor = valor.strip()
         if len(valor) < 5:
@@ -398,7 +757,22 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_nacimiento", mode="wrap")
     @classmethod
     def validar_fecha_nacimiento_social_custom(cls, v, handler):
-        """Valida fecha nacimiento social custom."""
+        """Intercepta el error de parseo de fecha en registro social.
+
+        Mismo comportamiento que el equivalente de ``Registro`` pero
+        duplicado aquí para no acoplar ambos esquemas en un único validador
+        compartido.
+
+        Args:
+            v: valor crudo del campo ``fecha_nacimiento``.
+            handler: validador original encadenado por Pydantic.
+
+        Returns:
+            Fecha ya parseada si el handler acepta el formato.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es una fecha válida.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -409,13 +783,40 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_nacimiento")
     @classmethod
     def validar_fecha_nacimiento_social(cls, v):
-        """Valida fecha nacimiento social."""
+        """Aplica la regla de edad mínima (18 años) a la fecha de nacimiento social.
+
+        Delega en ``validators.validar_fecha_nacimiento_logica``, igual que el
+        registro clásico.
+
+        Args:
+            v: fecha de nacimiento ya parseada.
+
+        Returns:
+            La misma fecha si pasa la regla.
+
+        Raises:
+            AppValidationError: ``BIRTH_DATE_IN_FUTURE`` o ``AGE_RESTRICTION_NOT_MET``.
+        """
         return validators.validar_fecha_nacimiento_logica(v)
 
     @field_validator("perfil_visible", mode="wrap")
     @classmethod
     def validar_perfil_visible_social_custom(cls, v, handler):
-        """Valida perfil visible social custom."""
+        """Intercepta errores de parseo del booleano ``perfil_visible``.
+
+        Equivalente a la versión de ``Registro``; ver ``validar_perfil_visible_registro_custom``
+        para el razonamiento sobre por qué se duplica la lógica.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            Booleano ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no se puede interpretar como booleano.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -426,7 +827,22 @@ class RegistroSocial(BaseModel):
     @field_validator("acepta_terminos")
     @classmethod
     def validar_acepta_terminos_social(cls, v: bool) -> bool:
-        """Valida acepta terminos social."""
+        """Exige aceptación explícita de términos también en el registro social.
+
+        Aunque el usuario se autentique con Google, el alta en MoveOn
+        requiere aceptar los términos propios del servicio: se valida aquí
+        con el mismo código ``REGISTRATION_CONSENTS_REQUIRED`` para que la
+        UI pueda reutilizar el mismo diálogo legal.
+
+        Args:
+            v: valor del checkbox de aceptación.
+
+        Returns:
+            ``True`` si la aceptación es válida.
+
+        Raises:
+            AppValidationError: ``REGISTRATION_CONSENTS_REQUIRED`` si el usuario no aceptó.
+        """
         if not v:
             raise AppValidationError(
                 "Error: Debes aceptar los Términos y la Política de Privacidad para registrarte",
@@ -437,7 +853,22 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_aceptacion_terminos", mode="wrap")
     @classmethod
     def validar_fecha_aceptacion_terminos_social_custom(cls, v, handler):
-        """Valida fecha aceptacion terminos social custom."""
+        """Intercepta errores de parseo ISO-8601 del timestamp social.
+
+        Equivalente a la versión de ``Registro``; ver
+        ``validar_fecha_aceptacion_terminos_custom`` para los motivos del
+        reemplazo de mensaje.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            ``datetime`` ya parseado si el formato es válido.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el formato no es ISO-8601.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -448,7 +879,20 @@ class RegistroSocial(BaseModel):
     @field_validator("fecha_aceptacion_terminos")
     @classmethod
     def validar_fecha_aceptacion_terminos_social(cls, v: datetime) -> datetime:
-        """Valida fecha aceptacion terminos social."""
+        """Normaliza a UTC y rechaza timestamps futuros en registro social.
+
+        Mismo margen de 5 minutos de tolerancia futura que el registro
+        clásico, para absorber desajustes de reloj.
+
+        Args:
+            v: ``datetime`` ya parseado.
+
+        Returns:
+            El mismo ``datetime`` normalizado a UTC.
+
+        Raises:
+            AppValidationError: ``TERMS_ACCEPTED_AT_IN_FUTURE`` si supera (``ahora + 5 minutos``).
+        """
         from datetime import timedelta, timezone
 
         ahora = datetime.now(timezone.utc)
@@ -463,7 +907,21 @@ class RegistroSocial(BaseModel):
     @field_validator("version_terminos")
     @classmethod
     def validar_version_terminos_social(cls, v: str) -> str:
-        """Valida version terminos social."""
+        """Recorta y valida no-vacío la versión de términos en registro social.
+
+        Mismo contrato que en ``Registro.validar_version_terminos``: solo
+        recorta y exige no vacío, sin comprobar que la versión sea *la
+        esperada*.
+
+        Args:
+            v: cadena con la versión.
+
+        Returns:
+            Versión recortada de espacios.
+
+        Raises:
+            AppValidationError: ``TERMS_VERSION_REQUIRED`` si queda vacía tras recortar.
+        """
         v = v.strip()
         if not v:
             raise AppValidationError(
@@ -482,7 +940,21 @@ class Login(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_login(cls, values: Any) -> Any:
-        """Revisa que se reciban todos los campos obligatorios."""
+        """Comprueba presencia explícita de ``identificador`` y ``password``.
+
+        Igual que el resto de pre-validadores, intercepta los obligatorios
+        antes de Pydantic para que cada ausencia tenga su propio código
+        (``IDENTIFIER_REQUIRED``, ``PASSWORD_REQUIRED``).
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: ``IDENTIFIER_REQUIRED`` o ``PASSWORD_REQUIRED`` según qué falte.
+        """
         if isinstance(values, dict):
             if "identificador" not in values or not values["identificador"]:
                 raise AppValidationError(
@@ -497,7 +969,22 @@ class Login(BaseModel):
     @field_validator("identificador", mode="before")
     @classmethod
     def limpiar_identificador(cls, valor: Any) -> Any:
-        """Normaliza identificador."""
+        """Recorta espacios del identificador (email o nombre de usuario).
+
+        No normaliza a minúsculas aquí porque el servicio
+        (``access_service.buscar_por_identificador``) ya hace la comparación
+        case-insensitive con ``LOWER(columna)``; bajar aquí a minúsculas
+        escondería inputs que en realidad son errores del cliente.
+
+        Args:
+            valor: identificador crudo.
+
+        Returns:
+            Identificador recortado si es cadena; el valor crudo si no lo es.
+
+        Raises:
+            AppValidationError: ``IDENTIFIER_EMPTY`` si tras recortar queda vacío.
+        """
         if isinstance(valor, str):
             # Quitar espacios.
             valor_limpio = valor.strip()
@@ -526,7 +1013,21 @@ class SolicitudRefreshToken(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_refresh(cls, values: Any) -> Any:
-        """Valida campos requeridos refresco."""
+        """Comprueba presencia explícita de ``refresh_token``.
+
+        Mismo patrón que el resto de pre-validadores: intercepta antes de
+        que Pydantic devuelva el error genérico, para asignar el código
+        ``REFRESH_TOKEN_REQUIRED``.
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si el campo está presente.
+
+        Raises:
+            AppValidationError: ``REFRESH_TOKEN_REQUIRED`` si el campo falta o está vacío.
+        """
         if isinstance(values, dict):
             if "refresh_token" not in values or not values["refresh_token"]:
                 raise AppValidationError(
@@ -537,7 +1038,21 @@ class SolicitudRefreshToken(BaseModel):
     @field_validator("refresh_token", mode="before")
     @classmethod
     def limpiar_refresh_token(cls, valor: Any) -> Any:
-        """Normaliza refresco token."""
+        """Recorta el refresh token y rechaza cadenas vacías tras el recorte.
+
+        El token es una cadena JWT; un espacio al principio o al final
+        rompería el parseo posterior. Recortar aquí libera a los
+        verificadores JWT aguas abajo de esa preocupación.
+
+        Args:
+            valor: refresh token tal como llega del cliente.
+
+        Returns:
+            Token recortado si es cadena; el valor crudo si no lo es.
+
+        Raises:
+            AppValidationError: ``REFRESH_TOKEN_EMPTY`` si tras recortar queda vacío.
+        """
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -608,7 +1123,21 @@ class ActualizarPerfil(BaseModel):
     @field_validator("nombre_real")
     @classmethod
     def validar_nombre_real_actualizacion(cls, v):
-        """Valida nombre real actualizacion."""
+        """Valida el nombre real opcional en el flujo de actualización.
+
+        ``None`` significa "no tocar este campo" (el PATCH es parcial) y se
+        devuelve tal cual para que el servicio no lo escriba. Si hay valor,
+        se recorta y se delega en la lógica compartida.
+
+        Args:
+            v: nombre real o ``None``.
+
+        Returns:
+            Nombre recortado, o ``None`` si no se proporcionó.
+
+        Raises:
+            AppValidationError: las que levante ``validators.validar_nombre_real_logica``.
+        """
         if v is None:
             return v
         v = v.strip()
@@ -617,7 +1146,18 @@ class ActualizarPerfil(BaseModel):
     @field_validator("email", mode="before")
     @classmethod
     def validar_email_actualizacion(cls, v):
-        """Convierte el email a minúsculas antes de procesar."""
+        """Normaliza el email a minúsculas y recorta espacios antes de parsear.
+
+        Respeta ``None`` (campo opcional en PATCH). Si hay valor se baja
+        a minúsculas para mantener la forma canónica en la base de datos
+        y simplificar la detección de duplicados.
+
+        Args:
+            v: valor crudo del campo ``email`` o ``None``.
+
+        Returns:
+            Cadena en minúsculas recortada, ``None`` si venía ``None``, o el valor tal cual si no era cadena.
+        """
         if v is not None and isinstance(v, str):
             return v.lower().strip()
         return v
@@ -625,7 +1165,22 @@ class ActualizarPerfil(BaseModel):
     @field_validator("email", mode="wrap")
     @classmethod
     def validar_email_actualizacion_custom(cls, v, handler):
-        """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
+        """Sustituye el error de ``EmailStr`` por un ``AppValidationError``.
+
+        Mismo motivo que en ``Registro``: ``EmailStr`` no trae ``error_code``
+        y la UI necesita distinguir este fallo concreto para marcar el campo
+        en rojo.
+
+        Args:
+            v: valor a validar.
+            handler: validador original de ``EmailStr``.
+
+        Returns:
+            Email ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``EMAIL_FORMAT_INVALID`` si el formato no es válido.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -636,13 +1191,40 @@ class ActualizarPerfil(BaseModel):
     @field_validator("password")
     @classmethod
     def validar_password_actualizacion(cls, v):
-        """Valida password actualizacion."""
+        """Aplica la política de contraseñas solo si se está cambiando.
+
+        Como el PATCH es parcial, ``None`` significa "no cambiar la contraseña"
+        y se devuelve tal cual. Cuando sí hay valor, se delega en
+        ``validators.validar_password_logica``.
+
+        Args:
+            v: contraseña nueva o ``None``.
+
+        Returns:
+            La contraseña si pasa las comprobaciones; ``None`` si no se cambia.
+
+        Raises:
+            AppValidationError: ``PASSWORD_TOO_SHORT``, ``PASSWORD_TOO_LONG_BYTES``, ``PASSWORD_MISSING_UPPERCASE`` o ``PASSWORD_MISSING_NUMBER``.
+        """
         return validators.validar_password_logica(v) if v is not None else v
 
     @field_validator("fecha_nacimiento", mode="wrap")
     @classmethod
     def validar_fecha_nacimiento_actualizacion_custom(cls, v, handler):
-        """Intercepta el formato de fecha para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo de fecha en el PATCH del perfil.
+
+        Replica el comportamiento de ``Registro.validar_fecha_nacimiento_registro_custom``.
+
+        Args:
+            v: valor crudo.
+            handler: validador original encadenado por Pydantic.
+
+        Returns:
+            Fecha ya parseada si el handler acepta el formato.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es una fecha válida.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -653,13 +1235,40 @@ class ActualizarPerfil(BaseModel):
     @field_validator("fecha_nacimiento")
     @classmethod
     def validar_fecha_nacimiento_actualizacion(cls, v):
-        """Valida fecha nacimiento actualizacion."""
+        """Aplica la regla de edad mínima (18 años) si se intenta cambiar la fecha.
+
+        Respeta ``None`` (no cambiar). Si hay valor, delega en
+        ``validators.validar_fecha_nacimiento_logica``.
+
+        Args:
+            v: fecha de nacimiento ya parseada, o ``None``.
+
+        Returns:
+            La misma fecha si pasa; ``None`` si no se cambia.
+
+        Raises:
+            AppValidationError: ``BIRTH_DATE_IN_FUTURE`` o ``AGE_RESTRICTION_NOT_MET``.
+        """
         return validators.validar_fecha_nacimiento_logica(v) if v is not None else v
 
     @field_validator("genero", mode="wrap")
     @classmethod
     def validar_genero_actualizacion_custom(cls, v, handler):
-        """Intercepta el genero para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo del enum ``GeneroUsuario`` en el PATCH.
+
+        Equivalente al del registro; mantiene consistencia en los mensajes
+        entre alta y actualización.
+
+        Args:
+            v: valor crudo.
+            handler: validador original del enum.
+
+        Returns:
+            Valor ya validado por el enum si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no pertenece al enum.
+        """
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El género seleccionado no es válido"
         )
@@ -667,7 +1276,20 @@ class ActualizarPerfil(BaseModel):
     @field_validator("altura", mode="wrap")
     @classmethod
     def validar_altura_actualizacion_custom(cls, v, handler):
-        """Intercepta la altura para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de tipo al parsear ``altura`` como entero en PATCH.
+
+        Mismo comportamiento que en el registro.
+
+        Args:
+            v: valor crudo.
+            handler: validador original de enteros.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es interpretable como entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -678,13 +1300,39 @@ class ActualizarPerfil(BaseModel):
     @field_validator("altura")
     @classmethod
     def validar_altura_actualizacion(cls, v):
-        """Valida altura actualizacion."""
+        """Aplica el rango humano razonable a la altura en el PATCH.
+
+        Delega en ``validators.validar_altura_logica`` (admite ``None``).
+
+        Args:
+            v: altura en centímetros, o ``None``.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``HEIGHT_OUT_OF_RANGE`` si no está en [50, 300].
+        """
         return validators.validar_altura_logica(v)
 
     @field_validator("peso", mode="wrap")
     @classmethod
     def validar_peso_actualizacion_custom(cls, v, handler):
-        """Intercepta el peso para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de tipo al parsear ``peso`` como número en PATCH.
+
+        Usa el código específico ``WEIGHT_MUST_BE_KILOGRAM_NUMBER`` igual
+        que en el registro, para que la UI reutilice el mismo mensaje.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            Número ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``WEIGHT_MUST_BE_KILOGRAM_NUMBER`` si no es numérico.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -695,13 +1343,39 @@ class ActualizarPerfil(BaseModel):
     @field_validator("peso")
     @classmethod
     def validar_peso_actualizacion(cls, v):
-        """Valida peso actualizacion."""
+        """Aplica el rango humano razonable al peso en el PATCH.
+
+        Delega en ``validators.validar_peso_logica`` (admite ``None``).
+
+        Args:
+            v: peso en kilogramos, o ``None``.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``WEIGHT_OUT_OF_RANGE`` si no está en [20, 300].
+        """
         return validators.validar_peso_logica(v)
 
     @field_validator("provincia", mode="wrap")
     @classmethod
     def validar_provincia_actualizacion_custom(cls, v, handler):
-        """Intercepta el error de Enum para para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo del enum ``ProvinciaEspaña`` en PATCH.
+
+        Mismo tratamiento que en el registro para que los mensajes sean
+        consistentes.
+
+        Args:
+            v: valor crudo.
+            handler: validador original del enum.
+
+        Returns:
+            Valor ya validado por el enum si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no pertenece al enum.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -712,7 +1386,20 @@ class ActualizarPerfil(BaseModel):
     @field_validator("perfil_visible", mode="wrap")
     @classmethod
     def validar_perfil_visible_actualizacion_custom(cls, v, handler):
-        """Intercepta sino llega un boolean para devolver un mensaje en el formato estandar."""
+        """Intercepta errores de parseo del booleano ``perfil_visible`` en PATCH.
+
+        Equivalente a la versión de ``Registro``.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            Booleano ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no se puede interpretar como booleano.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -723,7 +1410,24 @@ class ActualizarPerfil(BaseModel):
     @field_validator("objetivo_semanal_metros")
     @classmethod
     def validar_objetivo_semanal(cls, v: Optional[int]) -> Optional[int]:
-        """Valida objetivo semanal."""
+        """Valida el objetivo semanal en metros dentro de un rango razonable.
+
+        Admite ``None`` (no cambiar). Si hay valor, exige entero estricto
+        (no float, usando ``isinstance(v, int)``) y un rango amplio (10 m a
+        2 000 000 m) que cubre desde objetivos muy modestos hasta los de un
+        corredor de ultrafondo, sin admitir valores absurdos que indicarían
+        un cliente roto.
+
+        Args:
+            v: objetivo en metros o ``None``.
+
+        Returns:
+            El mismo valor si pasa; ``None`` si no se cambia.
+
+        Raises:
+            AppValidationError: ``WEEKLY_GOAL_MUST_BE_INTEGER_METERS`` si no es entero.
+            AppValidationError: ``WEEKLY_GOAL_OUT_OF_RANGE`` si está fuera de [10, 2 000 000].
+        """
         if v is None:
             return v
         if not isinstance(v, int):
@@ -741,7 +1445,23 @@ class ActualizarPerfil(BaseModel):
     @field_validator("objetivo_mensual_metros")
     @classmethod
     def validar_objetivo_mensual(cls, v: Optional[int]) -> Optional[int]:
-        """Valida objetivo mensual."""
+        """Valida el objetivo mensual en metros dentro del mismo rango que el semanal.
+
+        Se permite deliberadamente que el mensual y el semanal usen el
+        mismo rango numérico (10 m a 2 000 000 m). El servicio no obliga a
+        que ``mensual >= semanal × 4``: algunos usuarios quieren marcarse
+        un objetivo mensual más holgado y dividir a su ritmo.
+
+        Args:
+            v: objetivo en metros o ``None``.
+
+        Returns:
+            El mismo valor si pasa; ``None`` si no se cambia.
+
+        Raises:
+            AppValidationError: ``MONTHLY_GOAL_MUST_BE_INTEGER_METERS`` si no es entero.
+            AppValidationError: ``MONTHLY_GOAL_OUT_OF_RANGE`` si está fuera de [10, 2 000 000].
+        """
         if v is None:
             return v
         if not isinstance(v, int):
@@ -803,7 +1523,21 @@ class ReportePerfilInapropiado(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos(cls, values: Any) -> Any:
-        """Valida campos requeridos."""
+        """Comprueba presencia del ``nombre_usuario_reportado``.
+
+        Las banderas ``reportar_nombre`` / ``reportar_foto`` se validan en
+        otro validator (``validar_motivos``) con su propio mensaje: aquí
+        solo se asegura que sepamos a quién se reporta.
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si el obligatorio está presente.
+
+        Raises:
+            AppValidationError: ``REPORT_TARGET_USERNAME_REQUIRED`` si falta el nombre del reportado.
+        """
         if isinstance(values, dict):
             if (
                 "nombre_usuario_reportado" not in values
@@ -818,7 +1552,21 @@ class ReportePerfilInapropiado(BaseModel):
     @field_validator("nombre_usuario_reportado", mode="before")
     @classmethod
     def limpiar_nombre_usuario_reportado(cls, valor: Any) -> Any:
-        """Normaliza nombre usuario reportado."""
+        """Recorta el nombre reportado y rechaza cadenas vacías tras el recorte.
+
+        La búsqueda posterior compara case-insensitive en ``user_service``,
+        así que no se fuerza el caso aquí para no perder el original en
+        caso de auditoría posterior.
+
+        Args:
+            valor: nombre del usuario reportado tal como llega del cliente.
+
+        Returns:
+            Nombre recortado si es cadena; el valor crudo si no lo es.
+
+        Raises:
+            AppValidationError: ``REPORT_TARGET_USERNAME_EMPTY`` si tras recortar queda vacío.
+        """
         if isinstance(valor, str):
             valor_limpio = valor.strip()
             if not valor_limpio:
@@ -832,7 +1580,18 @@ class ReportePerfilInapropiado(BaseModel):
     @field_validator("observaciones", mode="before")
     @classmethod
     def limpiar_observaciones(cls, valor: Any) -> Any:
-        """Normaliza observaciones."""
+        """Recorta las observaciones y colapsa cadenas vacías a ``None``.
+
+        Una cadena con solo espacios no aporta nada al moderador; guardarla
+        llenaría la base de basura. Colapsar a ``None`` permite además que
+        la plantilla de email muestre "Sin observaciones" de forma uniforme.
+
+        Args:
+            valor: observaciones opcionales del reportante.
+
+        Returns:
+            Observaciones recortadas si aportan contenido; ``None`` si eran vacías o solo espacios.
+        """
         if valor is None:
             return None
         if isinstance(valor, str):
@@ -842,7 +1601,19 @@ class ReportePerfilInapropiado(BaseModel):
 
     @model_validator(mode="after")
     def validar_motivos(self):
-        """Valida motivos."""
+        """Exige al menos un motivo marcado entre ``reportar_nombre`` y ``reportar_foto``.
+
+        El formulario tiene dos checkboxes; si ambos llegan en ``False`` no
+        hay nada que reportar y dejar pasar el request solo generaría
+        ruido en el buzón de moderación. Se valida en ``mode='after'`` para
+        poder leer ambos campos ya parseados por Pydantic.
+
+        Returns:
+            La propia instancia si al menos un motivo está marcado.
+
+        Raises:
+            AppValidationError: ``AT_LEAST_ONE_REPORT_REASON_REQUIRED`` si los dos motivos son ``False``.
+        """
         if not self.reportar_nombre and not self.reportar_foto:
             raise AppValidationError(
                 "Error: Debes marcar al menos una opción de reporte",
@@ -860,7 +1631,20 @@ class SolicitarPassword(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_solicitar_recuperacion(cls, values: Any) -> Any:
-        """Revisa que se reciban todos los campos obligatorios."""
+        """Comprueba presencia explícita de ``email`` y ``locale``.
+
+        El ``locale`` es obligatorio porque decide el idioma del correo
+        que se enviará al usuario; sin él no se puede renderizar la plantilla.
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: ``EMAIL_REQUIRED`` o ``LOCALE_REQUIRED`` según qué falte.
+        """
         if isinstance(values, dict):
             if "email" not in values or not values["email"]:
                 raise AppValidationError(
@@ -875,7 +1659,17 @@ class SolicitarPassword(BaseModel):
     @field_validator("email", mode="before")
     @classmethod
     def validar_email_solicitar_recuperacion(cls, valor: Any) -> Any:
-        """Convierte el email a minúsculas antes de procesar."""
+        """Normaliza el email a minúsculas antes de pasar a ``EmailStr``.
+
+        Mismo motivo que en los demás esquemas: homogeneizar la clave de
+        búsqueda y evitar duplicados espurios.
+
+        Args:
+            valor: valor crudo del campo ``email``.
+
+        Returns:
+            Cadena en minúsculas recortada, o el valor tal cual si no es cadena.
+        """
         if isinstance(valor, str):
             return valor.lower().strip()
         return valor
@@ -883,7 +1677,21 @@ class SolicitarPassword(BaseModel):
     @field_validator("email", mode="wrap")
     @classmethod
     def validar_email_solicitar_recuperacion_custom(cls, v, handler):
-        """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
+        """Sustituye el error de ``EmailStr`` por ``EMAIL_FORMAT_INVALID``.
+
+        Mismo patrón que en el registro: traduce el mensaje técnico de
+        Pydantic a un código canónico que la UI entiende.
+
+        Args:
+            v: valor a validar.
+            handler: validador original de ``EmailStr``.
+
+        Returns:
+            Email ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``EMAIL_FORMAT_INVALID`` si el formato no es válido.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -894,7 +1702,26 @@ class SolicitarPassword(BaseModel):
     @field_validator("locale", mode="before")
     @classmethod
     def validar_locale_solicitar_recuperacion(cls, valor: Any) -> str:
-        """Valida configuración regional solicitar recuperacion."""
+        """Normaliza el ``locale`` al conjunto cerrado ``{"es", "en"}``.
+
+        Acepta cualquier variante (``es``, ``es-ES``, ``es_ES``, ``en``,
+        ``en-US``...) y reduce a ``"es"`` o ``"en"`` según el prefijo. Si
+        llega algo fuera de esos dos prefijos, se rechaza con
+        ``LOCALE_NOT_SUPPORTED`` en lugar de caer silenciosamente al
+        default, para que el cliente sepa que la app le envió algo
+        inesperado.
+
+        Args:
+            valor: locale tal como llega del cliente.
+
+        Returns:
+            ``"es"`` si empieza por español, ``"en"`` si empieza por inglés.
+
+        Raises:
+            AppValidationError: ``LOCALE_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``LOCALE_REQUIRED`` si queda vacío tras normalizar.
+            AppValidationError: ``LOCALE_NOT_SUPPORTED`` si el prefijo no coincide con ``es``/``en``.
+        """
         # Valida configuración regional solicitar recuperacion.
         if not isinstance(valor, str):
             raise AppValidationError(
@@ -926,7 +1753,21 @@ class ConfirmarPassword(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_confirmar_recuperacion(cls, values: Any) -> Any:
-        """Revisa que se reciban todos los campos obligatorios."""
+        """Comprueba presencia de los tres obligatorios (email, código, nueva contraseña).
+
+        Mismo patrón que los demás pre-validadores. Cada ausencia produce
+        un código distinto (``EMAIL_REQUIRED``, ``CODE_REQUIRED``,
+        ``NEW_PASSWORD_REQUIRED``) para que el cliente resalte el campo exacto.
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: ``EMAIL_REQUIRED``, ``CODE_REQUIRED`` o ``NEW_PASSWORD_REQUIRED`` según qué falte.
+        """
         # Valida campos confirmar recuperacion.
         if isinstance(values, dict):
             if "email" not in values or not values["email"]:
@@ -946,13 +1787,43 @@ class ConfirmarPassword(BaseModel):
     @field_validator("nueva_password")
     @classmethod
     def validar_nueva_password_confirmar_recuperacion(cls, v):
-        """Valida nueva password confirmar recuperacion."""
+        """Aplica la política de contraseñas a la nueva contraseña del reseteo.
+
+        Delega en ``validators.validar_password_logica`` con los mismos
+        requisitos que en alta y actualización: 8–72 bytes, mayúscula y dígito.
+
+        Args:
+            v: nueva contraseña en claro.
+
+        Returns:
+            La misma contraseña si pasa todas las comprobaciones.
+
+        Raises:
+            AppValidationError: ``PASSWORD_TOO_SHORT``, ``PASSWORD_TOO_LONG_BYTES``, ``PASSWORD_MISSING_UPPERCASE`` o ``PASSWORD_MISSING_NUMBER``.
+        """
         return validators.validar_password_logica(v)
 
     @field_validator("codigo", mode="before")
     @classmethod
     def limpiar_codigo_confirmar_recuperacion(cls, v) -> Any:
-        """Normaliza codigo confirmar recuperacion."""
+        """Recorta el código y valida que sean exactamente 6 dígitos.
+
+        El código que genera ``access_service.generar_codigo_recuperacion``
+        siempre es de 6 dígitos, así que aquí rechazamos en el esquema
+        cualquier cosa que no pueda ser válida, sin hacer IO a la base para
+        comparar un hash que ya sabemos que no va a coincidir.
+
+        Args:
+            v: código tal como llega del cliente.
+
+        Returns:
+            Código recortado si pasa las comprobaciones; el valor crudo si no es cadena.
+
+        Raises:
+            AppValidationError: ``CODE_EMPTY`` si queda vacío tras recortar.
+            AppValidationError: ``CODE_INVALID_LENGTH`` si la longitud no es 6.
+            AppValidationError: ``CODE_MUST_BE_NUMERIC`` si contiene caracteres no numéricos.
+        """
         if isinstance(v, str):
             # Quitar espacios delante y detrás.
             valor_limpio = v.strip()
@@ -976,7 +1847,17 @@ class ConfirmarPassword(BaseModel):
     @field_validator("email", mode="before")
     @classmethod
     def validar_email_confirmar_recuperacion(cls, valor: Any) -> Any:
-        """Convierte el email a minúsculas antes de procesar."""
+        """Normaliza el email a minúsculas antes de pasar a ``EmailStr``.
+
+        Mismo motivo que en el resto de esquemas: mantener la forma
+        canónica que se usa como clave de búsqueda en base de datos.
+
+        Args:
+            valor: valor crudo del campo ``email``.
+
+        Returns:
+            Cadena en minúsculas recortada, o el valor tal cual si no es cadena.
+        """
         if isinstance(valor, str):
             return valor.lower().strip()
         return valor
@@ -984,7 +1865,20 @@ class ConfirmarPassword(BaseModel):
     @field_validator("email", mode="wrap")
     @classmethod
     def validar_email_confirmar_recuperacion_custom(cls, v, handler):
-        """Intercepta el error de EmailStr para devolver un mensaje en el formato estandar."""
+        """Sustituye el error de ``EmailStr`` por ``EMAIL_FORMAT_INVALID``.
+
+        Equivalente al wrapper de los demás esquemas que usan ``EmailStr``.
+
+        Args:
+            v: valor a validar.
+            handler: validador original de ``EmailStr``.
+
+        Returns:
+            Email ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``EMAIL_FORMAT_INVALID`` si el formato no es válido.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1019,7 +1913,24 @@ class GuardarActividad(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validar_campos_requeridos_actividad(cls, values: Any) -> Any:
-        """Valida campos requeridos actividad."""
+        """Comprueba presencia de todos los campos obligatorios de actividad.
+
+        Teniendo tantos campos obligatorios (``tipo``, ``distancia``,
+        ``duracion_total``, ``duracion_movimiento``, ``calorias_quemadas``,
+        ``fecha_ruta``), este pre-validador recorre un diccionario
+        ``{campo: (mensaje, error_code)}`` en lugar de hacer ``if`` anidados.
+        Cada ausencia sigue produciendo su propio código canónico para que
+        el cliente Android pueda mapear error a UI sin parsear mensajes.
+
+        Args:
+            values: diccionario crudo de entrada.
+
+        Returns:
+            El mismo ``values`` si todos los obligatorios están presentes.
+
+        Raises:
+            AppValidationError: códigos ``ACTIVITY_TYPE_REQUIRED``, ``DISTANCE_REQUIRED``, ``TOTAL_DURATION_REQUIRED``, ``MOVING_DURATION_REQUIRED``, ``BURNED_CALORIES_REQUIRED`` o ``ACTIVITY_DATE_REQUIRED`` según qué falte.
+        """
         # Valida campos requeridos actividad.
         if isinstance(values, dict):
             required_fields = {
@@ -1056,7 +1967,26 @@ class GuardarActividad(BaseModel):
     @field_validator("client_local_id")
     @classmethod
     def validar_client_local_id_actividad(cls, v):
-        """Valida client local id actividad."""
+        """Valida el identificador local opcional para idempotencia de subidas.
+
+        Este id lo genera la app Android al crear la actividad y lo reenvía
+        en el POST para que el backend pueda detectar reintentos y
+        responder la actividad ya persistida en lugar de crear duplicados.
+        Admite ``None`` (cliente antiguo que no lo envía) pero si se envía:
+
+        - Tiene que ser cadena no vacía tras recortar.
+        - No puede superar 64 caracteres (suficiente para UUIDs).
+
+        Args:
+            v: id local o ``None``.
+
+        Returns:
+            Id recortado, o ``None`` si venía ``None``.
+
+        Raises:
+            AppValidationError: ``ACTIVITY_CLIENT_LOCAL_ID_INVALID`` si no es cadena o queda vacío.
+            AppValidationError: ``ACTIVITY_CLIENT_LOCAL_ID_TOO_LONG`` si supera 64 caracteres.
+        """
         if v is None:
             return None
         if not isinstance(v, str):
@@ -1080,7 +2010,22 @@ class GuardarActividad(BaseModel):
     @field_validator("tipo", mode="wrap")
     @classmethod
     def validar_tipo_actividad_custom(cls, v, handler):
-        """Valida tipo actividad custom."""
+        """Intercepta errores de parseo del enum ``TipoActividad``.
+
+        El enum tiene un conjunto cerrado (correr, caminar...); si el cliente
+        envía algo fuera de él, Pydantic soltaría un error técnico. Aquí
+        se traduce a ``VALIDATION_ERROR`` con mensaje en español.
+
+        Args:
+            v: valor crudo.
+            handler: validador original del enum.
+
+        Returns:
+            Valor ya validado por el enum si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no pertenece al enum.
+        """
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El tipo de actividad no es válido"
         )
@@ -1088,7 +2033,22 @@ class GuardarActividad(BaseModel):
     @field_validator("distancia", mode="wrap")
     @classmethod
     def validar_distancia_actividad_custom(cls, v, handler):
-        """Valida distancia actividad custom."""
+        """Intercepta errores de tipo al parsear ``distancia`` como entero estricto.
+
+        La distancia se envía como ``StrictInt`` en metros para evitar
+        ambigüedades de float. Si llega en otro formato, aquí se traduce
+        el error a un mensaje humano.
+
+        Args:
+            v: valor crudo del campo ``distancia``.
+            handler: validador original.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1099,7 +2059,23 @@ class GuardarActividad(BaseModel):
     @field_validator("distancia")
     @classmethod
     def validar_distancia_actividad(cls, v):
-        """Valida distancia actividad."""
+        """Aplica el rango operativo de la distancia (>0 y <=300 km).
+
+        Delega en ``validators.validar_distancia_logica``. El tope es una
+        sanity check (nadie corre más de 300 km en una sesión única) y
+        funciona como cortafuegos ante clientes rotos que podrían enviar
+        valores absurdos.
+
+        Args:
+            v: distancia en metros.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``DISTANCE_MUST_BE_POSITIVE`` si ``v <= 0``.
+            AppValidationError: ``DISTANCE_OUT_OF_RANGE`` si supera 300 000 m.
+        """
         return validators.validar_distancia_logica(v)
 
     @field_validator(
@@ -1111,7 +2087,22 @@ class GuardarActividad(BaseModel):
     )
     @classmethod
     def validar_duraciones_custom(cls, v, handler):
-        """Valida duraciones custom."""
+        """Intercepta errores de tipo en las 4 duraciones (``StrictInt``).
+
+        Se aplica al bloque ``duracion_total``, ``duracion_movimiento``,
+        ``duracion_parado``, ``duracion_pausa_manual`` en una única definición
+        para no duplicar el wrapper por cada campo.
+
+        Args:
+            v: valor crudo del campo.
+            handler: validador original de enteros.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1122,19 +2113,62 @@ class GuardarActividad(BaseModel):
     @field_validator("duracion_total")
     @classmethod
     def validar_duracion_total(cls, v):
-        """Valida duracion total."""
+        """Aplica el rango operativo (>0 y <=24h) a la duración total.
+
+        Delega en ``validators.validar_duracion_logica``. La duración total
+        es obligatoria y debe ser positiva: una actividad sin tiempo
+        registrado no tiene sentido.
+
+        Args:
+            v: duración total en segundos.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``DURATION_MUST_BE_POSITIVE`` si ``v <= 0``.
+            AppValidationError: ``DURATION_TOO_LONG`` si supera 86 400 s.
+        """
         return validators.validar_duracion_logica(v)
 
     @field_validator("duracion_movimiento")
     @classmethod
     def validar_duracion_movimiento(cls, v):
-        """Valida duracion movimiento."""
+        """Aplica el mismo rango operativo a la duración en movimiento.
+
+        Mismo validador que ``duracion_total``. El validador a nivel de
+        modelo (``validar_consistencia_temporal``) garantiza además que
+        ``duracion_movimiento <= duracion_total``.
+
+        Args:
+            v: duración en movimiento en segundos.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``DURATION_MUST_BE_POSITIVE`` o ``DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_logica(v)
 
     @field_validator("duracion_parado")
     @classmethod
     def validar_duracion_parado(cls, v):
-        """Valida duracion parado."""
+        """Permite que la duración parada sea cero, con tope de 24 horas.
+
+        Delega en ``validators.validar_duracion_no_negativa_logica``, que
+        contrasta con ``validar_duracion_logica`` en que admite ``0``:
+        una actividad sin ningún período parado es perfectamente legítima.
+
+        Args:
+            v: duración parada en segundos.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``STOPPED_DURATION_NEGATIVE`` o ``STOPPED_DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_no_negativa_logica(
             v, "la duración parada", "STOPPED_DURATION"
         )
@@ -1142,7 +2176,20 @@ class GuardarActividad(BaseModel):
     @field_validator("duracion_pausa_manual")
     @classmethod
     def validar_duracion_pausa_manual(cls, v):
-        """Valida duracion pausa manual."""
+        """Permite que la pausa manual sea cero, con tope de 24 horas.
+
+        Idéntica semántica a ``validar_duracion_parado`` pero con prefijo
+        de error propio para distinguir en logs/UI.
+
+        Args:
+            v: duración de pausa manual en segundos.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``MANUAL_PAUSE_DURATION_NEGATIVE`` o ``MANUAL_PAUSE_DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_no_negativa_logica(
             v, "la duración de pausa manual", "MANUAL_PAUSE_DURATION"
         )
@@ -1150,7 +2197,22 @@ class GuardarActividad(BaseModel):
     @field_validator("calorias_quemadas", mode="wrap")
     @classmethod
     def validar_calorias_actividad_custom(cls, v, handler):
-        """Valida calorias actividad custom."""
+        """Intercepta errores de tipo al parsear ``calorias_quemadas`` como entero.
+
+        Usa el código específico ``CALORIES_MUST_BE_INTEGER`` (no el
+        genérico ``VALIDATION_ERROR``) para que la UI pueda mostrar un
+        mensaje concreto.
+
+        Args:
+            v: valor crudo.
+            handler: validador original de enteros.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``CALORIES_MUST_BE_INTEGER`` si no es entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1161,13 +2223,41 @@ class GuardarActividad(BaseModel):
     @field_validator("calorias_quemadas")
     @classmethod
     def validar_calorias_actividad(cls, v):
-        """Valida calorias actividad."""
+        """Aplica el rango fisiológico (>0 y <=10000) a las calorías.
+
+        Delega en ``validators.validar_calorias_logica``. Quemar más de
+        10 000 calorías en una sesión es fisiológicamente improbable;
+        rechazarlo filtra inputs claramente rotos.
+
+        Args:
+            v: calorías quemadas.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``CALORIES_MUST_BE_POSITIVE`` o ``CALORIES_OUT_OF_RANGE``.
+        """
         return validators.validar_calorias_logica(v)
 
     @field_validator("ritmo_medio_movimiento", "ritmo_medio_total", mode="wrap")
     @classmethod
     def validar_ritmos_custom(cls, v, handler):
-        """Valida ritmos custom."""
+        """Intercepta errores de tipo en los ritmos (``ritmo_medio_movimiento``, ``ritmo_medio_total``).
+
+        Se aplica a ambos campos en una única definición para no duplicar
+        el wrapper.
+
+        Args:
+            v: valor crudo.
+            handler: validador original de enteros.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el valor no es entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1178,7 +2268,20 @@ class GuardarActividad(BaseModel):
     @field_validator("ritmo_medio_movimiento")
     @classmethod
     def validar_ritmo_medio_movimiento(cls, v):
-        """Valida ritmo medio movimiento."""
+        """Valida el ritmo medio en movimiento (0–3600 s/km).
+
+        Delega en ``validators.validar_ritmo_segundos_km_logica`` con el
+        prefijo ``MOVING_PACE``.
+
+        Args:
+            v: ritmo en segundos por kilómetro.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``MOVING_PACE_NEGATIVE`` o ``MOVING_PACE_OUT_OF_RANGE``.
+        """
         return validators.validar_ritmo_segundos_km_logica(
             v, "el ritmo medio en movimiento", "MOVING_PACE"
         )
@@ -1186,7 +2289,20 @@ class GuardarActividad(BaseModel):
     @field_validator("ritmo_medio_total")
     @classmethod
     def validar_ritmo_medio_total(cls, v):
-        """Valida ritmo medio total."""
+        """Valida el ritmo medio total (0–3600 s/km).
+
+        Mismo rango que el de movimiento, con prefijo ``TOTAL_PACE`` para
+        distinguir en errores.
+
+        Args:
+            v: ritmo en segundos por kilómetro.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``TOTAL_PACE_NEGATIVE`` o ``TOTAL_PACE_OUT_OF_RANGE``.
+        """
         return validators.validar_ritmo_segundos_km_logica(
             v, "el ritmo medio total", "TOTAL_PACE"
         )
@@ -1194,7 +2310,21 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_media_x100", "velocidad_max_x100", mode="wrap")
     @classmethod
     def validar_velocidades_custom(cls, v, handler):
-        """Valida velocidades custom."""
+        """Intercepta errores de tipo en ``velocidad_media_x100`` y ``velocidad_max_x100``.
+
+        Las velocidades se envían como enteros ``km/h × 100`` para no usar
+        floats; este wrapper solo traduce el error de tipo.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no es entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1205,7 +2335,20 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_media_x100")
     @classmethod
     def validar_velocidad_media(cls, v):
-        """Valida velocidad media."""
+        """Valida la velocidad media en rango 0–10 000 (= 0–100 km/h).
+
+        Delega en ``validators.validar_velocidad_x100_logica`` con prefijo
+        ``AVERAGE_SPEED``.
+
+        Args:
+            v: velocidad media expresada como km/h × 100.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``AVERAGE_SPEED_NEGATIVE`` o ``AVERAGE_SPEED_OUT_OF_RANGE``.
+        """
         return validators.validar_velocidad_x100_logica(
             v, "la velocidad media", "AVERAGE_SPEED"
         )
@@ -1213,7 +2356,20 @@ class GuardarActividad(BaseModel):
     @field_validator("velocidad_max_x100")
     @classmethod
     def validar_velocidad_max(cls, v):
-        """Valida velocidad max."""
+        """Valida la velocidad máxima en rango 0–10 000 (= 0–100 km/h).
+
+        Mismo rango que la media. La consistencia ``máxima >= media`` se
+        garantiza en el validador a nivel de modelo ``validar_consistencia_temporal``.
+
+        Args:
+            v: velocidad máxima expresada como km/h × 100.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``MAX_SPEED_NEGATIVE`` o ``MAX_SPEED_OUT_OF_RANGE``.
+        """
         return validators.validar_velocidad_x100_logica(
             v, "la velocidad máxima", "MAX_SPEED"
         )
@@ -1221,7 +2377,21 @@ class GuardarActividad(BaseModel):
     @field_validator("auto_pausas", "pausas_manuales", "alertas_velocidad", mode="wrap")
     @classmethod
     def validar_contadores_custom(cls, v, handler):
-        """Valida contadores custom."""
+        """Intercepta errores de tipo en los tres contadores del tracking.
+
+        Aplica a ``auto_pausas``, ``pausas_manuales`` y ``alertas_velocidad``
+        en una definición única.
+
+        Args:
+            v: valor crudo.
+            handler: validador original.
+
+        Returns:
+            Entero ya validado si pasa.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si no es entero.
+        """
         return validators.interceptar_error_pydantic(
             v,
             handler,
@@ -1232,7 +2402,21 @@ class GuardarActividad(BaseModel):
     @field_validator("auto_pausas")
     @classmethod
     def validar_auto_pausas(cls, v):
-        """Valida auto pausas."""
+        """Valida el contador de auto-pausas (0–500).
+
+        Delega en ``validators.validar_contador_tracking_logica`` con prefijo
+        ``AUTO_PAUSE_COUNT``. El tope de 500 descarta inputs claramente
+        rotos sin invalidar sesiones largas reales.
+
+        Args:
+            v: número de auto-pausas detectadas.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``AUTO_PAUSE_COUNT_NEGATIVE`` o ``AUTO_PAUSE_COUNT_OUT_OF_RANGE``.
+        """
         return validators.validar_contador_tracking_logica(
             v, "las auto pausas", "AUTO_PAUSE_COUNT"
         )
@@ -1240,7 +2424,20 @@ class GuardarActividad(BaseModel):
     @field_validator("pausas_manuales")
     @classmethod
     def validar_pausas_manuales(cls, v):
-        """Valida pausas manuales."""
+        """Valida el contador de pausas manuales (0–500).
+
+        Mismo rango y mismo validador que las auto-pausas, con prefijo
+        ``MANUAL_PAUSE_COUNT``.
+
+        Args:
+            v: número de pausas manuales.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``MANUAL_PAUSE_COUNT_NEGATIVE`` o ``MANUAL_PAUSE_COUNT_OUT_OF_RANGE``.
+        """
         return validators.validar_contador_tracking_logica(
             v, "las pausas manuales", "MANUAL_PAUSE_COUNT"
         )
@@ -1248,7 +2445,20 @@ class GuardarActividad(BaseModel):
     @field_validator("alertas_velocidad")
     @classmethod
     def validar_alertas_velocidad(cls, v):
-        """Valida alertas velocidad."""
+        """Valida el contador de alertas de velocidad (0–500).
+
+        Mismo rango que el resto de contadores, con prefijo
+        ``SPEED_ALERT_COUNT``.
+
+        Args:
+            v: número de alertas de velocidad disparadas durante la sesión.
+
+        Returns:
+            El mismo valor si pasa el rango.
+
+        Raises:
+            AppValidationError: ``SPEED_ALERT_COUNT_NEGATIVE`` o ``SPEED_ALERT_COUNT_OUT_OF_RANGE``.
+        """
         return validators.validar_contador_tracking_logica(
             v, "las alertas de velocidad", "SPEED_ALERT_COUNT"
         )
@@ -1256,7 +2466,22 @@ class GuardarActividad(BaseModel):
     @field_validator("fecha_ruta", mode="wrap")
     @classmethod
     def validar_fecha_ruta_actividad_custom(cls, v, handler):
-        """Valida fecha ruta actividad custom."""
+        """Intercepta errores de parseo de ``fecha_ruta`` (datetime con zona).
+
+        El formato esperado es ISO-8601 con offset; si el cliente envía
+        otra cosa, aquí se traduce el error de Pydantic a un mensaje
+        humano con ``VALIDATION_ERROR``.
+
+        Args:
+            v: valor crudo del campo ``fecha_ruta``.
+            handler: validador original.
+
+        Returns:
+            ``datetime`` ya parseado si el formato es válido.
+
+        Raises:
+            AppValidationError: ``VALIDATION_ERROR`` si el formato no es parseable.
+        """
         return validators.interceptar_error_pydantic(
             v, handler, "VALIDATION_ERROR", "Error: El formato de fecha no es válido"
         )
@@ -1264,20 +2489,83 @@ class GuardarActividad(BaseModel):
     @field_validator("fecha_ruta")
     @classmethod
     def validar_fecha_ruta_actividad(cls, v):
-        """Valida fecha ruta actividad."""
+        """Exige zona horaria, rechaza futuro y normaliza a UTC.
+
+        Delega en ``validators.validar_fecha_ruta_logica``, que admite
+        hasta 10 minutos en el futuro para absorber desajustes de reloj
+        entre dispositivo y servidor y normaliza a UTC para que la base
+        de datos guarde siempre valores homogéneos.
+
+        Args:
+            v: ``datetime`` ya parseado.
+
+        Returns:
+            El mismo instante normalizado a UTC.
+
+        Raises:
+            AppValidationError: ``ACTIVITY_DATE_MISSING_TIMEZONE`` si falta ``tzinfo``.
+            AppValidationError: ``ACTIVITY_DATE_IN_FUTURE`` si supera ``ahora + 10 minutos``.
+        """
         return validators.validar_fecha_ruta_logica(v)
 
     @field_validator("ruta_polilinea", mode="before")
     @classmethod
     def validar_polilinea_actividad(cls, v):
-        """Valida polilinea actividad."""
+        """Normaliza cadena vacía a ``None`` y valida el tamaño de la polilínea.
+
+        Admite que el cliente envíe ``""`` como equivalente a "sin ruta"
+        (p. ej. tracking GPS deshabilitado) colapsándolo a ``None`` aquí,
+        en ``mode='before'``. Si llega contenido real, delega en
+        ``validators.validar_polilinea_logica`` que impone tamaño mínimo/máximo.
+
+        Args:
+            v: polilínea codificada o cadena vacía o ``None``.
+
+        Returns:
+            ``None`` si venía vacío/``None``; el valor validado en caso contrario.
+
+        Raises:
+            AppValidationError: ``ROUTE_INVALID`` o ``ROUTE_TOO_LARGE`` si la polilínea no respeta los límites de tamaño.
+        """
         if v == "":
             return None
         return validators.validar_polilinea_logica(v)
 
     @model_validator(mode="after")
     def validar_consistencia_temporal(self):
-        """Valida consistencia temporal."""
+        """Comprobaciones cruzadas entre los distintos campos temporales y métricas.
+
+        Se ejecuta en ``mode='after'`` para disponer de todos los valores
+        ya parseados. Aplica, por orden:
+
+        1. ``duracion_movimiento <= duracion_total``: no se puede moverse
+           más tiempo del total registrado.
+        2. ``duracion_parado <= duracion_total``: mismo principio.
+        3. ``duracion_movimiento + duracion_parado == duracion_total``:
+           la suma tiene que cuadrar; diferencias indican un bug del
+           cliente en el desglose.
+        4. ``duracion_pausa_manual <= duracion_total``: las pausas forman
+           parte del total, no pueden superarlo.
+        5. ``velocidad_max >= velocidad_media``: físicamente imposible que
+           la máxima sea menor que la media.
+        6. Si hay ``distancia > 0``, debe haber ``duracion_movimiento > 0``:
+           no se hacen kilómetros en cero segundos.
+        7. Si hay ``duracion_movimiento > 0``, debe venir
+           ``ritmo_medio_movimiento > 0``: el cliente lo habría calculado.
+        8. Si hay ``duracion_total > 0``, debe venir ``ritmo_medio_total > 0``.
+        9. ``ritmo_maximo >= 0``: los ritmos son segundos por kilómetro,
+           no pueden ser negativos.
+
+        Estas comprobaciones protegen la base de datos de actividades con
+        datos internamente contradictorios, que luego romperían agregados
+        o rankings.
+
+        Returns:
+            La propia instancia si todas las comprobaciones pasan.
+
+        Raises:
+            AppValidationError: con códigos ``MOVING_DURATION_EXCEEDS_TOTAL``, ``STOPPED_DURATION_EXCEEDS_TOTAL``, ``DURATION_BREAKDOWN_MISMATCH``, ``MANUAL_PAUSE_EXCEEDS_TOTAL``, ``MAX_SPEED_BELOW_AVERAGE_SPEED``, ``MOVING_DURATION_REQUIRED_FOR_DISTANCE``, ``MOVING_PACE_REQUIRED``, ``TOTAL_PACE_REQUIRED`` o ``MAX_PACE_NEGATIVE`` según la regla que se haya violado.
+        """
         # Valida consistencia temporal.
         if self.duracion_movimiento > self.duracion_total:
             raise AppValidationError(
@@ -1342,7 +2630,23 @@ class EventoDiagnosticoActividad(BaseModel):
     @field_validator("tipo")
     @classmethod
     def validar_tipo(cls, valor: str) -> str:
-        """Valida tipo."""
+        """Recorta el tipo de evento y rechaza cadenas vacías tras el recorte.
+
+        El ``tipo`` actúa como categoría libre (``service_created``,
+        ``auto_pause``, ``resume``...); no se valida contra una lista
+        cerrada porque los builds internos pueden introducir eventos
+        nuevos sin desplegar backend. La longitud máxima ya está en el
+        ``Field`` de la clase.
+
+        Args:
+            valor: nombre del tipo de evento.
+
+        Returns:
+            El tipo recortado.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_EVENT_TYPE_REQUIRED`` si queda vacío tras recortar.
+        """
         valor = valor.strip()
         if not valor:
             raise AppValidationError(
@@ -1354,7 +2658,17 @@ class EventoDiagnosticoActividad(BaseModel):
     @field_validator("detalle")
     @classmethod
     def validar_detalle(cls, valor: Optional[str]) -> Optional[str]:
-        """Valida detalle."""
+        """Recorta el detalle opcional y colapsa cadenas vacías a ``None``.
+
+        Guardar cadenas vacías no aporta nada; colapsar a ``None``
+        simplifica los filtros posteriores sobre la tabla de diagnóstico.
+
+        Args:
+            valor: texto libre con el detalle del evento, o ``None``.
+
+        Returns:
+            El detalle recortado si aporta contenido, o ``None`` si estaba vacío o solo con espacios.
+        """
         if valor is None:
             return None
         valor = valor.strip()
@@ -1417,7 +2731,19 @@ class GuardarActividadDiagnostico(BaseModel):
     )
     @classmethod
     def limpiar_textos_opcionales(cls, valor: Optional[str]) -> Optional[str]:
-        """Normaliza textos opcionales."""
+        """Recorta los campos de texto descriptivos y colapsa vacíos a ``None``.
+
+        Aplica a ``actividad_local_id``, ``current_status``, ``app_version``,
+        ``os_version``, ``manufacturer`` y ``model``. Son campos puramente
+        descriptivos; tener ``""`` vs ``None`` no es útil y ensuciaría los
+        filtros en analítica.
+
+        Args:
+            valor: cadena opcional del campo.
+
+        Returns:
+            Cadena recortada si aporta contenido, o ``None`` si estaba vacía o solo con espacios.
+        """
         if valor is None:
             return None
         valor = valor.strip()
@@ -1441,7 +2767,24 @@ class GuardarActividadDiagnostico(BaseModel):
     )
     @classmethod
     def validar_no_negativos(cls, valor: int) -> int:
-        """Valida no negativos."""
+        """Rechaza valores negativos en los contadores y duraciones del diagnóstico.
+
+        Se aplica a todos los contadores numéricos enteros del diagnóstico
+        (``elapsed_seconds``, ``moving_seconds``, ``distance_meters``, pausas,
+        contadores de restart, etc.). Sus topes máximos no se fijan aquí
+        porque el diagnóstico puede durar lo que dure una sesión de
+        tracking extrema; el validator a nivel de modelo sí refuerza la
+        consistencia entre campos.
+
+        Args:
+            valor: valor entero del campo.
+
+        Returns:
+            El mismo valor si es no negativo.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_NEGATIVE_VALUE`` si es negativo.
+        """
         if valor < 0:
             raise AppValidationError(
                 "Error: Los valores del diagnóstico no pueden ser negativos",
@@ -1452,7 +2795,22 @@ class GuardarActividadDiagnostico(BaseModel):
     @model_validator(mode="after")
     def validar_consistencia(self):
         # Validación mínima para no persistir un breakdown temporal imposible.
-        """Valida consistencia."""
+        """Comprueba mínima consistencia temporal en el diagnóstico.
+
+        Solo refuerza que ``moving_seconds`` y ``stopped_seconds`` no
+        superen el total (``elapsed_seconds``). No exige que sumen
+        exactamente porque el diagnóstico es informativo y puede haber
+        pequeños desajustes entre timers que no invalidan el resto de
+        campos; lo que sí sería un bug claro es que uno de los dos
+        supere el total.
+
+        Returns:
+            La propia instancia si el desglose temporal es consistente.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_MOVING_EXCEEDS_ELAPSED`` si ``moving_seconds > elapsed_seconds``.
+            AppValidationError: ``DIAGNOSTIC_STOPPED_EXCEEDS_ELAPSED`` si ``stopped_seconds > elapsed_seconds``.
+        """
         if self.moving_seconds > self.elapsed_seconds:
             raise AppValidationError(
                 "Error: El tiempo en movimiento no puede superar el tiempo total",

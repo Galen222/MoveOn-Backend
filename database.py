@@ -64,7 +64,16 @@ AsyncSessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
 def _build_database_url() -> str:
-    """Construye la URL de conexión escapando usuario y password."""
+    """Construye la URL de conexión a PostgreSQL escapando usuario y password.
+
+    Usa ``urllib.parse.quote_plus`` porque el password puede contener
+    caracteres especiales (``@``, ``/``, ``:``, ``#``...) que romperían
+    el parseo del DSN si se inyectan tal cual. Sin escapar,
+    ``secret@pass`` haría que el parser entendiese ``@pass`` como host.
+
+    Returns:
+        URL ``postgresql+asyncpg://user:pass@host:port/dbname`` lista para ``create_async_engine``.
+    """
     user_safe = quote_plus(settings.DB_USER)
     pass_safe = quote_plus(settings.DB_PASSWORD)
 
@@ -149,16 +158,37 @@ VALID_SOCIAL_PROVIDERS = {"google"}
 
 
 def _ahora_utc() -> datetime:
-    """Devuelve la fecha/hora actual en UTC."""
+    """Devuelve el ``datetime`` actual con ``tzinfo=UTC``.
+
+    Centralizado aquí para que todas las marcas de tiempo que genera
+    este módulo (``fecha_eula``, validaciones de no-futuro, etc.) usen
+    la misma referencia y sea fácil de monkey-patchear en tests.
+
+    Returns:
+        Fecha y hora actual en UTC.
+    """
     return datetime.now(timezone.utc)
 
 
 def _normalizar_datetime_utc(v: Optional[datetime]) -> Optional[datetime]:
-    """
-    Normaliza un datetime a UTC.
+    """Garantiza que un ``datetime`` está expresado en UTC.
 
-    - Si llega naive, lo interpretamos como UTC por compatibilidad.
-    - Si llega aware, lo convertimos a UTC.
+    Dos casos:
+
+    - Entrada naive: se asume UTC y se le adjunta ``tzinfo`` (los
+      drivers antiguos y algunos flows legacy devuelven naive aunque
+      la columna sea ``TIMESTAMPTZ``).
+    - Entrada aware: se convierte a UTC con ``astimezone`` para que los
+      comparadores posteriores nunca mezclen zonas.
+
+    Unificar ambos caminos aquí evita que cada validador tenga que
+    repetir el mismo chequeo de ``tzinfo``.
+
+    Args:
+        v: ``datetime`` a normalizar, o ``None``.
+
+    Returns:
+        ``datetime`` en UTC, o ``None`` si la entrada era ``None``.
     """
     if v is None:
         return None
@@ -170,12 +200,35 @@ def _normalizar_datetime_utc(v: Optional[datetime]) -> Optional[datetime]:
 
 
 def _sql_quote(value: str) -> str:
-    """Escapa un string para incrustarlo de forma segura en un CheckConstraint SQL."""
+    """Escapa un string para incrustarlo de forma segura en un ``CheckConstraint`` SQL.
+
+    SQLAlchemy permite pasar la cláusula como texto crudo; los valores
+    que se inyectan provienen de enums propios del dominio (no input
+    de usuario) pero aun así se escapa ``'`` a ``''`` para no romper
+    el DDL si algún enum incluyera una comilla en el futuro.
+
+    Args:
+        value: cadena a incrustar literalmente en SQL.
+
+    Returns:
+        Cadena entrecomillada (``'valor'``) con comillas internas escapadas.
+    """
     return "'" + value.replace("'", "''") + "'"
 
 
 def _sql_in_values(values: set[str]) -> str:
-    """Convierte un set de valores a una lista SQL: 'A', 'B', 'C'."""
+    """Convierte un conjunto de valores en la lista literal de un ``IN (...)``.
+
+    Ordena con ``sorted`` antes de juntar para que el DDL generado sea
+    determinista entre ejecuciones: dos migraciones idénticas producen
+    el mismo SQL y no aparecen falsos diffs.
+
+    Args:
+        values: conjunto de valores a enumerar (p. ej. ``.value`` de un enum).
+
+    Returns:
+        Cadena ``'A', 'B', 'C'`` con los valores ya escapados para SQL.
+    """
     return ", ".join(_sql_quote(v) for v in sorted(values))
 
 
@@ -238,7 +291,27 @@ def _validar_hex64_opcional(
     must_be_string_code: str,
     invalid_code: str,
 ) -> Optional[str]:
-    """Valida un hash hexadecimal SHA-256 de 64 caracteres."""
+    """Valida que un texto opcional sea un hash SHA-256 hexadecimal (64 caracteres).
+
+    Se usa para columnas que guardan HMAC-SHA256 de tokens o códigos
+    (por ejemplo ``codigo_recuperacion`` o el hash de refresh tokens).
+    Normaliza a minúsculas para que el formato en base de datos sea
+    homogéneo y evita que comparaciones case-sensitive fallen por un
+    flip de caso en origen.
+
+    Args:
+        valor: cadena candidata, o ``None`` para permitir ausencia del hash.
+        nombre_campo: nombre humano del campo, usado en los mensajes de error.
+        must_be_string_code: ``error_code`` a usar si el valor no es cadena.
+        invalid_code: ``error_code`` a usar si no coincide con el patrón hex64.
+
+    Returns:
+        Hash en minúsculas ya validado, o ``None`` si la entrada era ``None``.
+
+    Raises:
+        AppValidationError: ``must_be_string_code`` si el valor no es una cadena.
+        AppValidationError: ``invalid_code`` si la cadena no coincide con ``^[0-9a-fA-F]{64}$``.
+    """
     # Valida hex64 opcional.
     if valor is None:
         return None
@@ -268,7 +341,27 @@ def _validar_texto_no_vacio(
     empty_code: str,
     too_long_code: str,
 ) -> str:
-    """Valida que un texto no esté vacío y no supere una longitud máxima."""
+    """Valida que un texto obligatorio no esté vacío y no supere ``max_len``.
+
+    Helper genérico usado por varios ``@validates`` para no duplicar la
+    terna de comprobaciones (tipo, no vacío, longitud) en cada columna.
+    Recorta espacios antes de comprobar longitud para que ``"   "`` cuente
+    como vacío y ``"  hola  "`` use 4 caracteres, no 8.
+
+    Args:
+        valor: cadena candidata.
+        nombre_campo: nombre humano del campo, usado en los mensajes de error.
+        max_len: longitud máxima permitida (incluida).
+        must_be_string_code: ``error_code`` si el valor no es cadena.
+        empty_code: ``error_code`` si queda vacío tras recortar.
+        too_long_code: ``error_code`` si supera ``max_len``.
+
+    Returns:
+        Cadena recortada si pasa todas las comprobaciones.
+
+    Raises:
+        AppValidationError: con uno de los tres códigos según el fallo detectado.
+    """
     # Valida texto no vacio.
     if not isinstance(valor, str):
         raise AppValidationError(
@@ -607,7 +700,27 @@ class Usuario(Base):
 
     @validates("nombre_usuario")
     def validar_nombre_usuario(self, key: str, valor: str) -> str:
-        """Valida nombre usuario."""
+        """Valida a nivel ORM el ``nombre_usuario`` al asignarse al atributo.
+
+        Duplica las reglas que aplica ``schemas.Registro.validar_nombre_usuario``
+        (longitud 5–50, alfanumérico) como segunda capa de defensa: si el
+        alta se hiciera saltándose el esquema Pydantic (por ejemplo desde
+        un script interno o un test), SQLAlchemy sigue rechazando valores
+        inválidos antes de escribir en la base.
+
+        Args:
+            key: nombre del atributo, lo pasa SQLAlchemy al decorador ``@validates``.
+            valor: valor que se está asignando.
+
+        Returns:
+            Nombre recortado si pasa las comprobaciones.
+
+        Raises:
+            AppValidationError: ``USERNAME_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``USERNAME_TOO_SHORT`` si tiene menos de 5.
+            AppValidationError: ``USERNAME_TOO_LONG`` si supera 50.
+            AppValidationError: ``USERNAME_INVALID_FORMAT`` si no es alfanumérico.
+        """
         # Valida nombre usuario.
         if not isinstance(valor, str):
             raise AppValidationError(
@@ -636,7 +749,31 @@ class Usuario(Base):
 
     @validates("email")
     def validar_email(self, key: str, valor: str) -> str:
-        """Valida correo electrónico."""
+        """Valida y normaliza el email al asignarse al atributo.
+
+        A diferencia del validator de Pydantic (que usa ``EmailStr``), aquí
+        se usa ``email_validator.validate_email`` con
+        ``check_deliverability=False``: no queremos hacer DNS en cada
+        asignación del ORM (los tests y los scripts lo convertirían en
+        lento e inestable), pero sí validar la sintaxis RFC.
+
+        Se normaliza a minúsculas antes y después de ``validate_email`` para
+        que la columna siempre guarde la misma forma canónica (evita
+        duplicados cuando un usuario se registra con ``Juan@X.com`` y otro
+        intenta hacerlo con ``juan@x.com``).
+
+        Args:
+            key: nombre del atributo.
+            valor: email tal como llega.
+
+        Returns:
+            Email normalizado a minúsculas.
+
+        Raises:
+            AppValidationError: ``EMAIL_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``EMAIL_REQUIRED`` si queda vacío tras recortar.
+            AppValidationError: ``EMAIL_FORMAT_INVALID`` si la sintaxis no es válida.
+        """
         # Valida correo electrónico.
         if not isinstance(valor, str):
             raise AppValidationError(
@@ -658,7 +795,22 @@ class Usuario(Base):
 
     @validates("password_encriptada")
     def validar_password_encriptada(self, key: str, valor: str) -> str:
-        """Valida password encriptada."""
+        """Valida que el hash bcrypt almacenado no esté vacío y quepa en la columna.
+
+        Bcrypt produce siempre cadenas de unos 60 caracteres, pero se da
+        margen hasta 255 (tamaño de la columna) para absorber futuros
+        cambios de algoritmo sin tener que alterar el esquema.
+
+        Args:
+            key: nombre del atributo.
+            valor: hash en claro tal como lo genera ``auth.hash_password``.
+
+        Returns:
+            Hash recortado si pasa las comprobaciones.
+
+        Raises:
+            AppValidationError: ``ENCRYPTED_PASSWORD_MUST_BE_STRING``, ``ENCRYPTED_PASSWORD_EMPTY`` o ``ENCRYPTED_PASSWORD_TOO_LONG`` según el fallo.
+        """
         return _validar_texto_no_vacio(
             valor,
             "La contraseña encriptada",
@@ -670,7 +822,24 @@ class Usuario(Base):
 
     @validates("nombre_real")
     def validar_nombre_real(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida nombre real."""
+        """Valida el nombre real opcional del usuario.
+
+        Respeta ``None`` porque el campo no es obligatorio en el modelo.
+        Si hay valor, lo recorta y delega en
+        ``validators.validar_nombre_real_logica``, que impone las mismas
+        reglas que el esquema Pydantic (longitud, caracteres latinos).
+
+        Args:
+            key: nombre del atributo.
+            valor: nombre real o ``None``.
+
+        Returns:
+            Nombre recortado, o ``None`` si no se proporcionó.
+
+        Raises:
+            AppValidationError: ``REAL_NAME_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: las demás que levante ``validar_nombre_real_logica``.
+        """
         if valor is None:
             return None
         if not isinstance(valor, str):
@@ -683,7 +852,23 @@ class Usuario(Base):
 
     @validates("fecha_nacimiento")
     def validar_fecha_nacimiento(self, key: str, valor: date) -> date:
-        """Valida fecha nacimiento."""
+        """Valida la fecha de nacimiento a nivel ORM.
+
+        Exige tipo ``date`` (no cadena: Pydantic ya parseó arriba) y aplica
+        la edad mínima y la no-futuro vía
+        ``validators.validar_fecha_nacimiento_logica``.
+
+        Args:
+            key: nombre del atributo.
+            valor: fecha de nacimiento ya parseada.
+
+        Returns:
+            La misma fecha si pasa las comprobaciones.
+
+        Raises:
+            AppValidationError: ``BIRTH_DATE_INVALID`` si no es ``date``.
+            AppValidationError: ``BIRTH_DATE_IN_FUTURE`` o ``AGE_RESTRICTION_NOT_MET`` según la regla violada.
+        """
         if not isinstance(valor, date):
             raise AppValidationError(
                 "Error: La fecha de nacimiento debe ser una fecha válida",
@@ -693,7 +878,24 @@ class Usuario(Base):
 
     @validates("genero")
     def validar_genero(self, key: str, valor: Optional[Any]) -> Optional[str]:
-        """Valida genero."""
+        """Valida el género contra el enum ``GeneroUsuario``.
+
+        Delega en ``_validar_enum_str`` con el conjunto de ``VALID_GENEROS``
+        (los ``.value`` del enum). Acepta el enum directamente o su valor
+        como cadena para que llamadores distintos (API vs scripts) puedan
+        pasar cualquiera de las dos formas.
+
+        Args:
+            key: nombre del atributo.
+            valor: valor candidato (enum, cadena o ``None``).
+
+        Returns:
+            Cadena canónica del enum, o ``None`` si se pasó ``None``.
+
+        Raises:
+            AppValidationError: ``GENDER_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``GENDER_INVALID`` si no pertenece al enum.
+        """
         return _validar_enum_str(
             valor,
             VALID_GENEROS,
@@ -704,7 +906,24 @@ class Usuario(Base):
 
     @validates("altura")
     def validar_altura(self, key: str, valor: Optional[int]) -> Optional[int]:
-        """Valida altura."""
+        """Valida la altura en centímetros a nivel ORM.
+
+        Admite ``None`` (campo opcional) y exige tipo ``int`` estricto
+        (no ``float``) porque el cliente Android siempre envía enteros y
+        un ``float`` aquí indicaría un bug de capa superior. Delega la
+        comprobación de rango en ``validators.validar_altura_logica``.
+
+        Args:
+            key: nombre del atributo.
+            valor: altura en centímetros o ``None``.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``HEIGHT_MUST_BE_INTEGER_CENTIMETERS`` si no es entero.
+            AppValidationError: ``HEIGHT_OUT_OF_RANGE`` si no está en [50, 300].
+        """
         if valor is None:
             return None
         if not isinstance(valor, int):
@@ -716,7 +935,24 @@ class Usuario(Base):
 
     @validates("peso")
     def validar_peso(self, key: str, valor: Optional[float]) -> Optional[float]:
-        """Valida peso."""
+        """Valida el peso en kilogramos a nivel ORM.
+
+        Admite ``None`` y acepta ``int`` o ``float`` (el usuario puede
+        introducir 70 o 70.5). Lo convierte siempre a ``float`` antes de
+        delegar en ``validators.validar_peso_logica`` para que la columna
+        ``Float`` de SQLAlchemy reciba siempre el mismo tipo.
+
+        Args:
+            key: nombre del atributo.
+            valor: peso en kg o ``None``.
+
+        Returns:
+            Peso como ``float``, o ``None`` si no se proporcionó.
+
+        Raises:
+            AppValidationError: ``WEIGHT_MUST_BE_KILOGRAM_NUMBER`` si no es numérico.
+            AppValidationError: ``WEIGHT_OUT_OF_RANGE`` si no está en [20, 300].
+        """
         if valor is None:
             return None
         if not isinstance(valor, (int, float)):
@@ -728,7 +964,22 @@ class Usuario(Base):
 
     @validates("provincia")
     def validar_provincia(self, key: str, valor: Optional[Any]) -> Optional[str]:
-        """Valida provincia."""
+        """Valida la provincia contra el enum ``ProvinciaEspaña``.
+
+        Delega en ``_validar_enum_str`` con ``VALID_PROVINCIAS``. Como el
+        campo es opcional, ``None`` se pasa tal cual.
+
+        Args:
+            key: nombre del atributo.
+            valor: valor candidato (enum, cadena o ``None``).
+
+        Returns:
+            Cadena canónica del enum, o ``None``.
+
+        Raises:
+            AppValidationError: ``PROVINCE_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``PROVINCE_INVALID`` si no pertenece al enum.
+        """
         return _validar_enum_str(
             valor,
             VALID_PROVINCIAS,
@@ -739,7 +990,23 @@ class Usuario(Base):
 
     @validates("foto_perfil")
     def validar_foto_perfil(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida foto perfil."""
+        """Valida la URL o nombre de fichero de la foto de perfil.
+
+        Admite ``None`` (usuario sin foto). Cuando hay valor, delega en
+        ``_validar_texto_no_vacio`` con tope de 500 caracteres, suficiente
+        para URLs de Cloudinary con ``public_id`` largo pero que descarta
+        valores claramente rotos o intentos de DoS por payload grande.
+
+        Args:
+            key: nombre del atributo.
+            valor: URL/nombre o ``None``.
+
+        Returns:
+            Valor recortado, o ``None`` si no había foto.
+
+        Raises:
+            AppValidationError: ``PROFILE_PHOTO_MUST_BE_STRING``, ``PROFILE_PHOTO_EMPTY`` o ``PROFILE_PHOTO_TOO_LONG``.
+        """
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -751,16 +1018,51 @@ class Usuario(Base):
             too_long_code="PROFILE_PHOTO_TOO_LONG",
         )
 
-    @validates("foto_fecha_actualizacion", "fecha_registro", "codigo_expiracion", "password_changed_at")
+    @validates(
+        "foto_fecha_actualizacion",
+        "fecha_registro",
+        "codigo_expiracion",
+        "password_changed_at",
+    )
     def validar_fechas_auxiliares(
         self, key: str, valor: Optional[datetime]
     ) -> Optional[datetime]:
-        """Valida fechas auxiliares."""
+        """Normaliza a UTC las columnas de timestamp auxiliares del usuario.
+
+        Un único validator cubre ``foto_fecha_actualizacion``,
+        ``fecha_registro``, ``codigo_expiracion`` y ``password_changed_at``
+        porque todos comparten la misma necesidad: que se guarden siempre
+        con ``tzinfo`` y en UTC para evitar comparaciones ambiguas.
+
+        Args:
+            key: nombre del atributo, lo usa SQLAlchemy pero aquí no se diferencia.
+            valor: ``datetime`` o ``None``.
+
+        Returns:
+            ``datetime`` en UTC, o ``None`` si la entrada era ``None``.
+        """
         return _normalizar_datetime_utc(valor)
 
     @validates("fecha_eula")
     def validar_fecha_eula(self, key: str, valor: datetime) -> datetime:
-        """Valida fecha eula."""
+        """Valida y normaliza la marca de aceptación de términos a UTC.
+
+        Obligatoria a nivel ORM: el alta no puede ocurrir sin evidencia
+        de aceptación. Normaliza a UTC y rechaza valores más de 5 minutos
+        en el futuro (mismo margen que el validator del esquema Pydantic
+        para absorber desajustes de reloj del cliente).
+
+        Args:
+            key: nombre del atributo.
+            valor: ``datetime`` propuesto.
+
+        Returns:
+            El mismo instante en UTC.
+
+        Raises:
+            AppValidationError: ``TERMS_ACCEPTED_AT_INVALID`` si no es ``datetime``.
+            AppValidationError: ``TERMS_ACCEPTED_AT_IN_FUTURE`` si supera ``ahora + 5 minutos``.
+        """
         if not isinstance(valor, datetime):
             raise AppValidationError(
                 "Error: La fecha de aceptación debe ser una fecha-hora válida",
@@ -782,7 +1084,24 @@ class Usuario(Base):
 
     @validates("total_metros")
     def validar_total_metros(self, key: str, valor: int) -> int:
-        """Valida total metros."""
+        """Valida el acumulado de metros del usuario.
+
+        El total se actualiza incrementalmente al guardar/borrar
+        actividades. Forzar ``int >= 0`` aquí atrapa bugs del servicio
+        (p. ej. un decremento mal calculado que dejaría el contador en
+        negativo) antes de que lleguen a la base.
+
+        Args:
+            key: nombre del atributo.
+            valor: total acumulado en metros.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``TOTAL_DISTANCE_MUST_BE_INTEGER`` si no es entero.
+            AppValidationError: ``TOTAL_DISTANCE_NEGATIVE`` si es negativo.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de metros debe ser un número entero",
@@ -797,7 +1116,23 @@ class Usuario(Base):
 
     @validates("total_calorias")
     def validar_total_calorias(self, key: str, valor: int) -> int:
-        """Valida total calorias."""
+        """Valida el acumulado de calorías del usuario.
+
+        Mismos invariantes que ``total_metros`` (entero no negativo). El
+        código se replica en vez de extraer a helper compartido para que
+        cada columna mantenga su ``error_code`` específico y pueda
+        evolucionar por separado.
+
+        Args:
+            key: nombre del atributo.
+            valor: total de calorías acumuladas.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``TOTAL_CALORIES_MUST_BE_INTEGER`` o ``TOTAL_CALORIES_NEGATIVE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de calorías debe ser un número entero",
@@ -812,7 +1147,21 @@ class Usuario(Base):
 
     @validates("total_duracion_segundos")
     def validar_total_duracion(self, key: str, valor: int) -> int:
-        """Valida total duracion."""
+        """Valida el acumulado de segundos del usuario.
+
+        Entero no negativo. Ver ``validar_total_metros`` para el razonamiento
+        sobre por qué se valida aquí además de en la capa de servicio.
+
+        Args:
+            key: nombre del atributo.
+            valor: total de segundos de actividad.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``TOTAL_DURATION_MUST_BE_INTEGER`` o ``TOTAL_DURATION_NEGATIVE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de duración debe ser un número entero",
@@ -827,7 +1176,20 @@ class Usuario(Base):
 
     @validates("total_actividades")
     def validar_total_actividades(self, key: str, valor: int) -> int:
-        """Valida total actividades."""
+        """Valida el contador de actividades guardadas.
+
+        Entero no negativo. Mismo patrón que los demás acumulados.
+
+        Args:
+            key: nombre del atributo.
+            valor: número de actividades registradas.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``TOTAL_ACTIVITIES_MUST_BE_INTEGER`` o ``TOTAL_ACTIVITIES_NEGATIVE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El total de actividades debe ser un número entero",
@@ -842,7 +1204,24 @@ class Usuario(Base):
 
     @validates("objetivo_semanal_metros")
     def validar_objetivo_semanal(self, key: str, valor: int) -> int:
-        """Valida objetivo semanal."""
+        """Valida el objetivo semanal de metros a nivel ORM.
+
+        Replica el rango del esquema Pydantic (10 m – 2 000 000 m). A
+        diferencia del esquema, aquí el valor no es opcional porque el
+        modelo tiene un default en la columna; el validator se ejecuta
+        también en asignaciones directas desde código que pudieran
+        romper el invariante.
+
+        Args:
+            key: nombre del atributo.
+            valor: objetivo en metros.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``WEEKLY_GOAL_MUST_BE_INTEGER`` o ``WEEKLY_GOAL_OUT_OF_RANGE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El objetivo semanal debe ser un número entero",
@@ -857,7 +1236,22 @@ class Usuario(Base):
 
     @validates("objetivo_mensual_metros")
     def validar_objetivo_mensual(self, key: str, valor: int) -> int:
-        """Valida objetivo mensual."""
+        """Valida el objetivo mensual de metros a nivel ORM.
+
+        Mismo rango que el semanal. No se fuerza aquí la relación
+        ``mensual >= semanal × 4`` para permitir configuraciones más
+        flexibles del usuario.
+
+        Args:
+            key: nombre del atributo.
+            valor: objetivo en metros.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``MONTHLY_GOAL_MUST_BE_INTEGER`` o ``MONTHLY_GOAL_OUT_OF_RANGE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: El objetivo mensual debe ser un número entero",
@@ -872,7 +1266,25 @@ class Usuario(Base):
 
     @validates("acepta_terminos")
     def validar_acepta_terminos(self, key: str, valor: bool) -> bool:
-        """Valida acepta terminos."""
+        """Exige ``True`` explícito en el booleano de aceptación de términos.
+
+        Una fila ``Usuario`` sin ``acepta_terminos=True`` no puede existir:
+        el servicio lo lleva como evidencia legal del consentimiento. Se
+        valida aquí además del esquema Pydantic como doble capa que
+        impide crear registros por rutas internas (scripts, tests) que
+        salten el esquema.
+
+        Args:
+            key: nombre del atributo.
+            valor: valor del booleano.
+
+        Returns:
+            ``True`` si pasa.
+
+        Raises:
+            AppValidationError: ``TERMS_ACCEPTANCE_MUST_BE_BOOLEAN`` si no es ``bool``.
+            AppValidationError: ``ACCOUNT_TERMS_ACCEPTANCE_REQUIRED`` si es ``False``.
+        """
         if not isinstance(valor, bool):
             raise AppValidationError(
                 "Error: acepta_terminos debe ser booleano",
@@ -887,7 +1299,22 @@ class Usuario(Base):
 
     @validates("perfil_visible")
     def validar_perfil_visible(self, key: str, valor: bool) -> bool:
-        """Valida perfil visible."""
+        """Valida que la visibilidad del perfil sea un booleano estricto.
+
+        A diferencia de ``acepta_terminos``, aquí se permite ``False`` (el
+        usuario puede decidir ocultarse del ranking y búsqueda). Solo se
+        rechaza que el tipo sea incorrecto.
+
+        Args:
+            key: nombre del atributo.
+            valor: valor candidato.
+
+        Returns:
+            El booleano si es de tipo correcto.
+
+        Raises:
+            AppValidationError: ``PROFILE_VISIBILITY_MUST_BE_BOOLEAN`` si no es ``bool``.
+        """
         if not isinstance(valor, bool):
             raise AppValidationError(
                 "Error: perfil_visible debe ser booleano",
@@ -897,7 +1324,25 @@ class Usuario(Base):
 
     @validates("version_terminos")
     def validar_version_terminos(self, key: str, valor: str) -> str:
-        """Valida version terminos."""
+        """Valida la versión de términos que aceptó el usuario.
+
+        Exige cadena no vacía tras recortar y tope de 10 caracteres (igual
+        que el esquema). Se almacena tal cual la envió el cliente (no se
+        fuerza caso) para poder auditar qué versión exacta del documento
+        legal se presentó al usuario en ese alta.
+
+        Args:
+            key: nombre del atributo.
+            valor: versión declarada.
+
+        Returns:
+            Versión recortada si pasa.
+
+        Raises:
+            AppValidationError: ``TERMS_VERSION_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``TERMS_VERSION_REQUIRED`` si queda vacía tras recortar.
+            AppValidationError: ``TERMS_VERSION_TOO_LONG`` si supera 10 caracteres.
+        """
         # Valida version terminos.
         if not isinstance(valor, str):
             raise AppValidationError(
@@ -923,7 +1368,24 @@ class Usuario(Base):
     def validar_codigo_recuperacion(
         self, key: str, valor: Optional[str]
     ) -> Optional[str]:
-        """Valida codigo recuperacion."""
+        """Valida que el código de recuperación guardado sea un hash SHA-256 válido.
+
+        La columna nunca guarda el código en claro: el servicio lo hashea
+        con HMAC-SHA256 antes de persistir. Aquí se valida el formato del
+        hash (64 hex) como defensa frente a escrituras accidentales del
+        código en claro.
+
+        Args:
+            key: nombre del atributo.
+            valor: hash SHA-256 hexadecimal, o ``None`` para limpiar.
+
+        Returns:
+            Hash en minúsculas, o ``None``.
+
+        Raises:
+            AppValidationError: ``RECOVERY_CODE_HASH_MUST_BE_STRING`` si no es cadena.
+            AppValidationError: ``RECOVERY_CODE_HASH_INVALID`` si no coincide con el patrón hex64.
+        """
         return _validar_hex64_opcional(
             valor,
             "codigo_recuperacion",
@@ -1104,7 +1566,24 @@ class Actividad(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
-        """Valida usuario identificador."""
+        """Valida el ``usuario_id`` de la actividad como entero positivo.
+
+        Aunque la FK y el NOT NULL del esquema ya impiden valores basura,
+        esta validación temprana devuelve un ``error_code`` canónico en vez
+        del genérico de SQLAlchemy cuando se asigna un tipo incorrecto
+        (``int`` esperado) o un id no positivo.
+
+        Args:
+            key: nombre del atributo (lo pasa SQLAlchemy al ``@validates``).
+            valor: id del usuario propietario.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``USER_ID_MUST_BE_INTEGER`` si no es entero.
+            AppValidationError: ``USER_ID_MUST_BE_POSITIVE`` si ``valor <= 0``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
@@ -1117,7 +1596,25 @@ class Actividad(Base):
 
     @validates("client_local_id")
     def validar_client_local_id(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida identificador local de la actividad."""
+        """Valida el identificador local opcional para idempotencia de subidas.
+
+        Este id lo genera la app Android al crear la actividad y lo reenvía
+        en el POST para que el backend pueda detectar reintentos y devolver
+        la actividad ya persistida en lugar de crear duplicados. Admite
+        ``None`` (cliente antiguo) y cuando hay valor aplica la terna de
+        comprobaciones (tipo, no vacío, longitud <= 64) vía
+        ``_validar_texto_no_vacio``.
+
+        Args:
+            key: nombre del atributo.
+            valor: id local o ``None``.
+
+        Returns:
+            Id recortado, o ``None`` si no se proporcionó.
+
+        Raises:
+            AppValidationError: ``ACTIVITY_CLIENT_LOCAL_ID_MUST_BE_STRING``, ``ACTIVITY_CLIENT_LOCAL_ID_EMPTY`` o ``ACTIVITY_CLIENT_LOCAL_ID_TOO_LONG``.
+        """
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -1131,7 +1628,27 @@ class Actividad(Base):
 
     @validates("tipo")
     def validar_tipo(self, key: str, valor: Optional[Any]) -> str:
-        """Valida y normaliza el tipo de actividad persistido como texto."""
+        """Valida y normaliza el tipo de actividad persistido como texto.
+
+        Delega en ``_validar_enum_str`` con ``VALID_TIPOS_ACTIVIDAD``. A
+        diferencia de otros enums del modelo, ``tipo`` es obligatorio:
+        una actividad sin tipo no tiene sentido. Como
+        ``_validar_enum_str`` devuelve ``None`` para entrada ``None``, se
+        comprueba después y se levanta ``ACTIVITY_TYPE_REQUIRED`` aquí
+        para mantener todos los errores de este campo agrupados.
+
+        Args:
+            key: nombre del atributo.
+            valor: valor candidato (enum, cadena o ``None``).
+
+        Returns:
+            Cadena canónica del enum.
+
+        Raises:
+            AppValidationError: ``ACTIVITY_TYPE_MUST_BE_STRING`` si no es cadena.
+            AppValidationError: ``ACTIVITY_TYPE_INVALID`` si no pertenece al enum.
+            AppValidationError: ``ACTIVITY_TYPE_REQUIRED`` si llega ``None``.
+        """
         tipo_normalizado = _validar_enum_str(
             valor,
             VALID_TIPOS_ACTIVIDAD,
@@ -1148,104 +1665,338 @@ class Actividad(Base):
 
     @validates("distancia")
     def validar_distancia(self, key: str, valor: int) -> int:
-        """Valida distancia."""
+        """Valida la distancia en metros (>0, <=300 km).
+
+        Delega en ``validators.validar_distancia_logica``, que además del
+        rango rechaza valores fisiológicamente imposibles (300 km de tope
+        actúa como cortafuegos ante clientes rotos).
+
+        Args:
+            key: nombre del atributo.
+            valor: distancia en metros.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``DISTANCE_MUST_BE_POSITIVE`` o ``DISTANCE_OUT_OF_RANGE``.
+        """
         return validators.validar_distancia_logica(valor)
 
     @validates("duracion_total")
     def validar_duracion_total(self, key: str, valor: int) -> int:
-        """Valida duracion total."""
+        """Valida la duración total (>0, <=24 horas).
+
+        Delega en ``validators.validar_duracion_logica``. Una actividad sin
+        tiempo no tiene sentido; el tope de 24 h descarta entradas absurdas.
+
+        Args:
+            key: nombre del atributo.
+            valor: duración total en segundos.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``DURATION_MUST_BE_POSITIVE`` o ``DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_logica(valor)
 
     @validates("duracion_movimiento")
     def validar_duracion_movimiento(self, key: str, valor: int) -> int:
-        """Valida duracion movimiento."""
+        """Valida la duración en movimiento (>0, <=24 horas).
+
+        Mismo validador que ``duracion_total``. La consistencia
+        ``duracion_movimiento <= duracion_total`` se impone a nivel de
+        esquema Pydantic; aquí solo validamos rangos individuales.
+
+        Args:
+            key: nombre del atributo.
+            valor: duración en movimiento en segundos.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``DURATION_MUST_BE_POSITIVE`` o ``DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_logica(valor)
 
     @validates("duracion_parado")
     def validar_duracion_parado(self, key: str, valor: int) -> int:
-        """Valida duracion parado."""
+        """Valida la duración parada (0 permitido, tope 24 horas).
+
+        Delega en ``validators.validar_duracion_no_negativa_logica``, que
+        a diferencia de ``validar_duracion_logica`` admite ``0``: es
+        perfectamente legítimo que una actividad no haya tenido ninguna
+        pausa.
+
+        Args:
+            key: nombre del atributo.
+            valor: duración parada en segundos.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``STOPPED_DURATION_NEGATIVE`` o ``STOPPED_DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_no_negativa_logica(
             valor, "la duración parada", "STOPPED_DURATION"
         )
 
     @validates("duracion_pausa_manual")
     def validar_duracion_pausa_manual(self, key: str, valor: int) -> int:
-        """Valida duracion pausa manual."""
+        """Valida la duración de pausa manual (0 permitido, tope 24 horas).
+
+        Misma semántica que ``duracion_parado`` pero con prefijo de error
+        ``MANUAL_PAUSE_DURATION`` para distinguir el origen en logs/UI.
+
+        Args:
+            key: nombre del atributo.
+            valor: duración de pausa manual en segundos.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``MANUAL_PAUSE_DURATION_NEGATIVE`` o ``MANUAL_PAUSE_DURATION_TOO_LONG``.
+        """
         return validators.validar_duracion_no_negativa_logica(
             valor, "la duración de pausa manual", "MANUAL_PAUSE_DURATION"
         )
 
     @validates("calorias_quemadas")
     def validar_calorias(self, key: str, valor: int) -> int:
-        """Valida calorias."""
+        """Valida las calorías quemadas (>0, <=10000).
+
+        Delega en ``validators.validar_calorias_logica``. El tope
+        fisiológico descarta inputs absurdos.
+
+        Args:
+            key: nombre del atributo.
+            valor: calorías quemadas en la sesión.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``CALORIES_MUST_BE_POSITIVE`` o ``CALORIES_OUT_OF_RANGE``.
+        """
         return validators.validar_calorias_logica(valor)
 
     @validates("ritmo_medio_movimiento")
     def validar_ritmo_medio_movimiento(self, key: str, valor: int) -> int:
-        """Valida ritmo medio movimiento."""
+        """Valida el ritmo medio en movimiento (0–3600 s/km).
+
+        Delega en ``validators.validar_ritmo_segundos_km_logica`` con
+        prefijo ``MOVING_PACE``.
+
+        Args:
+            key: nombre del atributo.
+            valor: ritmo en segundos por kilómetro.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``MOVING_PACE_NEGATIVE`` o ``MOVING_PACE_OUT_OF_RANGE``.
+        """
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo medio en movimiento", "MOVING_PACE"
         )
 
     @validates("ritmo_medio_total")
     def validar_ritmo_medio_total(self, key: str, valor: int) -> int:
-        """Valida ritmo medio total."""
+        """Valida el ritmo medio total (0–3600 s/km).
+
+        Mismo rango que el de movimiento, con prefijo ``TOTAL_PACE`` para
+        distinguir el origen en logs/UI.
+
+        Args:
+            key: nombre del atributo.
+            valor: ritmo en segundos por kilómetro.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``TOTAL_PACE_NEGATIVE`` o ``TOTAL_PACE_OUT_OF_RANGE``.
+        """
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo medio total", "TOTAL_PACE"
         )
 
     @validates("ritmo_maximo")
     def validar_ritmo_maximo(self, key: str, valor: int) -> int:
-        """Valida ritmo maximo."""
+        """Valida el ritmo máximo (0–3600 s/km).
+
+        Mismo rango que los anteriores, con prefijo ``MAX_PACE``.
+
+        Args:
+            key: nombre del atributo.
+            valor: ritmo máximo alcanzado en segundos por kilómetro.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``MAX_PACE_NEGATIVE`` o ``MAX_PACE_OUT_OF_RANGE``.
+        """
         return validators.validar_ritmo_segundos_km_logica(
             valor, "el ritmo máximo", "MAX_PACE"
         )
 
     @validates("velocidad_media_x100")
     def validar_velocidad_media(self, key: str, valor: int) -> int:
-        """Valida velocidad media."""
+        """Valida la velocidad media en formato km/h × 100 (0–10000).
+
+        Delega en ``validators.validar_velocidad_x100_logica`` con prefijo
+        ``AVERAGE_SPEED``. El tope 10 000 equivale a 100 km/h.
+
+        Args:
+            key: nombre del atributo.
+            valor: velocidad media expresada como km/h × 100.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``AVERAGE_SPEED_NEGATIVE`` o ``AVERAGE_SPEED_OUT_OF_RANGE``.
+        """
         return validators.validar_velocidad_x100_logica(
             valor, "la velocidad media", "AVERAGE_SPEED"
         )
 
     @validates("velocidad_max_x100")
     def validar_velocidad_max(self, key: str, valor: int) -> int:
-        """Valida velocidad max."""
+        """Valida la velocidad máxima en formato km/h × 100 (0–10000).
+
+        Mismo rango que la media, con prefijo ``MAX_SPEED``. La
+        consistencia ``máxima >= media`` se impone en el esquema Pydantic
+        (``GuardarActividad.validar_consistencia_temporal``).
+
+        Args:
+            key: nombre del atributo.
+            valor: velocidad máxima expresada como km/h × 100.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``MAX_SPEED_NEGATIVE`` o ``MAX_SPEED_OUT_OF_RANGE``.
+        """
         return validators.validar_velocidad_x100_logica(
             valor, "la velocidad máxima", "MAX_SPEED"
         )
 
     @validates("auto_pausas")
     def validar_auto_pausas(self, key: str, valor: int) -> int:
-        """Valida auto pausas."""
+        """Valida el contador de auto-pausas (0–500).
+
+        Delega en ``validators.validar_contador_tracking_logica`` con
+        prefijo ``AUTO_PAUSE_COUNT``.
+
+        Args:
+            key: nombre del atributo.
+            valor: número de auto-pausas detectadas.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``AUTO_PAUSE_COUNT_NEGATIVE`` o ``AUTO_PAUSE_COUNT_OUT_OF_RANGE``.
+        """
         return validators.validar_contador_tracking_logica(
             valor, "las auto pausas", "AUTO_PAUSE_COUNT"
         )
 
     @validates("pausas_manuales")
     def validar_pausas_manuales(self, key: str, valor: int) -> int:
-        """Valida pausas manuales."""
+        """Valida el contador de pausas manuales (0–500).
+
+        Mismo validador, con prefijo ``MANUAL_PAUSE_COUNT``.
+
+        Args:
+            key: nombre del atributo.
+            valor: número de pausas manuales.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``MANUAL_PAUSE_COUNT_NEGATIVE`` o ``MANUAL_PAUSE_COUNT_OUT_OF_RANGE``.
+        """
         return validators.validar_contador_tracking_logica(
             valor, "las pausas manuales", "MANUAL_PAUSE_COUNT"
         )
 
     @validates("alertas_velocidad")
     def validar_alertas_velocidad(self, key: str, valor: int) -> int:
-        """Valida alertas velocidad."""
+        """Valida el contador de alertas de velocidad (0–500).
+
+        Mismo validador, con prefijo ``SPEED_ALERT_COUNT``.
+
+        Args:
+            key: nombre del atributo.
+            valor: número de alertas disparadas durante la sesión.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``SPEED_ALERT_COUNT_NEGATIVE`` o ``SPEED_ALERT_COUNT_OUT_OF_RANGE``.
+        """
         return validators.validar_contador_tracking_logica(
             valor, "las alertas de velocidad", "SPEED_ALERT_COUNT"
         )
 
     @validates("ruta_polilinea")
     def validar_ruta_polilinea(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida la polilínea solo cuando existe, manteniendo el campo opcional."""
+        """Valida la polilínea solo cuando existe, manteniendo el campo opcional.
+
+        Admite ``None`` (actividades sin GPS grabado). Cuando hay valor,
+        delega en ``validators.validar_polilinea_logica``, que exige tamaño
+        mínimo (descartar ``"abc"`` que no es ninguna ruta real) y máximo
+        (protección contra payloads descomunales).
+
+        Args:
+            key: nombre del atributo.
+            valor: polilínea codificada o ``None``.
+
+        Returns:
+            El mismo valor si pasa (``None`` si entró ``None``).
+
+        Raises:
+            AppValidationError: ``ROUTE_INVALID`` o ``ROUTE_TOO_LARGE``.
+        """
         if valor is None:
             return None
         return validators.validar_polilinea_logica(valor)
 
     @validates("ruta_mapa_url")
     def validar_ruta_mapa_url(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida ruta mapa URL."""
+        """Valida la URL del mapa estático generado para la actividad.
+
+        Admite ``None`` (actividades sin mapa asociado). Cuando hay valor,
+        se aplican dos comprobaciones:
+
+        - Longitud <= 2048 caracteres (margen amplio; URLs con ``public_id``
+          complejo de Cloudinary pueden crecer).
+        - Esquema ``http://`` o ``https://``: la app nunca cargaría un mapa
+          desde otro esquema y cualquier otra cosa es sospechosa.
+
+        Args:
+            key: nombre del atributo.
+            valor: URL o ``None``.
+
+        Returns:
+            La misma URL si pasa (``None`` si entró ``None``).
+
+        Raises:
+            AppValidationError: ``MAP_URL_TOO_LONG`` si supera 2048 caracteres.
+            AppValidationError: ``MAP_URL_INVALID_SCHEME`` si no empieza por ``http://`` o ``https://``.
+        """
         if valor is None:
             return None
         if len(valor) > 2048:
@@ -1261,7 +2012,24 @@ class Actividad(Base):
 
     @validates("fecha_ruta")
     def validar_fecha_ruta(self, key: str, valor: datetime) -> datetime:
-        """Valida fecha ruta."""
+        """Valida y normaliza a UTC la fecha/hora reportada para la actividad.
+
+        Delega en ``validators.validar_fecha_ruta_logica``: exige
+        ``tzinfo`` (sin zona no se puede comparar entre dispositivos),
+        rechaza más de 10 minutos en el futuro (absorbe desajustes
+        de reloj cliente/servidor) y devuelve el instante siempre en UTC
+        para que la columna guarde valores homogéneos.
+
+        Args:
+            key: nombre del atributo.
+            valor: ``datetime`` propuesto por el cliente.
+
+        Returns:
+            El mismo instante en UTC.
+
+        Raises:
+            AppValidationError: ``ACTIVITY_DATE_MISSING_TIMEZONE`` o ``ACTIVITY_DATE_IN_FUTURE``.
+        """
         return validators.validar_fecha_ruta_logica(valor)
 
 
@@ -1448,7 +2216,22 @@ class ActividadDiagnostico(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
-        """Valida usuario identificador."""
+        """Valida el ``usuario_id`` de la fila de diagnóstico como entero positivo.
+
+        Usa ``error_code`` específico con prefijo ``DIAGNOSTIC_`` para
+        distinguir en logs que el fallo viene del pipeline de telemetría
+        interna, no del pipeline principal de actividades.
+
+        Args:
+            key: nombre del atributo.
+            valor: id del usuario dueño del diagnóstico.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_USER_ID_MUST_BE_INTEGER`` o ``DIAGNOSTIC_USER_ID_MUST_BE_POSITIVE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero",
@@ -1463,7 +2246,23 @@ class ActividadDiagnostico(Base):
 
     @validates("actividad_id")
     def validar_actividad_id(self, key: str, valor: Optional[int]) -> Optional[int]:
-        """Valida actividad identificador."""
+        """Valida el ``actividad_id`` opcional de la fila de diagnóstico.
+
+        Se permite ``None`` a propósito: el diagnóstico puede enviarse
+        incluso si la actividad principal no se ha persistido (porque el
+        guardado falló o porque aún no se ha llamado). Cuando hay valor,
+        sigue las mismas reglas que el resto de ids: entero y positivo.
+
+        Args:
+            key: nombre del atributo.
+            valor: id remoto de la actividad asociada, o ``None``.
+
+        Returns:
+            El mismo valor si pasa; ``None`` si no hay asociación.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_ACTIVITY_ID_MUST_BE_INTEGER`` o ``DIAGNOSTIC_ACTIVITY_ID_MUST_BE_POSITIVE``.
+        """
         if valor is None:
             return None
         if not isinstance(valor, int):
@@ -1487,7 +2286,24 @@ class ActividadDiagnostico(Base):
         "model",
     )
     def validar_textos_cortos(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida textos cortos."""
+        """Valida y normaliza los campos de texto descriptivos del diagnóstico.
+
+        Un único validator cubre ``actividad_local_id``, ``current_status``,
+        ``app_version``, ``os_version``, ``manufacturer`` y ``model``: son
+        todos cadenas descriptivas opcionales que solo necesitan ser
+        cadenas reales. Recorta espacios y colapsa cadenas vacías a ``None``
+        para no ensuciar la tabla con entradas sin contenido real.
+
+        Args:
+            key: nombre del atributo; el mismo validator se invoca para varios.
+            valor: cadena o ``None``.
+
+        Returns:
+            Cadena recortada si aporta contenido; ``None`` si estaba vacía o era ``None``.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_TEXT_FIELD_MUST_BE_STRING`` si el valor no es cadena.
+        """
         if valor is None:
             return None
         if not isinstance(valor, str):
@@ -1507,7 +2323,21 @@ class ActividadDiagnostico(Base):
         "creada_en",
     )
     def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
-        """Valida fechas."""
+        """Normaliza a UTC todas las columnas de timestamp del diagnóstico.
+
+        Cubre los hitos de la sesión (``session_started_at``,
+        ``session_finished_at``, ``last_timer_tick_at``,
+        ``service_created_at``, ``service_destroyed_at``) y la propia
+        ``creada_en``. Todas son opcionales salvo ``creada_en``, que tiene
+        valor por defecto a nivel de columna; el ORM se ocupa del default.
+
+        Args:
+            key: nombre del atributo; el validator se invoca para varios.
+            valor: ``datetime`` o ``None``.
+
+        Returns:
+            ``datetime`` en UTC, o ``None``.
+        """
         return _normalizar_datetime_utc(valor)
 
     @validates(
@@ -1527,7 +2357,27 @@ class ActividadDiagnostico(Base):
         "service_restart_count",
     )
     def validar_enteros_no_negativos(self, key: str, valor: int) -> int:
-        """Valida enteros no negativos."""
+        """Valida que los contadores numéricos del diagnóstico sean enteros >= 0.
+
+        Aplica a todos los campos numéricos del diagnóstico (tiempos,
+        distancia, ritmos, contadores de pausas, classifications y restart
+        count). No se fijan topes máximos individuales porque el
+        diagnóstico puede cubrir sesiones extremadamente largas y preferimos
+        tener la telemetría aunque sea atípica; para consistencia cruzada
+        (``moving_seconds <= elapsed_seconds``) existe el validator de
+        esquema Pydantic.
+
+        Args:
+            key: nombre del atributo; el validator se invoca para varios.
+            valor: entero candidato.
+
+        Returns:
+            El mismo valor si es no negativo.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_NUMERIC_FIELD_MUST_BE_INTEGER`` si no es entero.
+            AppValidationError: ``DIAGNOSTIC_NUMERIC_FIELD_NEGATIVE`` si es negativo.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: el valor de diagnóstico debe ser un entero",
@@ -1542,7 +2392,24 @@ class ActividadDiagnostico(Base):
 
     @validates("event_log_json", "device_info_json")
     def validar_json_serializado(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida JSON serializado."""
+        """Valida que los campos JSON textuales sean cadenas (o ``None``).
+
+        Aplica a ``event_log_json`` y ``device_info_json``, que guardan
+        estructuras serializadas por el backend como texto para poder
+        inspeccionarlas sin depender de funciones JSON de PostgreSQL.
+        Aquí solo se valida el tipo y se colapsa cadena vacía a ``None``;
+        la validez del JSON como tal se asume ya hecha por quien serializó.
+
+        Args:
+            key: nombre del atributo.
+            valor: cadena serializada o ``None``.
+
+        Returns:
+            Cadena recortada si aporta contenido, ``None`` si estaba vacía o era ``None``.
+
+        Raises:
+            AppValidationError: ``DIAGNOSTIC_JSON_FIELD_MUST_BE_STRING`` si no es cadena.
+        """
         if valor is None:
             return None
         if not isinstance(valor, str):
@@ -1639,7 +2506,23 @@ class UsuarioAuthSocial(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
-        """Valida usuario identificador."""
+        """Valida el ``usuario_id`` al que se vincula la cuenta social.
+
+        Mismas reglas que en el resto de tablas: entero positivo. Además
+        de la propia FK, el ``error_code`` específico permite que un alta
+        fallida por id inválido se distinga claramente en los logs de
+        auth social.
+
+        Args:
+            key: nombre del atributo.
+            valor: id del usuario local.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``USER_ID_MUST_BE_INTEGER`` o ``USER_ID_MUST_BE_POSITIVE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
@@ -1652,7 +2535,25 @@ class UsuarioAuthSocial(Base):
 
     @validates("provider")
     def validar_provider(self, key: str, valor: str) -> str:
-        """Valida provider."""
+        """Valida el identificador del proveedor social contra la lista soportada.
+
+        Delega en ``_validar_enum_str`` con ``VALID_SOCIAL_PROVIDERS``
+        (hoy solo ``{"google"}``). A diferencia del resto de validadores
+        basados en ``_validar_enum_str``, aquí el valor es obligatorio y
+        una ``assert`` confirma que el helper no devolvió ``None`` para
+        contentar al type checker.
+
+        Args:
+            key: nombre del atributo.
+            valor: identificador del proveedor.
+
+        Returns:
+            Identificador del proveedor recortado y validado.
+
+        Raises:
+            AppValidationError: ``SOCIAL_PROVIDER_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``SOCIAL_PROVIDER_INVALID`` si no pertenece a la lista soportada.
+        """
         resultado = _validar_enum_str(
             valor,
             VALID_SOCIAL_PROVIDERS,
@@ -1665,7 +2566,22 @@ class UsuarioAuthSocial(Base):
 
     @validates("provider_user_id")
     def validar_provider_user_id(self, key: str, valor: str) -> str:
-        """Valida provider usuario identificador."""
+        """Valida el ``sub`` del proveedor (id inmutable del usuario en Google, etc.).
+
+        Tope 255 caracteres para dar margen al ``sub`` de Google (21 hoy)
+        sin quedarnos cortos ante proveedores futuros con ids más largos.
+        No se fuerza formato específico porque varía entre proveedores.
+
+        Args:
+            key: nombre del atributo.
+            valor: id del usuario en el proveedor.
+
+        Returns:
+            Id recortado.
+
+        Raises:
+            AppValidationError: ``SOCIAL_PROVIDER_USER_ID_MUST_BE_STRING``, ``SOCIAL_PROVIDER_USER_ID_EMPTY`` o ``SOCIAL_PROVIDER_USER_ID_TOO_LONG``.
+        """
         return _validar_texto_no_vacio(
             valor,
             "provider_user_id",
@@ -1677,7 +2593,27 @@ class UsuarioAuthSocial(Base):
 
     @validates("email_social")
     def validar_email_social(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida correo electrónico social."""
+        """Valida el email que el proveedor social devolvió para el usuario.
+
+        Admite ``None`` (no todos los proveedores devuelven email) y además
+        colapsa cadena vacía tras recortar a ``None`` también: si el
+        proveedor envía ``""`` queremos guardarlo como "no tiene email" y
+        no como una cadena vacía. Cuando hay contenido real, se valida la
+        sintaxis con ``email_validator`` (sin deliverability: ya confiamos
+        en que el proveedor validó su propio lado) y se normaliza a
+        minúsculas para detectar duplicados correctamente.
+
+        Args:
+            key: nombre del atributo.
+            valor: email candidato o ``None``.
+
+        Returns:
+            Email en minúsculas ya validado, o ``None``.
+
+        Raises:
+            AppValidationError: ``SOCIAL_EMAIL_MUST_BE_TEXT`` si no es cadena.
+            AppValidationError: ``SOCIAL_EMAIL_FORMAT_INVALID`` si la sintaxis no es válida.
+        """
         # Valida correo electrónico social.
         if valor is None:
             return None
@@ -1703,7 +2639,25 @@ class UsuarioAuthSocial(Base):
 
     @validates("nombre_social")
     def validar_nombre_social(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida nombre social."""
+        """Valida el nombre que el proveedor social devolvió para el usuario.
+
+        Admite ``None``. Cuando hay valor, aplica la terna estándar
+        (tipo, no vacío, longitud <= 120). No aplica la misma política
+        restrictiva de caracteres que ``Usuario.nombre_real`` porque los
+        proveedores pueden devolver nombres con caracteres que nuestra
+        regex interna no admitiría (p. ej. caracteres CJK), y rechazar
+        eso rompería registros legítimos.
+
+        Args:
+            key: nombre del atributo.
+            valor: nombre social o ``None``.
+
+        Returns:
+            Nombre recortado si pasa, ``None`` si se pasó ``None``.
+
+        Raises:
+            AppValidationError: ``SOCIAL_NAME_MUST_BE_STRING``, ``SOCIAL_NAME_EMPTY`` o ``SOCIAL_NAME_TOO_LONG``.
+        """
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -1717,7 +2671,21 @@ class UsuarioAuthSocial(Base):
 
     @validates("avatar_url")
     def validar_avatar_url(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida avatar URL."""
+        """Valida la URL del avatar que devuelve el proveedor social.
+
+        Delega en ``_validar_url_http_opcional``: exige cadena y esquema
+        ``http``/``https`` con tope de 2048 caracteres.
+
+        Args:
+            key: nombre del atributo.
+            valor: URL o ``None``.
+
+        Returns:
+            URL recortada si pasa, ``None`` si no había.
+
+        Raises:
+            AppValidationError: ``SOCIAL_AVATAR_URL_MUST_BE_TEXT``, ``SOCIAL_AVATAR_URL_TOO_LONG`` o ``SOCIAL_AVATAR_URL_INVALID``.
+        """
         return _validar_url_http_opcional(
             valor,
             "avatar_url",
@@ -1729,7 +2697,20 @@ class UsuarioAuthSocial(Base):
 
     @validates("creada_en", "ultimo_login_en")
     def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
-        """Valida fechas."""
+        """Normaliza a UTC las columnas de timestamp del vínculo social.
+
+        Cubre ``creada_en`` (cuándo se vinculó la cuenta) y
+        ``ultimo_login_en`` (cuándo fue el último login social). Garantizar
+        UTC aquí evita comparaciones ambiguas al listar cuentas por
+        "último uso" o purgar vínculos inactivos.
+
+        Args:
+            key: nombre del atributo.
+            valor: ``datetime`` o ``None``.
+
+        Returns:
+            ``datetime`` en UTC, o ``None``.
+        """
         return _normalizar_datetime_utc(valor)
 
 
@@ -1817,7 +2798,23 @@ class SesionRefresh(Base):
 
     @validates("usuario_id")
     def validar_usuario_id(self, key: str, valor: int) -> int:
-        """Valida usuario identificador."""
+        """Valida el ``usuario_id`` dueño del refresh token.
+
+        Entero positivo, mismas reglas que las demás tablas. Los refresh
+        tokens se indexan por usuario para que el logout global
+        (``_limpiar_sesiones_refresh_usuario``) pueda purgar todas las
+        sesiones de un usuario de una sola query.
+
+        Args:
+            key: nombre del atributo.
+            valor: id del usuario.
+
+        Returns:
+            El mismo valor si pasa.
+
+        Raises:
+            AppValidationError: ``USER_ID_MUST_BE_INTEGER`` o ``USER_ID_MUST_BE_POSITIVE``.
+        """
         if not isinstance(valor, int):
             raise AppValidationError(
                 "Error: usuario_id debe ser un entero", "USER_ID_MUST_BE_INTEGER"
@@ -1830,7 +2827,26 @@ class SesionRefresh(Base):
 
     @validates("jti", "familia_id", "reemplazada_por_jti")
     def validar_ids_sesion(self, key: str, valor: Optional[str]) -> Optional[str]:
-        """Valida identificadores sesion."""
+        """Valida los identificadores de sesión ``jti``, ``familia_id`` y ``reemplazada_por_jti``.
+
+        El ``jti`` es el id único del refresh token individual; ``familia_id``
+        agrupa todos los tokens derivados del mismo login (para revocar
+        toda la familia ante reuso sospechoso); ``reemplazada_por_jti`` es
+        opcional y apunta al token que sustituyó al actual tras una
+        rotación. Los tres comparten el mismo validador porque siguen las
+        mismas reglas: texto no vacío de hasta 64 caracteres (hex de un
+        ``uuid4().hex``).
+
+        Args:
+            key: nombre del atributo.
+            valor: identificador o ``None``.
+
+        Returns:
+            Id recortado o ``None`` si entró ``None`` (solo permitido en ``reemplazada_por_jti``).
+
+        Raises:
+            AppValidationError: ``SESSION_IDENTIFIER_MUST_BE_STRING``, ``SESSION_IDENTIFIER_EMPTY`` o ``SESSION_IDENTIFIER_TOO_LONG``.
+        """
         if valor is None:
             return None
         return _validar_texto_no_vacio(
@@ -1844,7 +2860,27 @@ class SesionRefresh(Base):
 
     @validates("token_hash")
     def validar_token_hash(self, key: str, valor: str) -> str:
-        """Valida token hash."""
+        """Valida que el hash del refresh token sea un SHA-256 hexadecimal obligatorio.
+
+        La columna nunca guarda el refresh token en claro: el servicio lo
+        hashea con HMAC-SHA256 antes de persistir, usando
+        ``settings.REFRESH_HASH_SECRET``. Este validator delega en
+        ``_validar_hex64_opcional`` y después fuerza no-nulo porque
+        ``token_hash`` sí es obligatorio (aunque el helper admite ``None``
+        por diseño para reutilizarlo desde otros campos opcionales).
+
+        Args:
+            key: nombre del atributo.
+            valor: hash SHA-256 hexadecimal.
+
+        Returns:
+            Hash en minúsculas.
+
+        Raises:
+            AppValidationError: ``TOKEN_HASH_MUST_BE_STRING`` si no es cadena.
+            AppValidationError: ``TOKEN_HASH_INVALID`` si no coincide con el patrón hex64.
+            AppValidationError: ``TOKEN_HASH_REQUIRED`` si llega ``None``.
+        """
         resultado = _validar_hex64_opcional(
             valor,
             "token_hash",
@@ -1859,7 +2895,25 @@ class SesionRefresh(Base):
 
     @validates("creada_en", "ultimo_uso_en", "expira_en", "revocada_en")
     def validar_fechas(self, key: str, valor: Optional[datetime]) -> Optional[datetime]:
-        """Valida fechas."""
+        """Normaliza a UTC las columnas temporales y exige ``expira_en`` presente.
+
+        Cubre ``creada_en``, ``ultimo_uso_en``, ``expira_en`` y
+        ``revocada_en``. El único obligatorio es ``expira_en``: sin fecha
+        de expiración el token sería válido para siempre, lo cual es
+        negado por diseño de seguridad. Los demás pueden ser ``None``
+        (``ultimo_uso_en`` hasta el primer uso, ``revocada_en`` mientras
+        siga vivo).
+
+        Args:
+            key: nombre del atributo.
+            valor: ``datetime`` o ``None``.
+
+        Returns:
+            ``datetime`` en UTC, o ``None`` para las columnas opcionales.
+
+        Raises:
+            AppValidationError: ``EXPIRES_AT_REQUIRED`` si ``key == 'expira_en'`` y ``valor is None``.
+        """
         valor = _normalizar_datetime_utc(valor)
 
         if key == "expira_en" and valor is None:
