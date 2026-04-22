@@ -1,6 +1,10 @@
 # tests/test_access_service.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Verifica la lógica de autenticación persistente y recuperación de acceso.
+
+Cubre búsquedas de usuario, creación y refresco de sesiones, revocación de
+tokens, emisión de códigos de recuperación y reseteo seguro de contraseña.
+"""
 
 # Cubre todas las funciones públicas de services/access_service.py:
 # buscar_por_identificador, crear_sesion_login,
@@ -569,11 +573,17 @@ class TestGenerarCodigoRecuperacion:
     async def test_respuesta_identica_email_exista_o_no(self):
         """No debe filtrarse si el email está registrado o no."""
         # Verifica que respuesta identica correo electrónico exista o no.
+        usuario = MagicMock()
+        usuario.id = 1
+        usuario.codigo_recuperacion = None
+        usuario.codigo_expiracion = None
+
         db_existe = AsyncMock()
         db_existe.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=MagicMock())
-            )
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+            ]
         )
         db_existe.commit = AsyncMock()
 

@@ -1,6 +1,11 @@
 # scripts/seed_fake_data.py
 
-"""Incluye un script de apoyo para tareas del proyecto."""
+"""Genera un conjunto amplio e idempotente de usuarios y actividades demo.
+
+Se usa para poblar entornos locales con registros verosímiles, pasando por
+los mismos servicios y validaciones del backend para detectar regresiones
+en esquemas, moderación, cálculos y persistencia.
+"""
 
 from __future__ import annotations
 
@@ -71,7 +76,11 @@ random.seed(SEED)
 
 
 class RutaSeed(TypedDict):
-    """Representa ruta semilla."""
+    """Describe la forma exacta de cada ruta base usada en la semilla.
+
+    El ``TypedDict`` obliga a que cada plantilla incluya todas las métricas que
+    exige ``GuardarActividad``, evitando olvidar campos al ampliar el seed.
+    """
 
     nombre: str
     tipo: TipoActividad
@@ -93,7 +102,11 @@ class RutaSeed(TypedDict):
 
 
 def provincia_safe(*names: str) -> ProvinciaEspaña:
-    """Gestiona provincia safe."""
+    """Resuelve una provincia del enum aceptando varios nombres candidatos.
+
+    Se usa para absorber diferencias de acentos o alias históricos del enum sin
+    romper la semilla cuando cambia la representación textual de una provincia.
+    """
     for name in names:
         if hasattr(ProvinciaEspaña, name):
             return getattr(ProvinciaEspaña, name)
@@ -545,17 +558,29 @@ RUTAS_BASE: list[RutaSeed] = [
 
 
 def ahora_utc() -> datetime:
-    """Gestiona ahora utc."""
+    """Devuelve el instante actual con zona horaria UTC.
+
+    Centraliza la obtención de tiempo para que todas las fechas derivadas del
+    seed partan de la misma convención temporal.
+    """
     return datetime.now(UTC)
 
 
 def fecha_aceptacion_base(indice: int) -> datetime:
-    """Gestiona fecha aceptacion base."""
+    """Calcula una fecha de aceptación de términos estable para cada usuario.
+
+    Escalona ligeramente las marcas temporales para que el dataset no quede con
+    veinte aceptaciones idénticas a la vez.
+    """
     return datetime(2026, 1, 1, 9, 0, tzinfo=UTC) + timedelta(days=indice)
 
 
 def fecha_actividad(indice_usuario: int, indice_actividad: int) -> datetime:
-    """Gestiona fecha actividad."""
+    """Distribuye las actividades de un usuario a lo largo del tiempo.
+
+    Combina índice de usuario e índice de actividad para repartir el histórico
+    de forma realista y reproducible entre distintos perfiles seed.
+    """
     base = datetime(2026, 1, 5, 7, 30, tzinfo=UTC)
     return base + timedelta(
         days=(indice_usuario * 3) + indice_actividad,
@@ -564,12 +589,20 @@ def fecha_actividad(indice_usuario: int, indice_actividad: int) -> datetime:
 
 
 def generar_password(indice: int) -> str:
-    """Genera password."""
+    """Genera la contraseña conocida asociada a cada usuario semilla.
+
+    El formato permanece determinista para facilitar pruebas manuales y acceso
+    rápido a cualquier cuenta demo del entorno local.
+    """
     return f"Prueba{indice:02d}-"
 
 
 def generar_email(indice: int) -> str:
-    """Genera correo electrónico."""
+    """Construye el email único de cada cuenta de prueba.
+
+    Mantiene el patrón ``pruebaNN@prueba.com`` para que el cleanup pueda
+    identificar fácilmente los registros que debe eliminar.
+    """
     return f"prueba{indice:02d}@prueba.com"
 
 
@@ -578,19 +611,31 @@ def derivar_objetivo_semanal(
     altura: int,
     peso: float,
 ) -> int:
-    """Gestiona derivar objetivo semanal."""
+    """Calcula un objetivo semanal plausible a partir del perfil semilla.
+
+    La función introduce variedad entre usuarios sin salir de rangos coherentes
+    con el tipo de actividad dominante y el nivel esperado.
+    """
     base = 45000 if tipo_preferente == TipoActividad.CAMINAR else 60000
     ajuste = ((altura - 160) * 200) + int((peso - 60) * 150)
     return max(10000, min(2000000, base + ajuste))
 
 
 def derivar_objetivo_mensual(objetivo_semanal: int) -> int:
-    """Gestiona derivar objetivo mensual."""
+    """Escala el objetivo semanal a su equivalente mensual orientativo.
+
+    Se usa para poblar el perfil con metas consistentes entre sí sin duplicar la
+    lógica de cálculo en varios puntos del script.
+    """
     return max(10000, min(2000000, objetivo_semanal * 4))
 
 
 def construir_registro(indice: int) -> schemas.Registro:
-    """Construye registro."""
+    """Convierte una entrada base en un ``schemas.Registro`` válido.
+
+    Aplica todos los campos exigidos por el flujo real de alta para que los
+    usuarios seed recorran las mismas validaciones que un registro normal.
+    """
     # Construye registro.
     username, nombre_real, genero, provincia = USUARIOS_BASE[indice - 1]
 
@@ -614,7 +659,11 @@ def construir_registro(indice: int) -> schemas.Registro:
 def construir_actividad(
     ruta: RutaSeed, fecha_ruta: datetime
 ) -> schemas.GuardarActividad:
-    """Construye actividad."""
+    """Monta un ``GuardarActividad`` completo a partir de una ruta seed.
+
+    Normaliza tipos, calcula la duración total y rellena las métricas derivadas
+    que el servicio de actividades espera recibir ya validadas.
+    """
     # Construye actividad.
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
 
@@ -624,6 +673,7 @@ def construir_actividad(
         ruta_mapa_url = AnyHttpUrl(raw_url)
 
     return schemas.GuardarActividad(
+        client_local_id=None,
         tipo=ruta["tipo"],
         distancia=int(ruta["distancia"]),
         duracion_total=duracion_total,
@@ -646,7 +696,11 @@ def construir_actividad(
 
 
 async def obtener_usuario_existente(db, email: str, username: str):
-    """Obtiene usuario existente."""
+    """Busca si la cuenta seed ya existe por email o nombre de usuario.
+
+    Permite que el script sea idempotente y reutilice usuarios previamente
+    creados en vez de fallar por duplicados al reejecutarse.
+    """
     result = await db.execute(
         select(database.Usuario).where(
             and_(
@@ -659,7 +713,11 @@ async def obtener_usuario_existente(db, email: str, username: str):
 
 
 async def obtener_o_crear_usuario(db, indice: int):
-    """Obtiene o crear usuario."""
+    """Recupera un usuario seed o lo registra si aún no está en la base.
+
+    La creación se delega al servicio real de usuarios para conservar hashing,
+    moderación y comprobaciones de duplicidad.
+    """
     registro = construir_registro(indice)
 
     existente = await obtener_usuario_existente(
@@ -700,7 +758,11 @@ async def obtener_o_crear_usuario(db, indice: int):
 
 
 async def contar_actividades_usuario(db, usuario_id: int) -> int:
-    """Gestiona contar actividades usuario."""
+    """Cuenta cuántas actividades tiene actualmente un usuario seed.
+
+    Se usa para saber si faltan registros por crear y evitar inserciones ciegas
+    cuando el entorno ya fue poblado parcialmente.
+    """
     result = await db.execute(
         select(database.Actividad.id).where(database.Actividad.usuario_id == usuario_id)
     )
@@ -714,7 +776,11 @@ async def actividad_ya_existe(
     distancia: int,
     fecha_ruta: datetime,
 ) -> bool:
-    """Gestiona actividad ya existe."""
+    """Comprueba si una actividad equivalente ya fue persistida para el usuario.
+
+    La deduplicación se basa en fecha, tipo y distancia, suficientes para no
+    repetir entradas del seed al relanzar el script.
+    """
     result = await db.execute(
         select(database.Actividad.id).where(
             and_(
@@ -729,7 +795,11 @@ async def actividad_ya_existe(
 
 
 async def crear_actividades_faltantes(db, usuario, indice_usuario: int) -> int:
-    """Construye actividades faltantes."""
+    """Genera solo las actividades que todavía faltan para un usuario concreto.
+
+    Recorre el plan previsto para ese perfil, salta duplicados detectados y
+    devuelve cuántas inserciones nuevas se realizaron realmente.
+    """
     total_actual = await contar_actividades_usuario(db, usuario.id)
     faltan = max(0, ACTIVIDADES_POR_USUARIO - total_actual)
     if faltan == 0:
@@ -764,7 +834,11 @@ async def crear_actividades_faltantes(db, usuario, indice_usuario: int) -> int:
 
 
 async def seed_fake_data() -> None:
-    """Carga datos simulados de prueba."""
+    """Orquesta la carga completa del dataset demo del backend.
+
+    Inicializa la base de datos, asegura la presencia de las veinte cuentas seed
+    y completa para cada una el número objetivo de actividades.
+    """
     # Poblar la base de datos con datos simulados de prueba.
     if database.AsyncSessionLocal is None:
         database._init_db_objects()
@@ -798,7 +872,11 @@ async def seed_fake_data() -> None:
 
 
 async def main() -> None:
-    """Gestiona principal."""
+    """Expone el orquestador del seed como entrada ejecutable por consola.
+
+    Mantiene el punto de entrada separado para facilitar importaciones desde
+    otros scripts o desde futuras pruebas de integración.
+    """
     await seed_fake_data()
 
 

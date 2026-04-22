@@ -1,6 +1,10 @@
 # tests/conftest.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Define fixtures y configuración compartida para la suite de tests.
+
+Centraliza dependencias reutilizables para mantener los módulos de prueba
+centrados en sus escenarios y reducir duplicación de montaje.
+"""
 
 # Variables de entorno para el entorno de test.
 # Los secretos JWT deben tener al menos 32 bytes para HS256 (RFC 7518 §3.2).

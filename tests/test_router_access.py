@@ -1,6 +1,10 @@
 # tests/test_router_access.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Verifica el contrato HTTP del router de acceso y recuperación de cuenta.
+
+Incluye validación de cabeceras de sesión de app, payloads, errores públicos
+y delegación correcta a los servicios de autenticación.
+"""
 
 # Pruebas de integración para routers/access.py usando TestClient.
 # Cubre: /handshake, /login, /token/refresh, /logout, /password/solicitar, /password/confirmar.

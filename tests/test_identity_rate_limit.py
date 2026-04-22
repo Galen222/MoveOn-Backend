@@ -1,6 +1,10 @@
 # tests/test_identity_rate_limit.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Comprueba el rate limit en memoria aplicado sobre identidades lógicas.
+
+La suite valida el parser de límites, la purga de buckets y la aplicación
+por scopes cuando la feature flag está activada.
+"""
 
 import time
 import pytest

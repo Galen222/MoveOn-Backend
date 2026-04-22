@@ -1,6 +1,11 @@
 # scripts/seed_aportillo.py
 
-"""Incluye un script de apoyo para tareas del proyecto."""
+"""Genera actividades realistas para la cuenta de demostración ``aportillo``.
+
+Parte de plantillas manuales y les aplica variaciones controladas para crear
+un histórico suficiente sin introducir métricas incoherentes respecto a las
+restricciones del backend.
+"""
 
 from __future__ import annotations
 
@@ -304,12 +309,10 @@ def derivar_ritmo_maximo(
     velocidad_max_x100: int,
     tipo: TipoActividad,
 ) -> int:
-    """Deriva un ritmo máximo razonable para datos semilla.
+    """Calcula un ritmo máximo plausible a partir del ritmo medio y la velocidad pico.
 
-    El backend persistente ahora guarda ritmo máximo además del ritmo medio.
-    En los semillas evitamos valores imposibles partiendo de la velocidad máxima
-    y acotando el resultado para que sea mejor que el ritmo medio en movimiento,
-    pero sin producir picos absurdos por ruido.
+    El objetivo es poblar el nuevo campo persistido sin fabricar valores imposibles,
+    acotando la mejora máxima según si la actividad es correr o andar.
     """
     # Gestiona derivar ritmo maximo.
     ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
@@ -332,11 +335,16 @@ def derivar_ritmo_maximo(
 
 
 def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
-    """Convierte el diccionario de la semilla en una carga útil validada."""
+    """Transforma un diccionario del plan en un payload ``GuardarActividad`` válido.
+
+    Recalcula la duración total y rellena ``ritmo_maximo`` cuando la plantilla no
+    lo trae explícito, reutilizando la derivación coherente del propio script.
+    """
     # Construye actividad.
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
 
     return schemas.GuardarActividad(
+        client_local_id=None,
         tipo=ruta["tipo"],
         distancia=int(ruta["distancia"]),
         duracion_total=duracion_total,
@@ -366,7 +374,11 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
 
 
 async def obtener_usuario_aportillo(db):
-    """Busca el usuario existente 'aportillo' de forma case-insensitive."""
+    """Localiza la cuenta ``aportillo`` ignorando diferencias de mayúsculas.
+
+    Así el seed sigue funcionando aunque el nombre se haya almacenado con otro
+    case en la base de datos de desarrollo.
+    """
     result = await db.execute(
         select(database.Usuario).where(
             func.lower(database.Usuario.nombre_usuario) == TARGET_USERNAME.lower()
@@ -376,7 +388,11 @@ async def obtener_usuario_aportillo(db):
 
 
 async def actividad_ya_existe(db, usuario_id: int, ruta: dict) -> bool:
-    """Evita duplicados obvios cuando se relanza el seed."""
+    """Detecta si ya hay una actividad equivalente en la cuenta objetivo.
+
+    Usa usuario, fecha, tipo y distancia como huella suficiente para evitar
+    duplicados visibles cuando el script se ejecuta varias veces.
+    """
     existente = await db.execute(
         select(database.Actividad.id).where(
             and_(
@@ -391,7 +407,11 @@ async def actividad_ya_existe(db, usuario_id: int, ruta: dict) -> bool:
 
 
 async def crear_actividades_aportillo() -> None:
-    """Inicializa la BD y crea 30 actividades completas para aportillo."""
+    """Genera el histórico planificado para ``aportillo`` usando el servicio real.
+
+    Inicializa la base, valida que la cuenta exista, omite rutas repetidas y va
+    informando por consola de cada inserción o salto realizado.
+    """
     # Construye actividades aportillo.
     await database.init_db()
 

@@ -1,6 +1,10 @@
 # tests/test_user_service.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Cubre la lógica de negocio del servicio principal de usuarios.
+
+Incluye alta, lectura de perfil, actualización, búsqueda pública, ranking y
+eliminación de cuenta con sus efectos asociados.
+"""
 
 # Pruebas para services/user_service.py.
 # Cubre: registrar_nuevo_usuario, obtener_perfil, actualizar_perfil_usuario,

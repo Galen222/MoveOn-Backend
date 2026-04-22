@@ -1,6 +1,10 @@
 # tests/test_calculos.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Comprueba las utilidades de cálculo derivadas del dominio de actividad.
+
+Se centra en los puntos de nivel para asegurar que la gamificación mantiene
+la progresión esperada ante cambios futuros.
+"""
 
 # Pruebas unitarias para utils/calculos.py.
 # La lógica es simple (1000m = 1 punto) pero es la base del ranking,

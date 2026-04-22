@@ -1,6 +1,10 @@
 # tests/test_request_size.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Valida el middleware que limita el tamaño de los cuerpos HTTP entrantes.
+
+La suite comprueba respuestas tempranas, streaming sin ``Content-Length`` y
+casos de desconexión del cliente sin bucles ni fugas de estado.
+"""
 
 from __future__ import annotations
 

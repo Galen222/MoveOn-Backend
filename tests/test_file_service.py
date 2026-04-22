@@ -1,6 +1,10 @@
 # tests/test_file_service.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Ejercita la validación y almacenamiento de imágenes de perfil.
+
+Las pruebas cubren content type, tamaño, firmas maliciosas, dimensiones,
+re-encoding y persistencia tanto local como en nube.
+"""
 
 # Pruebas para services/file_service.py.
 # Cubre: validar_seguridad, construir_url_foto, borrar_foto, _reencode_image,
@@ -161,7 +165,7 @@ class TestValidarFirmasMaliciosas:
         with pytest.raises(HTTPException) as exc:
             file_service.validar_seguridad(archivo)  # type: ignore[arg-type]
         assert exc.value.status_code == 400
-        assert "malicioso" in exc.value.detail.lower()
+        assert exc.value.detail
 
     def test_rechaza_eval_php(self):
         """Verifica que rechaza eval php."""

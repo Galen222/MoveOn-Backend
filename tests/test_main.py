@@ -1,6 +1,10 @@
 # tests/test_main.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Comprueba los endpoints de salud y arranque expuestos por FastAPI.
+
+La suite protege la disponibilidad mínima del servicio, incluyendo root,
+favicon y checks ``healthz``/``readyz``.
+"""
 
 import pytest
 from fastapi.testclient import TestClient

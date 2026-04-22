@@ -1,6 +1,11 @@
 # scripts/cleanup_fake_data.py
 
-"""Incluye un script de apoyo para tareas del proyecto."""
+"""Elimina exclusivamente los datos simulados creados por el seed general.
+
+El script localiza a los usuarios de prueba por email o nombre de usuario,
+borra primero sus actividades y sesiones refresh para respetar la
+integridad referencial y, por último, elimina las cuentas semilla.
+"""
 
 from __future__ import annotations
 
@@ -62,7 +67,12 @@ USERNAMES_FAKE = [
 
 
 async def cleanup_fake_data() -> None:
-    """Limpia los datos simulados de prueba."""
+    """Borra de la base de datos el dataset demo generado por el seed masivo.
+
+    Inicializa la sesión si todavía no existe, localiza primero a los usuarios
+    objetivo y calcula cuántas actividades, sesiones refresh y cuentas se van a
+    eliminar antes de ejecutar el borrado transaccional.
+    """
     # Eliminar los datos simulados creados para las pruebas.
     if database.AsyncSessionLocal is None:
         database._init_db_objects()
@@ -151,7 +161,11 @@ async def cleanup_fake_data() -> None:
 
 
 async def main() -> None:
-    """Gestiona principal."""
+    """Sirve como punto de entrada CLI del script de limpieza.
+
+    Mantiene separada la función principal para poder reutilizarla o probarla
+    sin depender del bloque ``if __name__ == "__main__"``.
+    """
     await cleanup_fake_data()
 
 

@@ -1,6 +1,10 @@
 # tests/test_config.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Valida las reglas de configuración crítica cargada desde entorno.
+
+Las pruebas se enfocan en la URL pública y en los secretos necesarios para
+que la aplicación arranque con parámetros seguros y coherentes.
+"""
 
 # Pruebas para los validadores de config.py (Settings).
 # Cubre: parse_cors_origins, validar_public_base_url,

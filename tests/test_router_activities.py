@@ -1,6 +1,10 @@
 # tests/test_router_activities.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Comprueba el endpoint HTTP que registra actividades del usuario autenticado.
+
+La suite cubre validación de entrada, dependencia de autenticación y forma
+de la respuesta devuelta por el router.
+"""
 
 from datetime import datetime, timezone
 from types import SimpleNamespace

@@ -1,6 +1,10 @@
 # tests/test_ip_rate_limit.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Valida la extracción robusta de IP cliente detrás de proxies de confianza.
+
+Se cubren cabeceras reenviadas, conexiones directas y casos ambiguos para
+que el rate limit no dependa de entradas mal formadas.
+"""
 
 # Pruebas para ip_rate_limit.py.
 # Cubre: detección de proxy confiable (LAN/WAN), extracción de IP

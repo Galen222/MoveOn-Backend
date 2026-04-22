@@ -1,6 +1,10 @@
 # tests/test_middlewares.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Ejercita los middlewares transversales registrados por la aplicación.
+
+Se validan request id, logging asociado y cabeceras de seguridad generadas
+a partir de la configuración activa.
+"""
 
 # Cubre los dos middlewares de infraestructura:
 # - RequestContextMiddleware  (middlewares/petición_context.py)

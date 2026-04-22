@@ -1,6 +1,10 @@
 # tests/test_activities_service.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Ejercita el alta de actividades y la actualización de agregados del usuario.
+
+Las pruebas validan idempotencia, persistencia de métricas y manejo de
+errores en el servicio que registra actividades cerradas.
+"""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -48,6 +52,7 @@ def _make_datos() -> schemas.GuardarActividad:
         auto_pausas=1,
         pausas_manuales=1,
         alertas_velocidad=0,
+        ruta_polilinea=None,
         ruta_mapa_url=None,
         fecha_ruta=_ahora() - timedelta(minutes=5),
     )
@@ -131,7 +136,12 @@ class TestCrearActividad:
         # Verifica que persiste metricas enriquecidas.
         usuario = _make_usuario(total_metros=1000, total_calorias=50)
         db = AsyncMock()
-        db.execute = _mock_execute_one(usuario)
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=usuario)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+            ]
+        )
         db.add = MagicMock()
         db.commit = AsyncMock()
         db.refresh = AsyncMock()

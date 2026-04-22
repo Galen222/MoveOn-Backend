@@ -1,6 +1,10 @@
 # tests/test_email_templates.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Verifica el HTML de las plantillas de correo usadas por la aplicación.
+
+La suite protege la estructura mínima y el contenido esperado del email de
+recuperación para evitar regresiones visuales o de copy.
+"""
 
 # Pruebas para services/email_templates.py.
 # Verifica que la plantilla HTML contiene los datos dinámicos correctos.

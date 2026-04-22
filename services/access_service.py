@@ -548,8 +548,7 @@ async def cerrar_sesion(db: AsyncSession, refresh_token: str):
     try:
         payload = auth.decodificar_token_refresh(refresh_token)
     except HTTPException as exc:
-        detail = exc.detail if isinstance(exc.detail, dict) else {}
-        if detail.get("error_code") != "REFRESH_TOKEN_INVALID_OR_EXPIRED":
+        if getattr(exc, "error_code", None) != "REFRESH_TOKEN_INVALID_OR_EXPIRED":
             raise
         logger.info(
             "logout_idempotente_refresh_invalido",

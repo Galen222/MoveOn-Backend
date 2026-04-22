@@ -1,5 +1,11 @@
 # tests/test_logging_config.py
 
+"""Verifica los filtros y formateadores del subsistema de logging.
+
+Estas pruebas comprueban la inyección del ``request_id``, la salida JSON y
+texto plano, y la configuración final de loggers según el modo elegido.
+"""
+
 # Cubre:
 # - RequestIdFilter
 # - JsonPipeFormatter
@@ -18,11 +24,27 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def strip_ansi(text: str) -> str:
+    """Elimina secuencias ANSI para poder comparar texto de consola en bruto.
+
+    Los tests del formateador de consola verifican el contenido semántico del
+    log sin depender de códigos de color.
+    """
     return ANSI_RE.sub("", text)
 
 
 class TestRequestIdFilter:
+    """Comprueba el filtro que inyecta ``request_id`` en cada ``LogRecord``.
+
+    Así se garantiza que el resto de formateadores pueda apoyarse en ese dato
+    aunque el mensaje original no lo incluya.
+    """
+
     def test_inyecta_request_id_en_record(self, monkeypatch):
+        """Verifica que el filtro copia al record el identificador expuesto por el contexto.
+
+        Este comportamiento es la base para correlacionar todas las líneas de log
+        de una misma petición HTTP.
+        """
         monkeypatch.setattr(logging_config, "get_request_id", lambda: "req-123")
 
         record = logging.LogRecord(
@@ -41,7 +63,18 @@ class TestRequestIdFilter:
 
 
 class TestJsonPipeFormatter:
+    """Cubre la serialización estructurada en JSON del logger de aplicación.
+
+    Las pruebas validan campos base, extras permitidos y cómo se representa una
+    traza cuando el record incluye ``exc_info``.
+    """
+
     def test_formatea_json_sin_display_y_con_extras(self):
+        """Comprueba que el formatter emite JSON limpio con extras relevantes del record.
+
+        Además verifica que no se cuele el campo ``display`` usado solo en otros
+        formatos de salida.
+        """
         formatter = logging_config.JsonPipeFormatter()
 
         record = logging.LogRecord(
@@ -71,6 +104,11 @@ class TestJsonPipeFormatter:
         assert "display" not in payload
 
     def test_incluye_exception_si_hay_exc_info(self):
+        """Asegura que las excepciones viajan serializadas cuando el record trae ``exc_info``.
+
+        El objetivo es no perder la traza en logs estructurados consumidos por
+        plataformas externas.
+        """
         formatter = logging_config.JsonPipeFormatter()
 
         try:
@@ -98,7 +136,18 @@ class TestJsonPipeFormatter:
 
 
 class TestConsolePipeFormatter:
+    """Comprueba el formatter de consola inspirado en el estilo de Uvicorn.
+
+    La suite protege la línea legible para desarrollo, incluyendo extras útiles
+    y la representación de excepciones.
+    """
+
     def test_formatea_texto_plano_tipo_uvicorn_con_extras(self):
+        """Verifica la línea de texto plano generada para un record informativo con extras.
+
+        Se fija el timestamp para que la aserción compare solo el formato final y
+        no la hora real de ejecución.
+        """
         formatter = logging_config.ConsolePipeFormatter()
         formatter.formatTime = lambda record, datefmt=None: "2026-03-08 13:10:00"
 
@@ -122,6 +171,10 @@ class TestConsolePipeFormatter:
         )
 
     def test_incluye_exception_si_hay_exc_info(self):
+        """Comprueba que una excepción se adjunta al formato de consola cuando existe ``exc_info``.
+
+        Esto evita que el modo legible oculte información clave de depuración.
+        """
         formatter = logging_config.ConsolePipeFormatter()
         formatter.formatTime = lambda record, datefmt=None: "2026-03-08 13:10:00"
 
@@ -149,6 +202,11 @@ class TestConsolePipeFormatter:
         assert "ValueError: boom" in out_clean
 
     def test_no_incluye_task_name_como_extra(self):
+        """Asegura que ``task_name`` no se duplica como extra visible en consola.
+
+        El formatter debe reservar ese dato para el formato interno sin ensuciar
+        la línea principal que ve el desarrollador.
+        """
         formatter = logging_config.ConsolePipeFormatter()
         formatter.formatTime = lambda record, datefmt=None: "2026-03-08 13:10:00"
 
@@ -170,7 +228,18 @@ class TestConsolePipeFormatter:
 
 
 class TestSetupLogging:
+    """Ejercita la configuración global de loggers y handlers del proyecto.
+
+    Estas pruebas comprueban que ``setup_logging`` monta el formatter correcto
+    según el modo JSON o consola.
+    """
+
     def test_configura_logger_app_con_formatter_json(self, monkeypatch):
+        """Verifica que el logger de aplicación recibe el formatter JSON en modo estructurado.
+
+        Así se protege la configuración usada en entornos donde los logs se
+        consumen por máquinas.
+        """
         monkeypatch.setattr(logging_config.settings, "LOG_LEVEL", "DEBUG")
         monkeypatch.setattr(logging_config.settings, "LOG_FORMAT", "json")
 
@@ -202,6 +271,10 @@ class TestSetupLogging:
             logger.propagate = old_propagate
 
     def test_configura_logger_app_con_formatter_console(self, monkeypatch):
+        """Comprueba que el logger monta el formatter legible cuando se pide modo consola.
+
+        Con ello se evita una configuración cruzada entre producción y desarrollo.
+        """
         monkeypatch.setattr(logging_config.settings, "LOG_LEVEL", "INFO")
         monkeypatch.setattr(logging_config.settings, "LOG_FORMAT", "console")
 

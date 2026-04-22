@@ -1,6 +1,10 @@
 # tests/test_email_service.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Cubre la construcción y el envío de correos transaccionales del backend.
+
+Revisa clasificación de errores SMTP, composición de mensajes y flujos de
+recuperación tanto clásica como asociada a inicio de sesión con Google.
+"""
 
 import logging
 from contextlib import contextmanager

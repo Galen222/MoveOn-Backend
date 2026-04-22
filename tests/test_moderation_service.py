@@ -1,6 +1,10 @@
 # tests/test_moderation_service.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Comprueba el servicio de moderación textual para usernames y nombres reales.
+
+Las pruebas cubren diccionarios, tokens reservados, caché y errores de carga
+para garantizar un bloqueo consistente y explicable.
+"""
 
 from __future__ import annotations
 

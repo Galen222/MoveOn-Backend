@@ -1,6 +1,10 @@
 # tests/test_schemas.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Verifica los modelos Pydantic más sensibles del dominio de actividades.
+
+Se revisan límites, defaults y validaciones cruzadas del payload usado al
+guardar una actividad cerrada.
+"""
 
 from datetime import datetime, timedelta, timezone
 

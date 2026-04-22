@@ -1,6 +1,10 @@
 # tests/test_validators.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Ejercita los validadores puros usados por esquemas y servicios.
+
+La suite se centra en rangos, formatos y mensajes de error para impedir
+regresiones silenciosas en las reglas de entrada del backend.
+"""
 
 # Pruebas unitarias para utils/validators.py.
 # Son pruebas puros: sin BD, sin red, sin fixtures async.

@@ -1,6 +1,10 @@
 # tests/test_exceptions.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Asegura que todas las excepciones públicas comparten el mismo contrato JSON.
+
+Incluye la factoría de respuestas y los handlers globales para errores HTTP,
+validación y fallos inesperados.
+"""
 
 # Pruebas para exceptions.py.
 # Cubre: error_respuesta, manejador_http_exception,

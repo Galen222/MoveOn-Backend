@@ -1,6 +1,11 @@
 # scripts/seed_galen.py
 
-"""Incluye un script de apoyo para tareas del proyecto."""
+"""Carga el histórico de rutas de prueba asociado al usuario ``Galen``.
+
+El script garantiza la existencia de la cuenta, amplía las rutas base con
+variaciones consistentes y persiste cada actividad usando la capa real de
+servicios para mantener la semilla alineada con la aplicación.
+"""
 
 from __future__ import annotations
 
@@ -301,16 +306,19 @@ RUTAS_GALEN = RUTAS_GALEN_BASE + generar_rutas_extra(50)
 
 
 def ahora_utc() -> datetime:
-    """Devuelve la fecha/hora actual en UTC."""
+    """Devuelve la hora actual en UTC para construir marcas temporales consistentes.
+
+    El seed usa siempre datetimes conscientes para no mezclar zonas horarias al
+    persistir actividades y aceptaciones de términos.
+    """
     return datetime.now(timezone.utc)
 
 
 async def obtener_usuario_existente(db):
-    """
-    Busca un usuario existente por nombre de usuario o email.
+    """Busca si el usuario semilla ya existe por username o correo electrónico.
 
-    Se usa para hacer el semilla idempotente y evitar errores por duplicados
-    si el script se ejecuta varias veces.
+    La consulta doble permite reutilizar una cuenta previa aunque se haya creado
+    manual o parcialmente antes de lanzar el script.
     """
     result = await db.execute(
         select(database.Usuario).where(
@@ -322,10 +330,10 @@ async def obtener_usuario_existente(db):
 
 
 async def obtener_o_crear_usuario_galen(db):
-    """
-    Obtiene el usuario Galen si ya existe; si no, lo crea usando el
-    servicio real de registro para que el hash de contraseña se genere
-    igual que en producción.
+    """Garantiza la existencia de la cuenta Galen antes de sembrar actividades.
+
+    Si no está creada, delega en el servicio real de registro para que el seed
+    pase por las mismas validaciones y side effects que un alta normal.
     """
     # Obtiene o crear usuario galen.
     usuario = await obtener_usuario_existente(db)
@@ -364,12 +372,10 @@ def derivar_ritmo_maximo(
     velocidad_max_x100: int,
     tipo: TipoActividad,
 ) -> int:
-    """Deriva un ritmo máximo razonable para datos semilla.
+    """Rellena ``ritmo_maximo`` con un valor creíble a partir del resto de métricas.
 
-    El backend persistente ahora guarda ritmo máximo además del ritmo medio.
-    En los semillas evitamos valores imposibles partiendo de la velocidad máxima
-    y acotando el resultado para que sea mejor que el ritmo medio en movimiento,
-    pero sin producir picos absurdos por ruido.
+    El cálculo limita mejoras exageradas y mantiene una relación razonable entre
+    ritmo medio de movimiento y velocidad máxima observada.
     """
     # Gestiona derivar ritmo maximo.
     ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
@@ -392,7 +398,11 @@ def derivar_ritmo_maximo(
 
 
 def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
-    """Construye la carga útil validada de una actividad a partir del diccionario de la semilla."""
+    """Construye el modelo validado que consumirá ``activities_service``.
+
+    Toma una ruta del seed, calcula campos derivados y garantiza que el payload
+    cumpla el esquema actual antes de persistirlo.
+    """
     # Construye actividad.
     fecha_ruta = ahora_utc() - timedelta(
         days=ruta["dias_atras"],
@@ -403,6 +413,7 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
 
     return schemas.GuardarActividad(
+        client_local_id=None,
         tipo=ruta["tipo"],
         distancia=int(ruta["distancia"]),
         duracion_total=duracion_total,
@@ -432,7 +443,11 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
 
 
 async def crear_rutas_galen() -> None:
-    """Inicializa la BD, garantiza el usuario Galen y crea las 57 rutas de prueba."""
+    """Inicializa la base, asegura al usuario Galen y crea su histórico de rutas.
+
+    El proceso es idempotente: omite duplicados ya presentes y utiliza el
+    servicio de actividades para mantener el seed alineado con producción.
+    """
     # Construye rutas galen.
     await database.init_db()
 

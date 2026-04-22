@@ -1,12 +1,17 @@
 # tests/test_auth.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Comprueba la emisión y validación de JWT usados por el backend.
+
+La suite cubre ``typ``, endurecimiento con ``iss``/``aud`` y la extracción
+del usuario autenticado a partir de credenciales Bearer.
+"""
 
 # Cubre: creación/validación de tokens, hardening JWT (iss/aud/typ),
 # y extracción del usuario actual desde credenciales Bearer.
 
 import pytest
 from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
@@ -154,55 +159,68 @@ class TestHardeningJWT:
 class TestObtenerUsuarioActual:
     """Agrupa pruebas relacionadas con obtener usuario actual."""
 
-    def test_token_valido_devuelve_usuario_id(self):
+    @pytest.mark.asyncio
+    async def test_token_valido_devuelve_usuario_id(self):
         """Verifica que token valido devuelve usuario identificador."""
         token = auth.crear_token_acceso({"sub": "123"})
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
 
-        assert auth.obtener_usuario_actual(creds) == 123
+        assert await auth.obtener_usuario_actual(creds, db) == 123
 
-    def test_rechaza_token_sin_sub(self):
+    @pytest.mark.asyncio
+    async def test_rechaza_token_sin_sub(self):
         """Verifica que rechaza token sin sub."""
         token = auth.codifica_jwt(
             {}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
         )
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        db = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
-            auth.obtener_usuario_actual(creds)
+            await auth.obtener_usuario_actual(creds, db)
 
         assert exc.value.status_code == 401
         assert "usuario válido" in exc.value.detail.lower()
 
-    def test_rechaza_token_con_sub_no_string(self):
+    @pytest.mark.asyncio
+    async def test_rechaza_token_con_sub_no_string(self):
         """Verifica que rechaza token con sub no string."""
         token = auth.codifica_jwt(
             {"sub": 99999}, auth.ACCESS_TOKEN_SECRET, timedelta(minutes=5), "access"
         )
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        db = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
-            auth.obtener_usuario_actual(creds)
+            await auth.obtener_usuario_actual(creds, db)
 
         assert exc.value.status_code == 401
 
-    def test_token_de_refresh_rechazado_en_endpoint(self):
+    @pytest.mark.asyncio
+    async def test_token_de_refresh_rechazado_en_endpoint(self):
         """Verifica que token de refresco rechazado en endpoint."""
         token = auth.crear_token_refresh(123, "jti-x", "fam-x")
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        db = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
-            auth.obtener_usuario_actual(creds)
+            await auth.obtener_usuario_actual(creds, db)
 
         assert exc.value.status_code == 401
 
-    def test_token_completamente_invalido_rechazado(self):
+    @pytest.mark.asyncio
+    async def test_token_completamente_invalido_rechazado(self):
         """Verifica que token completamente invalido rechazado."""
         creds = HTTPAuthorizationCredentials(
             scheme="Bearer", credentials="token.basura.fake"
         )
+        db = AsyncMock()
 
         with pytest.raises(HTTPException) as exc:
-            auth.obtener_usuario_actual(creds)
+            await auth.obtener_usuario_actual(creds, db)
 
         assert exc.value.status_code == 401

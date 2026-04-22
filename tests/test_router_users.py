@@ -1,6 +1,10 @@
 # tests/test_router_users.py
 
-"""Contiene pruebas automatizadas de este módulo."""
+"""Ejercita el router de usuarios en registro, perfil, foto, búsqueda y ranking.
+
+Las pruebas protegen tanto la validación HTTP como la integración ligera con
+los servicios que sostienen cada endpoint.
+"""
 
 # Pruebas de integración para routers/users.py usando TestClient.
 # Cubre: /registro, /perfil/informacion, /perfil/informacion/{nombre},
@@ -16,7 +20,7 @@
 import io
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -468,6 +472,15 @@ class TestFotoPerfil:
                 status_code=400, detail="Error: Solo imágenes JPG o PNG"
             )
 
+        db_mock = AsyncMock()
+        db_mock.commit = AsyncMock()
+        db_mock.rollback = AsyncMock()
+
+        async def _fake_db_error_validacion():
+            """Crea un simulacro de base de datos para errores de validación."""
+            return db_mock
+
+        app.dependency_overrides[obtener_db] = _fake_db_error_validacion
         monkeypatch.setattr(file_service, "validar_seguridad", fake_validar)
         response = self._post_foto(TestClient(app), b"basura")
         assert response.status_code == 400
@@ -484,12 +497,21 @@ class TestFotoPerfil:
             file_service, "procesar_subida", lambda a, u, raw, f=None: "temp.jpg"
         )
 
+        db_mock = AsyncMock()
+        db_mock.commit = AsyncMock()
+        db_mock.rollback = AsyncMock()
+
+        async def _fake_db_usuario_no_encontrado():
+            """Crea un simulacro de base de datos para usuario no encontrado."""
+            return db_mock
+
         async def fake_obtener(db, usuario_actual_id, for_update=False):
             """Crea un simulacro de obtener."""
             raise HTTPException(
                 status_code=404, detail="Error: Perfil de usuario no encontrado"
             )
 
+        app.dependency_overrides[obtener_db] = _fake_db_usuario_no_encontrado
         monkeypatch.setattr(user_service, "obtener_perfil", fake_obtener)
         response = self._post_foto(TestClient(app))
         assert response.status_code == 404
