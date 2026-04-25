@@ -41,4 +41,5 @@ pip-review
 # --- tests ---
 pytest
 pytest-asyncio
+pytest-cov
 httpx
