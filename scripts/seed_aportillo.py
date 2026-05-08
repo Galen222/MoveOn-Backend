@@ -1,10 +1,13 @@
-# scripts/seed_aportillo.py
+"""Genera 60 actividades de Cádiz para cuentas existentes de ``Aportillo``.
 
-"""Genera actividades realistas para la cuenta de demostración ``aportillo``.
+Configuración principal:
+- Edita ``TARGET_USERNAMES`` para poner una o varias cuentas.
+- El script NO crea usuarios; si una cuenta no existe, la omite.
+- Si una cuenta ya tiene estas seeds, no las vuelve a insertar.
 
-Parte de plantillas manuales y les aplica variaciones controladas para crear
-un histórico suficiente sin introducir métricas incoherentes respecto a las
-restricciones del backend.
+El seeder construye actividades completas y las persiste mediante
+``activities_service`` para pasar por las mismas validaciones y actualizaciones
+que la aplicación real.
 """
 
 from __future__ import annotations
@@ -18,253 +21,315 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import asyncio  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
 
-from sqlalchemy import and_, func, select  # noqa: E402
+from sqlalchemy import and_, or_, select  # noqa: E402
 
 import database  # noqa: E402
 import schemas  # noqa: E402
 from domain.enums import TipoActividad  # noqa: E402
 from services import activities_service  # noqa: E402
 
-"""
-Seeder de 30 actividades completas para el usuario existente "aportillo".
+SEED_NAME = "Aportillo"
+SEED_VERSION = "aportillo-v2-60"
+TOTAL_ACTIVIDADES = 60
 
-Objetivo:
-- NO crea el usuario; exige que ya exista en la base de datos.
-- Inserta 30 actividades completas y coherentes para pruebas manuales.
-- Las fechas están repartidas entre enero de 2026 y el 20 de marzo de 2026.
-- Reutiliza schemas.GuardarActividad + activities_service.crear_actividad()
-  para respetar validaciones, métricas y acumulados.
-- Intenta ser idempotente: si ya existe una actividad del mismo usuario con
-  la misma fecha, tipo y distancia, la omite.
+# Edita esta lista para sembrar una o varias cuentas.
+# La búsqueda es EXACTA por nombre_usuario.
+TARGET_USERNAMES = ["alvaroportillorendon9450", "aportillo", "portillotest"]
 
-Uso:
-    python scripts/seed_aportillo_activities_2026.py
-"""
-
-TARGET_USERNAME = "aportillo"
-TOTAL_ACTIVIDADES = 30
-
-# 30 fechas fijas dentro del rango pedido por el usuario.
-FECHAS_SEED = [
-    datetime(2026, 1, 2, 7, 15, tzinfo=timezone.utc),
-    datetime(2026, 1, 4, 18, 5, tzinfo=timezone.utc),
-    datetime(2026, 1, 6, 7, 25, tzinfo=timezone.utc),
-    datetime(2026, 1, 8, 19, 10, tzinfo=timezone.utc),
-    datetime(2026, 1, 10, 8, 0, tzinfo=timezone.utc),
-    datetime(2026, 1, 12, 18, 40, tzinfo=timezone.utc),
-    datetime(2026, 1, 14, 7, 35, tzinfo=timezone.utc),
-    datetime(2026, 1, 16, 19, 0, tzinfo=timezone.utc),
-    datetime(2026, 1, 18, 8, 20, tzinfo=timezone.utc),
-    datetime(2026, 1, 21, 18, 25, tzinfo=timezone.utc),
-    datetime(2026, 1, 24, 7, 10, tzinfo=timezone.utc),
-    datetime(2026, 1, 27, 19, 5, tzinfo=timezone.utc),
-    datetime(2026, 1, 30, 8, 15, tzinfo=timezone.utc),
-    datetime(2026, 2, 2, 18, 30, tzinfo=timezone.utc),
-    datetime(2026, 2, 5, 7, 45, tzinfo=timezone.utc),
-    datetime(2026, 2, 8, 18, 15, tzinfo=timezone.utc),
-    datetime(2026, 2, 11, 7, 20, tzinfo=timezone.utc),
-    datetime(2026, 2, 14, 18, 50, tzinfo=timezone.utc),
-    datetime(2026, 2, 17, 8, 10, tzinfo=timezone.utc),
-    datetime(2026, 2, 20, 19, 20, tzinfo=timezone.utc),
-    datetime(2026, 2, 23, 7, 5, tzinfo=timezone.utc),
-    datetime(2026, 2, 26, 18, 45, tzinfo=timezone.utc),
-    datetime(2026, 3, 1, 8, 5, tzinfo=timezone.utc),
-    datetime(2026, 3, 4, 19, 15, tzinfo=timezone.utc),
-    datetime(2026, 3, 7, 7, 40, tzinfo=timezone.utc),
-    datetime(2026, 3, 10, 18, 35, tzinfo=timezone.utc),
-    datetime(2026, 3, 13, 7, 30, tzinfo=timezone.utc),
-    datetime(2026, 3, 16, 19, 25, tzinfo=timezone.utc),
-    datetime(2026, 3, 18, 8, 0, tzinfo=timezone.utc),
-    datetime(2026, 3, 20, 18, 10, tzinfo=timezone.utc),
-]
-
-# Plantillas base con polilíneas válidas ya probadas en el backend.
-PLANTILLAS = [
+ACTIVIDADES_BASE = [
     {
-        "nombre": "Retiro tempo",
+        "nombre": "Cádiz paseo marítimo",
         "tipo": TipoActividad.CORRER,
-        "distancia": 3781,
-        "duracion_movimiento": 1267,
-        "duracion_parado": 45,
+        "distancia": 6200,
+        "duracion_movimiento": 2139,
+        "duracion_parado": 60,
         "duracion_pausa_manual": 0,
-        "calorias_quemadas": 272,
-        "ritmo_medio_movimiento": 335,
-        "ritmo_medio_total": 347,
-        "velocidad_media_x100": 1074,
-        "velocidad_max_x100": 1332,
+        "calorias_quemadas": 446,
+        "ritmo_medio_movimiento": 345,
+        "ritmo_medio_total": 355,
+        "velocidad_media_x100": 1043,
+        "velocidad_max_x100": 1320,
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "skuuFvgoUfEcQzE{T~HoQjQgPjZoNjWoI~AgBfRcHnFiLo@sNgG{MiJwG{EsS",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490# map=15/40.41430/-3.68490",
+        "ruta_polilinea": "okbpF|~nUg@u@u@_Aw@kA_AiAw@qAe@w@a@u@c@w@u@_A_AgB",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.50090&mlon=-6.27820# map=15/36.50090/-6.27820",
     },
     {
-        "nombre": "Madrid Río progresivo",
-        "tipo": TipoActividad.CORRER,
-        "distancia": 7935,
-        "duracion_movimiento": 2698,
-        "duracion_parado": 80,
-        "duracion_pausa_manual": 30,
-        "calorias_quemadas": 571,
-        "ritmo_medio_movimiento": 340,
-        "ritmo_medio_total": 350,
-        "velocidad_media_x100": 1059,
-        "velocidad_max_x100": 1377,
-        "auto_pausas": 1,
+        "nombre": "La Caleta suave",
+        "tipo": TipoActividad.CAMINAR,
+        "distancia": 4100,
+        "duracion_movimiento": 2870,
+        "duracion_parado": 180,
+        "duracion_pausa_manual": 60,
+        "calorias_quemadas": 226,
+        "ritmo_medio_movimiento": 700,
+        "ritmo_medio_total": 744,
+        "velocidad_media_x100": 514,
+        "velocidad_max_x100": 690,
+        "auto_pausas": 2,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310# map=15/40.40820/-3.70310",
+        "ruta_polilinea": "}_ilFf}qUe@qA_A_Bg@q@w@qA_AiAw@w@q@e@u@_Ay@uA_AuAe@q@",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.52950&mlon=-6.30870# map=15/36.52950/-6.30870",
     },
     {
-        "nombre": "Casa de Campo fondo",
+        "nombre": "Campo del Sur tempo",
         "tipo": TipoActividad.CORRER,
-        "distancia": 9543,
-        "duracion_movimiento": 3388,
-        "duracion_parado": 95,
-        "duracion_pausa_manual": 45,
-        "calorias_quemadas": 687,
-        "ritmo_medio_movimiento": 355,
-        "ritmo_medio_total": 365,
-        "velocidad_media_x100": 1014,
-        "velocidad_max_x100": 1369,
+        "distancia": 7350,
+        "duracion_movimiento": 2573,
+        "duracion_parado": 85,
+        "duracion_pausa_manual": 20,
+        "calorias_quemadas": 529,
+        "ritmo_medio_movimiento": 350,
+        "ritmo_medio_total": 362,
+        "velocidad_media_x100": 1029,
+        "velocidad_max_x100": 1348,
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": "_mtuFnowUgJwQgOwLkMgOcL_SnKwQ~RkC~RzE~MnP~HvVoAvVsI~MkH~C",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000# map=15/40.41440/-3.73000",
+        "ruta_polilinea": "gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.52760&mlon=-6.29660# map=15/36.52760/-6.29660",
     },
     {
-        "nombre": "Dehesa recovery walk",
+        "nombre": "San Fernando caños",
         "tipo": TipoActividad.CAMINAR,
-        "distancia": 6288,
-        "duracion_movimiento": 4244,
-        "duracion_parado": 120,
-        "duracion_pausa_manual": 60,
-        "calorias_quemadas": 302,
-        "ritmo_medio_movimiento": 675,
-        "ritmo_medio_total": 694,
-        "velocidad_media_x100": 533,
-        "velocidad_max_x100": 629,
+        "distancia": 5800,
+        "duracion_movimiento": 3973,
+        "duracion_parado": 210,
+        "duracion_pausa_manual": 75,
+        "calorias_quemadas": 319,
+        "ritmo_medio_movimiento": 685,
+        "ritmo_medio_total": 721,
+        "velocidad_media_x100": 526,
+        "velocidad_max_x100": 704,
         "auto_pausas": 2,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "oo~uFvouUgJcVcGgYg@k[~DaYzJwVmFsLaQ_CoTuImPeRkEmUw@qYfGaY~QmPvUmGjWbLrTfU|QhYdBxZgI~XqOzToVjNmVfGkR{DcNqIgP}A_N{@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750# map=15/40.46070/-3.70750",
+        "ruta_polilinea": "gwjkFjykWi@w@u@aA_AiAq@w@w@aAc@u@i@w@q@aA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.46460&mlon=-6.19880# map=15/36.46460/-6.19880",
     },
     {
-        "nombre": "Capricho paseo largo",
-        "tipo": TipoActividad.CAMINAR,
-        "distancia": 5069,
-        "duracion_movimiento": 3548,
-        "duracion_parado": 150,
-        "duracion_pausa_manual": 90,
-        "calorias_quemadas": 243,
-        "ritmo_medio_movimiento": 700,
-        "ritmo_medio_total": 730,
-        "velocidad_media_x100": 514,
-        "velocidad_max_x100": 596,
-        "auto_pausas": 2,
-        "pausas_manuales": 2,
-        "alertas_velocidad": 0,
-        "ruta_polilinea": "wj|uFvc}ToFwQkCgT?gTbEuRnJmOtPuHpXeA|XcFjUcKjNuOjGqQ~@oR_DgQiJmNmPcIvUcD|W~@vWbEyT~HoP|LmJpQeCxQ?lQeDzEoP{@wLwG",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640# map=15/40.44990/-3.58640",
-    },
-    {
-        "nombre": "Tío Pío series",
+        "nombre": "Chiclana Sancti Petri",
         "tipo": TipoActividad.CORRER,
-        "distancia": 5216,
-        "duracion_movimiento": 1721,
-        "duracion_parado": 40,
+        "distancia": 8900,
+        "duracion_movimiento": 3160,
+        "duracion_parado": 95,
+        "duracion_pausa_manual": 30,
+        "calorias_quemadas": 641,
+        "ritmo_medio_movimiento": 355,
+        "ritmo_medio_total": 366,
+        "velocidad_media_x100": 1014,
+        "velocidad_max_x100": 1338,
+        "auto_pausas": 1,
+        "pausas_manuales": 1,
+        "alertas_velocidad": 1,
+        "ruta_polilinea": "ixnjFz~aZa@u@u@aA_AiAq@w@w@aAa@u@u@aA_AiAw@aA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.38160&mlon=-6.20580# map=15/36.38160/-6.20580",
+    },
+    {
+        "nombre": "Valdelagrana paseo largo",
+        "tipo": TipoActividad.CAMINAR,
+        "distancia": 6400,
+        "duracion_movimiento": 4384,
+        "duracion_parado": 220,
+        "duracion_pausa_manual": 80,
+        "calorias_quemadas": 352,
+        "ritmo_medio_movimiento": 685,
+        "ritmo_medio_total": 719,
+        "velocidad_media_x100": 526,
+        "velocidad_max_x100": 700,
+        "auto_pausas": 2,
+        "pausas_manuales": 1,
+        "alertas_velocidad": 0,
+        "ruta_polilinea": "i}yrEtofYc@u@o@aA_AiAq@w@w@aAc@u@q@aAc@u@",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.58150&mlon=-6.22670# map=15/36.58150/-6.22670",
+    },
+    {
+        "nombre": "Jerez parques",
+        "tipo": TipoActividad.CORRER,
+        "distancia": 5600,
+        "duracion_movimiento": 1988,
+        "duracion_parado": 60,
         "duracion_pausa_manual": 0,
-        "calorias_quemadas": 376,
-        "ritmo_medio_movimiento": 330,
-        "ritmo_medio_total": 338,
-        "velocidad_media_x100": 1091,
-        "velocidad_max_x100": 1386,
+        "calorias_quemadas": 403,
+        "ritmo_medio_movimiento": 355,
+        "ritmo_medio_total": 366,
+        "velocidad_media_x100": 1014,
+        "velocidad_max_x100": 1310,
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "_houF~sgU_IwL{JwL_IgOrDgT~M_IvQR~MrIvGvQg@~RkHfOgJbGkHR",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880# map=15/40.38800/-3.64880",
+        "ruta_polilinea": "eulkFjzzUc@u@w@_Am@w@u@aA_AkAq@w@i@u@w@aA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.68650&mlon=-6.12610# map=15/36.68650/-6.12610",
+    },
+    {
+        "nombre": "Tarifa costa",
+        "tipo": TipoActividad.CORRER,
+        "distancia": 10200,
+        "duracion_movimiento": 3774,
+        "duracion_parado": 130,
+        "duracion_pausa_manual": 45,
+        "calorias_quemadas": 734,
+        "ritmo_medio_movimiento": 370,
+        "ritmo_medio_total": 383,
+        "velocidad_media_x100": 973,
+        "velocidad_max_x100": 1268,
+        "auto_pausas": 1,
+        "pausas_manuales": 1,
+        "alertas_velocidad": 1,
+        "ruta_polilinea": "wqmoFnyqYg@u@u@aA_AiAq@w@q@aAe@u@u@aA_AiA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.01430&mlon=-5.60440# map=15/36.01430/-5.60440",
     },
 ]
 
+ZONAS_EXTRA = [
+    "Cádiz",
+    "La Caleta",
+    "Campo del Sur",
+    "San Fernando",
+    "Chiclana",
+    "Valdelagrana",
+    "Jerez",
+    "Tarifa",
+    "El Puerto",
+    "Rota",
+    "Zahara",
+    "Conil",
+]
 
-def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
+
+def ahora_utc() -> datetime:
+    """Devuelve una referencia horaria UTC consciente de zona."""
+    return datetime.now(timezone.utc)
+
+
+def obtener_usernames_objetivo() -> tuple[str, ...]:
+    """Obtiene las cuentas objetivo desde ``TARGET_USERNAMES``.
+
+    La búsqueda en base de datos será exacta por ``nombre_usuario``. Se eliminan
+    espacios y duplicados manteniendo el orden definido en la lista editable.
     """
-    Construye una actividad completa a partir de una plantilla base.
+    usernames: list[str] = []
+    seen: set[str] = set()
 
-    Se añaden pequeñas variaciones deterministas para que no salgan 30 copias
-    idénticas, pero manteniendo métricas coherentes con las validaciones del
-    backend.
-    """
-    ciclo = indice // len(PLANTILLAS)
-    offset = (indice % 5) - 2  # -2, -1, 0, 1, 2
+    for value in TARGET_USERNAMES:
+        username = str(value).strip()
+        if username and username not in seen:
+            usernames.append(username)
+            seen.add(username)
 
-    distancia = int(base["distancia"] + (offset * 55) + (ciclo * 35))
+    return tuple(usernames)
+
+
+def generar_fechas_seed(
+    total: int = TOTAL_ACTIVIDADES,
+    referencia: datetime | None = None,
+) -> list[datetime]:
+    """Genera una fecha por día desde hace ``total`` días hasta ayer."""
+    ref = referencia or ahora_utc()
+    medianoche_utc = ref.astimezone(timezone.utc).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    horas_plan = (6, 7, 18, 19, 8, 20, 7, 18, 6, 19)
+    minutos_plan = (5, 15, 25, 35, 45, 10, 20, 30, 40, 50)
+
+    fechas: list[datetime] = []
+    for indice in range(total):
+        dias_atras = total - indice
+        dia = medianoche_utc - timedelta(days=dias_atras)
+        fechas.append(
+            dia
+            + timedelta(
+                hours=horas_plan[indice % len(horas_plan)],
+                minutes=minutos_plan[(indice * 3) % len(minutos_plan)],
+            )
+        )
+
+    return fechas
+
+
+def aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
+    """Construye una actividad completa y coherente a partir de una plantilla."""
+    ciclo = indice // len(ACTIVIDADES_BASE)
+    offset = (indice % 7) - 3  # -3, -2, -1, 0, 1, 2, 3
+    factor = 0.94 + ((indice % 11) * 0.018) + (ciclo * 0.004)
+
+    distancia = int(round(base["distancia"] * factor + (offset * 42) + ciclo * 28))
+    distancia = max(2400, distancia)
 
     if base["tipo"] == TipoActividad.CORRER:
         ritmo_mov = max(
-            300, int(base["ritmo_medio_movimiento"] + offset * 6 + ciclo * 3)
+            295,
+            int(base["ritmo_medio_movimiento"] + offset * 5 + ciclo * 2),
         )
         ritmo_total = max(
-            ritmo_mov + 6, int(base["ritmo_medio_total"] + offset * 6 + ciclo * 3)
+            ritmo_mov + 6,
+            int(base["ritmo_medio_total"] + offset * 6 + ciclo * 2),
         )
-        velocidad_media = max(800, int(360000 / ritmo_mov))
+        velocidad_media = max(800, int(round(360000 / ritmo_mov)))
         velocidad_max = max(
-            velocidad_media + 180,
-            int(base["velocidad_max_x100"] + offset * 12 + ciclo * 10),
+            velocidad_media + 170,
+            int(base["velocidad_max_x100"] + offset * 10 + ciclo * 9),
         )
-        pausas = max(0, int(base["pausas_manuales"] + (1 if offset > 1 else 0)))
+        pausas = max(0, int(base["pausas_manuales"] + (1 if offset >= 3 else 0)))
         auto_pausas = max(
-            0, int(base["auto_pausas"] + (1 if ciclo >= 3 and offset < 0 else 0))
+            0,
+            int(base["auto_pausas"] + (1 if ciclo >= 4 and offset < 0 else 0)),
         )
         duracion_mov = max(900, int(round(distancia * ritmo_mov / 1000)))
         duracion_parado = max(
-            20, int(base["duracion_parado"] + (offset * 8) + (ciclo * 5))
+            20,
+            int(base["duracion_parado"] + offset * 7 + ciclo * 4),
         )
         duracion_pausa_manual = max(
             0,
             int(
                 base["duracion_pausa_manual"]
-                + (10 if pausas > base["pausas_manuales"] else 0)
+                + (12 if pausas > base["pausas_manuales"] else 0)
             ),
         )
         calorias = max(
-            180,
+            170,
             int(
                 base["calorias_quemadas"]
-                + (distancia - base["distancia"]) * 0.06
-                + ciclo * 8
+                + (distancia - base["distancia"]) * 0.058
+                + ciclo * 7
             ),
         )
         alertas = (
             1
-            if velocidad_max >= 1350 and (indice % 3 == 0)
+            if velocidad_max >= 1350 and indice % 4 == 0
             else int(base["alertas_velocidad"])
         )
     else:
         ritmo_mov = max(
-            540, int(base["ritmo_medio_movimiento"] + offset * 10 + ciclo * 8)
+            540,
+            int(base["ritmo_medio_movimiento"] + offset * 9 + ciclo * 6),
         )
         ritmo_total = max(
-            ritmo_mov + 10, int(base["ritmo_medio_total"] + offset * 11 + ciclo * 8)
+            ritmo_mov + 10,
+            int(base["ritmo_medio_total"] + offset * 10 + ciclo * 6),
         )
-        velocidad_media = max(420, int(360000 / ritmo_mov))
+        velocidad_media = max(420, int(round(360000 / ritmo_mov)))
         velocidad_max = max(
             velocidad_media + 60,
-            int(base["velocidad_max_x100"] + offset * 8 + ciclo * 6),
+            int(base["velocidad_max_x100"] + offset * 7 + ciclo * 5),
         )
-        pausas = max(1, int(base["pausas_manuales"] + (1 if indice % 4 == 0 else 0)))
+        pausas = max(1, int(base["pausas_manuales"] + (1 if indice % 6 == 0 else 0)))
         auto_pausas = max(
-            1, int(base["auto_pausas"] + (1 if ciclo >= 2 and indice % 5 == 0 else 0))
+            1,
+            int(base["auto_pausas"] + (1 if ciclo >= 3 and indice % 5 == 0 else 0)),
         )
         duracion_mov = max(1800, int(round(distancia * ritmo_mov / 1000)))
         duracion_parado = max(
-            60, int(base["duracion_parado"] + (offset * 12) + (ciclo * 7))
+            60,
+            int(base["duracion_parado"] + offset * 10 + ciclo * 6),
         )
         duracion_pausa_manual = max(
             30,
@@ -274,17 +339,21 @@ def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
             ),
         )
         calorias = max(
-            150,
+            140,
             int(
                 base["calorias_quemadas"]
-                + (distancia - base["distancia"]) * 0.04
-                + ciclo * 6
+                + (distancia - base["distancia"]) * 0.038
+                + ciclo * 5
             ),
         )
         alertas = 0
 
+    zona = ZONAS_EXTRA[indice % len(ZONAS_EXTRA)]
+    km = f"{distancia / 1000:.1f}K"
+
     return {
-        "nombre": f"{base['nombre']} # {indice + 1}",
+        "client_local_id": f"{SEED_VERSION}-{indice + 1:03d}",
+        "nombre": f"{zona} {base['nombre']} #{indice + 1:02d} {km}",
         "tipo": base["tipo"],
         "distancia": distancia,
         "duracion_movimiento": duracion_mov,
@@ -304,17 +373,24 @@ def _aplicar_variacion(base: dict, indice: int, fecha_ruta: datetime) -> dict:
     }
 
 
+def generar_plan_actividades(
+    total: int = TOTAL_ACTIVIDADES,
+    referencia: datetime | None = None,
+) -> list[dict]:
+    """Genera el mismo plan de actividades para todas las cuentas objetivo."""
+    fechas = generar_fechas_seed(total=total, referencia=referencia)
+    return [
+        aplicar_variacion(ACTIVIDADES_BASE[i % len(ACTIVIDADES_BASE)], i, fechas[i])
+        for i in range(total)
+    ]
+
+
 def derivar_ritmo_maximo(
     ritmo_medio_movimiento: int,
     velocidad_max_x100: int,
     tipo: TipoActividad,
 ) -> int:
-    """Calcula un ritmo máximo plausible a partir del ritmo medio y la velocidad pico.
-
-    El objetivo es poblar el nuevo campo persistido sin fabricar valores imposibles,
-    acotando la mejora máxima según si la actividad es correr o andar.
-    """
-    # Gestiona derivar ritmo maximo.
+    """Calcula un ritmo máximo plausible a partir del ritmo medio y velocidad pico."""
     ritmo_medio_movimiento = max(1, int(ritmo_medio_movimiento))
     velocidad_max_x100 = max(1, int(velocidad_max_x100))
 
@@ -335,16 +411,11 @@ def derivar_ritmo_maximo(
 
 
 def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
-    """Transforma un diccionario del plan en un payload ``GuardarActividad`` válido.
-
-    Recalcula la duración total y rellena ``ritmo_maximo`` cuando la plantilla no
-    lo trae explícito, reutilizando la derivación coherente del propio script.
-    """
-    # Construye actividad.
+    """Transforma un diccionario del plan en un payload ``GuardarActividad`` válido."""
     duracion_total = int(ruta["duracion_movimiento"]) + int(ruta["duracion_parado"])
 
     return schemas.GuardarActividad(
-        client_local_id=None,
+        client_local_id=ruta["client_local_id"],
         tipo=ruta["tipo"],
         distancia=int(ruta["distancia"]),
         duracion_total=duracion_total,
@@ -373,103 +444,182 @@ def construir_actividad(ruta: dict) -> schemas.GuardarActividad:
     )
 
 
-async def obtener_usuario_aportillo(db):
-    """Localiza la cuenta ``aportillo`` ignorando diferencias de mayúsculas.
+async def obtener_usuarios_objetivo(
+    db,
+    usernames: tuple[str, ...],
+) -> tuple[list[database.Usuario], list[str]]:
+    """Localiza las cuentas por nombre exacto y devuelve también las faltantes."""
+    if not usernames:
+        return [], []
 
-    Así el seed sigue funcionando aunque el nombre se haya almacenado con otro
-    case en la base de datos de desarrollo.
-    """
     result = await db.execute(
-        select(database.Usuario).where(
-            func.lower(database.Usuario.nombre_usuario) == TARGET_USERNAME.lower()
+        select(database.Usuario).where(database.Usuario.nombre_usuario.in_(usernames))
+    )
+    encontrados = list(result.scalars().all())
+    por_username = {usuario.nombre_usuario: usuario for usuario in encontrados}
+
+    usuarios_ordenados = [
+        por_username[username] for username in usernames if username in por_username
+    ]
+    faltantes = [username for username in usernames if username not in por_username]
+
+    return usuarios_ordenados, faltantes
+
+
+async def obtener_seed_client_local_ids_existentes(
+    db,
+    usuario_id: int,
+    plan: list[dict],
+) -> set[str]:
+    """Devuelve las seeds de este plan que ya existen para el usuario."""
+    client_local_ids = [ruta["client_local_id"] for ruta in plan]
+    if not client_local_ids:
+        return set()
+
+    result = await db.execute(
+        select(database.Actividad.client_local_id).where(
+            database.Actividad.usuario_id == usuario_id,
+            database.Actividad.client_local_id.in_(client_local_ids),
         )
     )
-    return result.scalar_one_or_none()
+    return {value for value in result.scalars().all() if value}
 
 
-async def actividad_ya_existe(db, usuario_id: int, ruta: dict) -> bool:
+async def actividad_ya_existe(
+    db,
+    usuario_id: int,
+    ruta: dict,
+    client_local_ids_existentes: set[str],
+) -> bool:
     """Detecta si ya hay una actividad equivalente en la cuenta objetivo.
 
-    Usa usuario, fecha, tipo y distancia como huella suficiente para evitar
-    duplicados visibles cuando el script se ejecuta varias veces.
+    Prioriza ``client_local_id`` para que el seed sea idempotente aunque se
+    ejecute otro día. Mantiene una segunda huella por fecha, tipo y distancia
+    para evitar duplicados si alguna carga previa no tenía ``client_local_id``.
     """
+    if ruta["client_local_id"] in client_local_ids_existentes:
+        return True
+
     existente = await db.execute(
         select(database.Actividad.id).where(
             and_(
                 database.Actividad.usuario_id == usuario_id,
-                database.Actividad.fecha_ruta == ruta["fecha_ruta"],
-                database.Actividad.tipo == ruta["tipo"].value,
-                database.Actividad.distancia == ruta["distancia"],
+                or_(
+                    database.Actividad.client_local_id == ruta["client_local_id"],
+                    and_(
+                        database.Actividad.fecha_ruta == ruta["fecha_ruta"],
+                        database.Actividad.tipo == ruta["tipo"].value,
+                        database.Actividad.distancia == ruta["distancia"],
+                    ),
+                ),
             )
         )
     )
     return existente.scalar_one_or_none() is not None
 
 
-async def crear_actividades_aportillo() -> None:
-    """Genera el histórico planificado para ``aportillo`` usando el servicio real.
+async def sembrar_plan_en_usuario(
+    db,
+    usuario: database.Usuario,
+    plan: list[dict],
+) -> tuple[int, int]:
+    """Inserta el plan completo en una cuenta concreta si todavía no existe."""
+    total_creadas = 0
+    total_omitidas = 0
+    client_local_ids_existentes = await obtener_seed_client_local_ids_existentes(
+        db,
+        usuario.id,
+        plan,
+    )
 
-    Inicializa la base, valida que la cuenta exista, omite rutas repetidas y va
-    informando por consola de cada inserción o salto realizado.
-    """
-    # Construye actividades aportillo.
+    if len(client_local_ids_existentes) == len(plan):
+        print(
+            f"[SKIP] {usuario.nombre_usuario}: ya tiene las {len(plan)} seeds "
+            f"de {SEED_VERSION}. No se inserta nada."
+        )
+        return 0, len(plan)
+
+    for indice, ruta in enumerate(plan, start=1):
+        try:
+            if await actividad_ya_existe(
+                db,
+                usuario.id,
+                ruta,
+                client_local_ids_existentes,
+            ):
+                print(
+                    f"[SKIP] {usuario.nombre_usuario}: actividad # {indice} ya existe "
+                    f"({ruta['client_local_id']} - {ruta['fecha_ruta'].date().isoformat()})"
+                )
+                total_omitidas += 1
+                continue
+
+            datos = construir_actividad(ruta)
+            respuesta = await activities_service.crear_actividad(db, usuario.id, datos)
+            client_local_ids_existentes.add(ruta["client_local_id"])
+            total_creadas += 1
+            print(
+                f"[OK] {usuario.nombre_usuario}: actividad {respuesta['id']} "
+                f"- {ruta['nombre']} - {respuesta['tipo']} - {respuesta['distancia']}m "
+                f"- {ruta['fecha_ruta'].date().isoformat()}"
+            )
+        except Exception as exc:
+            await db.rollback()
+            total_omitidas += 1
+            print(
+                f"[SKIP] {usuario.nombre_usuario}: actividad # {indice} "
+                f"({ruta['nombre']}) -> {exc}"
+            )
+
+    return total_creadas, total_omitidas
+
+
+async def crear_actividades_seed() -> None:
+    """Genera actividades recientes para una o varias cuentas existentes."""
     await database.init_db()
 
     if database.AsyncSessionLocal is None:
         print("No se ha podido inicializar AsyncSessionLocal.")
         return
 
+    usernames = obtener_usernames_objetivo()
+    referencia = ahora_utc()
+    plan = generar_plan_actividades(referencia=referencia)
+
     async with database.AsyncSessionLocal() as db:
-        usuario = await obtener_usuario_aportillo(db)
-        if not usuario:
-            print("No se ha encontrado el usuario 'aportillo'.")
-            print("Crea primero esa cuenta y vuelve a ejecutar este seed.")
+        usuarios, faltantes = await obtener_usuarios_objetivo(db, usernames)
+
+        for username in faltantes:
+            print(f"[MISS] No se ha encontrado el usuario exacto '{username}'.")
+
+        if not usuarios:
+            print("No hay cuentas objetivo disponibles para sembrar.")
+            print("Crea primero las cuentas o edita TARGET_USERNAMES en este archivo.")
             return
 
-        plan = [
-            _aplicar_variacion(PLANTILLAS[i % len(PLANTILLAS)], i, FECHAS_SEED[i])
-            for i in range(TOTAL_ACTIVIDADES)
-        ]
+        total_creadas_global = 0
+        total_omitidas_global = 0
 
-        total_creadas = 0
-        total_omitidas = 0
-
-        for indice, ruta in enumerate(plan, start=1):
-            try:
-                if await actividad_ya_existe(db, usuario.id, ruta):
-                    print(
-                        f"[SKIP] {usuario.nombre_usuario}: actividad # {indice} ya existe "
-                        f"({ruta['nombre']} - {ruta['fecha_ruta'].isoformat()})"
-                    )
-                    total_omitidas += 1
-                    continue
-
-                datos = construir_actividad(ruta)
-                respuesta = await activities_service.crear_actividad(
-                    db, usuario.id, datos
-                )
-                total_creadas += 1
-                print(
-                    f"[OK] {usuario.nombre_usuario}: actividad {respuesta['id']} "
-                    f"- {ruta['nombre']} - {respuesta['tipo']} - {respuesta['distancia']}m "
-                    f"- {ruta['fecha_ruta'].date().isoformat()}"
-                )
-            except Exception as exc:
-                total_omitidas += 1
-                print(
-                    f"[SKIP] {usuario.nombre_usuario}: actividad # {indice} "
-                    f"({ruta['nombre']}) -> {exc}"
-                )
+        for usuario in usuarios:
+            print()
+            print(
+                f"== Sembrando actividades {SEED_NAME} para {usuario.nombre_usuario} =="
+            )
+            creadas, omitidas = await sembrar_plan_en_usuario(db, usuario, plan)
+            total_creadas_global += creadas
+            total_omitidas_global += omitidas
 
     print()
-    print(f"Usuario objetivo: {TARGET_USERNAME}")
+    print(f"Seed: {SEED_NAME} ({SEED_VERSION})")
+    print(f"Usuarios configurados: {', '.join(usernames)}")
     print(
-        f"Rango de fechas: {FECHAS_SEED[0].date().isoformat()} -> {FECHAS_SEED[-1].date().isoformat()}"
+        f"Rango de fechas: {plan[0]['fecha_ruta'].date().isoformat()} -> "
+        f"{plan[-1]['fecha_ruta'].date().isoformat()}"
     )
-    print(f"Actividades planificadas: {TOTAL_ACTIVIDADES}")
-    print(f"Actividades creadas: {total_creadas}")
-    print(f"Actividades omitidas: {total_omitidas}")
+    print(f"Actividades planificadas por usuario: {TOTAL_ACTIVIDADES}")
+    print(f"Actividades creadas en total: {total_creadas_global}")
+    print(f"Actividades omitidas en total: {total_omitidas_global}")
 
 
 if __name__ == "__main__":
-    asyncio.run(crear_actividades_aportillo())
+    asyncio.run(crear_actividades_seed())
