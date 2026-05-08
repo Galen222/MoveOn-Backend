@@ -31,7 +31,7 @@ from domain.enums import TipoActividad  # noqa: E402
 from services import activities_service  # noqa: E402
 
 SEED_NAME = "Aportillo"
-SEED_VERSION = "aportillo-v2-60"
+SEED_VERSION = "aportillo-v3-60"
 TOTAL_ACTIVIDADES = 60
 
 # Edita esta lista para sembrar una o varias cuentas.
@@ -54,8 +54,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "okbpF|~nUg@u@u@_Aw@kA_AiAw@qAe@w@a@u@c@w@u@_A_AgB",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.50090&mlon=-6.27820# map=15/36.50090/-6.27820",
+        "ruta_polilinea": "q_w}Etaie@iDa@eCg@mDmAkEuAmCk@w@?k@GaBaAkBqBi@yAK?gArAyClByCzAmBpA}BtBoEhDwFlD",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.50090&mlon=-6.27820#map=15/36.50090/-6.27820",
     },
     {
         "nombre": "La Caleta suave",
@@ -72,8 +72,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 2,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "}_ilFf}qUe@qA_A_Bg@q@w@qA_AiAw@w@q@e@u@_Ay@uA_AuAe@q@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.52950&mlon=-6.30870# map=15/36.52950/-6.30870",
+        "ruta_polilinea": "qt|}Enwne@c@p@_BTyAv@S`BF`Bw@h@sBG{A?i@~@eA|BwC~ByDnAeCn@eBdAuCvBsE`CyDfAmBS}AaAoCu@aDQ{A[WuA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.52950&mlon=-6.30870#map=15/36.52950/-6.30870",
     },
     {
         "nombre": "Campo del Sur tempo",
@@ -90,8 +90,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": "gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.52760&mlon=-6.29660# map=15/36.52760/-6.29660",
+        "ruta_polilinea": "g~{}Eplle@i@x@_Bl@iAtACxB@dBeAb@qBIiAH_@jAkArB}CbBiDp@sBd@eBtAiDnCaFzC{D`B}BZiCDgE`@kEr@_CLmAeAmBeCyCcCqBsA_@y@SuA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.52760&mlon=-6.29660#map=15/36.52760/-6.29660",
     },
     {
         "nombre": "San Fernando caños",
@@ -108,8 +108,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 2,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "gwjkFjykWi@w@u@aA_AiAq@w@w@aAc@u@i@w@q@aA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.46460&mlon=-6.19880# map=15/36.46460/-6.19880",
+        "ruta_polilinea": "spo}Efpyd@sAjCiCbByBrBaBhC_D`C{GfByIhByHrC{GlD}HvBwIWsGqDwCeGaBuF{ByD",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.46460&mlon=-6.19880#map=15/36.46460/-6.19880",
     },
     {
         "nombre": "Chiclana Sancti Petri",
@@ -126,8 +126,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": "ixnjFz~aZa@u@u@aA_AiAq@w@w@aAa@u@u@aA_AiAw@aA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.38160&mlon=-6.20580# map=15/36.38160/-6.20580",
+        "ruta_polilinea": "g|~|Epc{d@kCh@oDn@gCtA_B|AsCr@kF@_G@mEz@eExBiGxByHt@oGQcEk@aE[sF[iFqAsCcD{AkE{BeDkDwA",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.38160&mlon=-6.20580#map=15/36.38160/-6.20580",
     },
     {
         "nombre": "Valdelagrana paseo largo",
@@ -144,8 +144,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 2,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "i}yrEtofYc@u@o@aA_AiAq@w@w@aAc@u@q@aAc@u@",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.58150&mlon=-6.22670# map=15/36.58150/-6.22670",
+        "ruta_polilinea": "gve~Eft_e@}Eu@aDWcDs@iFaBmGiBwEs@{CFmDFeFq@uEoB_CuB{AmAeCo@iDiAwBeCq@cD{@{BaCi@sCD{AAaA]{BQgEp@{DvBgCbC",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.58150&mlon=-6.22670#map=15/36.58150/-6.22670",
     },
     {
         "nombre": "Jerez parques",
@@ -162,8 +162,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": "eulkFjzzUc@u@w@_Am@w@u@aA_AkAq@w@i@u@w@aA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.68650&mlon=-6.12610# map=15/36.68650/-6.12610",
+        "ruta_polilinea": "m}y~Et{kd@qEi@wCWeDaAmFmB}FaB}Dc@mCNuD@iFw@gEaByBqAiB_@_DMuDu@uByBw@oCsAcBqCg@iCWcAy@q@}AsBeAgDDeChAqAlAmBf@_ELsEr@{CpBaCnC",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.68650&mlon=-6.12610#map=15/36.68650/-6.12610",
     },
     {
         "nombre": "Tarifa costa",
@@ -180,8 +180,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": "wqmoFnyqYg@u@u@aA_AiAq@w@q@aAe@u@u@aA_AiA",
-        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.01430&mlon=-5.60440# map=15/36.01430/-5.60440",
+        "ruta_polilinea": "osvzEp{ea@gKkCyIiBkJwBwKkCkJyB{FqAwDoAiEkC{EoEcDsEgB}BgCFmFjBeHlCqGtCuGnDkJ`F",
+        "ruta_mapa_url": "https://www.openstreetmap.org/?mlat=36.01430&mlon=-5.60440#map=15/36.01430/-5.60440",
     },
 ]
 

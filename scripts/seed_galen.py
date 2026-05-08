@@ -31,7 +31,7 @@ from domain.enums import TipoActividad  # noqa: E402
 from services import activities_service  # noqa: E402
 
 SEED_NAME = 'Galen'
-SEED_VERSION = 'galen-v2-60'
+SEED_VERSION = 'galen-v3-60'
 TOTAL_ACTIVIDADES = 60
 
 # Edita esta lista para sembrar una o varias cuentas.
@@ -54,8 +54,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": 'skuuFvgoUfEcQzE{T~HoQjQgPjZoNjWoI~AgBfRcHnFiLo@sNgG{MiJwG{EsS',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490# map=15/40.41430/-3.68490',
+        "ruta_polilinea": "_tsuFxanUg@n@qA?qB@y@r@JzA@bAaABsAa@[@CrAeAfCoCxBeCnAsAlA}A|BkDrDkEjDsC|A}AFuBSkDDqCZ",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.41430&mlon=-3.68490#map=15/40.41430/-3.68490',
     },
     {
         "nombre": 'Madrid Río progresivo',
@@ -72,8 +72,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": 'gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310# map=15/40.40820/-3.70310',
+        "ruta_polilinea": "qcruFpsqUi@l@_B@sBTu@lABfB[`A{AAuA]WJKnAqAfBgC`AiBVy@b@uAjBgDbDyD~C}B`B_Bl@uCr@kE`BkDjB_Bp@{Ac@sCoAaDw@yAG",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.40820&mlon=-3.70310#map=15/40.40820/-3.70310',
     },
     {
         "nombre": 'Casa de Campo fondo',
@@ -90,8 +90,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": '_mtuFnowUgJwQgOwLkMgOcL_SnKwQ~RkC~RzE~MnP~HvVoAvVsI~MkH~C',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000# map=15/40.41440/-3.73000',
+        "ruta_polilinea": "cjsuFbxvUUv@qAXuAx@MnBXxBS`AoA?u@IFf@?~AkA|AoBl@cAF[f@oAnByC`DyCnC}AvAuA|@{C`BgEtC{CzC_BzAsBLqDOoDNeBj@{@LeB_AoC{BaBuBU_A",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.41440&mlon=-3.73000#map=15/40.41440/-3.73000',
     },
     {
         "nombre": 'Dehesa recovery walk',
@@ -108,8 +108,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 2,
         "pausas_manuales": 1,
         "alertas_velocidad": 0,
-        "ruta_polilinea": 'oo~uFvouUgJcVcGgYg@k[~DaYzJwVmFsLaQ_CoTuImPeRkEmUw@qYfGaY~QmPvUmGjWbLrTfU|QhYdBxZgI~XqOzToVjNmVfGkR{DcNqIgP}A_N{@',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750# map=15/40.46070/-3.70750',
+        "ruta_polilinea": "o_|uFtprUoA~B}BzAoBnBo@nCk@`CeCjAoEl@eEvAkDpD}ErFwH`FkInCkGdA}Ef@}F`@uGOuEqBoBsEsAkF",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.46070&mlon=-3.70750#map=15/40.46070/-3.70750',
     },
     {
         "nombre": 'Juan Carlos I controlado',
@@ -126,8 +126,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 1,
         "pausas_manuales": 1,
         "alertas_velocidad": 1,
-        "ruta_polilinea": 'ot~uFrx`U{Jo_@wG_b@?_b@vGg^nNo\\vWmRj_@uDj_@eCz]mGhZoNpSsUhLgYfEaZqC{Y}J{ViQyQqWwIe\\?w\\vGqZrNoVnWoQl_@cDz^?~HgYf@{TsI',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.45890&mlon=-3.59890# map=15/40.45890/-3.59890',
+        "ruta_polilinea": "_f{uF~k~TaEa@wCNoBP{C_@eFoAaFaAaDAmCl@gETmFm@yD_BqBoAyBa@qDWoDmAeBqCw@aDgBkB{Ce@}BO}@s@eAqAsCq@uDX",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.45890&mlon=-3.59890#map=15/40.45890/-3.59890',
     },
     {
         "nombre": 'Capricho paseo largo',
@@ -144,8 +144,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 2,
         "pausas_manuales": 2,
         "alertas_velocidad": 0,
-        "ruta_polilinea": 'wj|uFvc}ToFwQkCgT?gTbEuRnJmOtPuHpXeA|XcFjUcKjNuOjGqQ~@oR_DgQiJmNmPcIvUcD|W~@vWbEyT~HoP|LmJpQeCxQ?lQeDzEoP{@wLwG',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640# map=15/40.44990/-3.58640',
+        "ruta_polilinea": "_ayuFde|TgEm@sC?wBMsDgAsFiB}EiA}CC}C^_FCsFcAuD{AyB{@uCKiEQqDuAaB{CgAaDyBoB{CaAgBkAg@aC}@yCaCmBiCWmA\\w@LwBYuDYaD^",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.44990&mlon=-3.58640#map=15/40.44990/-3.58640',
     },
     {
         "nombre": 'Tío Pío series',
@@ -162,8 +162,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": '_houF~sgU_IwL{JwL_IgOrDgT~M_IvQR~MrIvGvQg@~RkHfOgJbGkHR',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880# map=15/40.38800/-3.64880',
+        "ruta_polilinea": "}|luFtihUgJsB_IcAaIgA_KmB}K}BwIeBuFkA_FkB_GaEeFkGsCyFmBoCoDQaGv@gG~@oFbA",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.38800&mlon=-3.64880#map=15/40.38800/-3.64880',
     },
     {
         "nombre": 'Castellana control',
@@ -180,8 +180,8 @@ ACTIVIDADES_BASE = [
         "auto_pausas": 0,
         "pausas_manuales": 0,
         "alertas_velocidad": 0,
-        "ruta_polilinea": '_xguF|aoUcEwNgHeMoLgHwOa@qM~DuHjIiDpLc@pMa',
-        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.43810&mlon=-3.69190# map=15/40.43810/-3.69190',
+        "ruta_polilinea": "akvuFbxpUmI}B}GwAiHoBoJoC_KgCwHkAoF]yFw@yGmCoFyEmCcFgBmDwCaCyD_CmCsC_BsBiCQiFjBiGlDgF`DeFvB",
+        "ruta_mapa_url": 'https://www.openstreetmap.org/?mlat=40.43810&mlon=-3.69190#map=15/40.43810/-3.69190',
     },
 ]
 

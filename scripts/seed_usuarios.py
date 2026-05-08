@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import asyncio  # noqa: E402
+import math  # noqa: E402
 from datetime import date, datetime, timedelta, timezone  # noqa: E402
 from collections.abc import Awaitable, Callable  # noqa: E402
 from typing import Any, TypedDict, cast  # noqa: E402
@@ -50,7 +51,7 @@ crear_actividad_async = cast(
 )
 
 VERSION_TERMINOS = "1.0"
-SEED_VERSION = "usuarios-v1-30u"
+SEED_VERSION = "usuarios-v2-30"
 TOTAL_USUARIOS = 30
 ACTIVIDADES_POR_USUARIO = 4
 UTC = timezone.utc
@@ -179,12 +180,71 @@ RUTAS_PROVINCIA_CONFIG = {
 }
 
 
-POLILINEAS_BASE = (
-    "}_ilFf}qUe@qA_A_Bg@q@w@qA_AiAw@w@q@e@u@_Ay@uA_AuAe@q@",
-    "u_thFzvtUe@w@i@cAq@oAw@cBy@qA_@u@q@aA_AkAu@{Aq@cA",
-    "gfsuFjgrUcGcGkHoPwGoPwBgT~HgOfOgEbQfEnKbQjCfT{E~RsIjMwLzE",
-    "ixnjFz~aZa@u@u@aA_AiAq@w@w@aAa@u@u@aA_AiAw@aA",
-)
+
+def codificar_polilinea(puntos: list[tuple[float, float]]) -> str:
+    """Codifica puntos lat/lon al formato Google Encoded Polyline válido."""
+    anterior_lat = 0
+    anterior_lon = 0
+    partes: list[str] = []
+
+    def codificar_valor(valor: int) -> None:
+        valor = ~(valor << 1) if valor < 0 else valor << 1
+        while valor >= 0x20:
+            partes.append(chr((0x20 | (valor & 0x1F)) + 63))
+            valor >>= 5
+        partes.append(chr(valor + 63))
+
+    for lat, lon in puntos:
+        lat_entero = int(round(lat * 100000))
+        lon_entero = int(round(lon * 100000))
+        codificar_valor(lat_entero - anterior_lat)
+        codificar_valor(lon_entero - anterior_lon)
+        anterior_lat = lat_entero
+        anterior_lon = lon_entero
+
+    return "".join(partes)
+
+
+def desplazar_coordenada(
+    lat: float,
+    lon: float,
+    norte_metros: float,
+    este_metros: float,
+) -> tuple[float, float]:
+    """Desplaza una coordenada unos metros manteniendo precisión suficiente."""
+    nueva_lat = lat + norte_metros / 111_320.0
+    nueva_lon = lon + este_metros / (
+        111_320.0 * max(0.15, math.cos(math.radians(lat)))
+    )
+    return round(nueva_lat, 5), round(nueva_lon, 5)
+
+
+def generar_puntos_ruta(
+    lat: float,
+    lon: float,
+    indice_usuario: int,
+    indice_actividad: int,
+    total_puntos: int,
+    semilla_provincia: int,
+) -> list[tuple[float, float]]:
+    """Crea una ruta no repetida, dentro de la provincia y con puntos variables."""
+    fase = (semilla_provincia % 29) * 0.07 + indice_usuario * 0.19 + indice_actividad * 0.83
+    largo = 900 + indice_actividad * 310 + (indice_usuario % 6) * 95 + (semilla_provincia % 7) * 40
+    ancho = 210 + indice_actividad * 55 + (indice_usuario % 5) * 26 + (semilla_provincia % 5) * 18
+    puntos: list[tuple[float, float]] = []
+
+    for punto in range(total_puntos):
+        progreso = punto / max(1, total_puntos - 1)
+        norte = (progreso - 0.5) * largo
+        norte += math.sin(progreso * math.pi * 2 + fase) * ancho * 0.40
+        este = math.sin(progreso * math.pi + fase) * ancho
+        este += math.cos(progreso * math.pi * 3 + fase) * ancho * 0.22
+        norte += math.sin((punto + 1) * 1.37 + fase) * 22
+        este += math.cos((punto + 1) * 1.11 + fase) * 22
+        puntos.append(desplazar_coordenada(lat, lon, norte, este))
+
+    return puntos
+
 
 METRICAS_BASE = (
     {
@@ -254,37 +314,82 @@ METRICAS_BASE = (
 )
 
 
-def generar_rutas_provincia(clave_provincia: str) -> list[RutaSeed]:
-    """Genera cuatro rutas ubicadas en la provincia indicada."""
+def generar_rutas_provincia(
+    clave_provincia: str,
+    indice_usuario: int,
+) -> list[RutaSeed]:
+    """Genera cuatro rutas propias para un usuario dentro de su provincia."""
     nombre_provincia, lat, lon, nombres = RUTAS_PROVINCIA_CONFIG[clave_provincia]
+    semilla_provincia = sum(ord(letra) for letra in clave_provincia)
     rutas: list[RutaSeed] = []
 
     for indice, metricas in enumerate(METRICAS_BASE):
-        variacion_lat = (indice - 1.5) * 0.006
-        variacion_lon = (indice - 1.5) * 0.006
+        total_puntos = 14 + ((semilla_provincia + indice_usuario * 4 + indice * 7) % 23)
+        puntos = generar_puntos_ruta(
+            lat,
+            lon,
+            indice_usuario,
+            indice,
+            total_puntos,
+            semilla_provincia,
+        )
+
+        es_correr = metricas["tipo"] == TipoActividad.CORRER
+        variacion_usuario = (indice_usuario % 8) * 85
+        variacion_provincia = (semilla_provincia % 10) * 45
+        distancia = int(metricas["distancia"] + indice * 230 + variacion_usuario + variacion_provincia)
+
+        if es_correr:
+            ritmo_movimiento = int(metricas["ritmo_medio_movimiento"] + (indice_usuario % 5) * 7 + indice * 4)
+            ritmo_total = max(ritmo_movimiento + 8, ritmo_movimiento + 14 + indice * 3)
+            ritmo_maximo = max(230, ritmo_movimiento - 38 - (indice_usuario % 4) * 3)
+            velocidad_maxima = max(1100, int(metricas["velocidad_max_x100"] + indice * 24 + (indice_usuario % 6) * 11))
+            auto_pausas = int(metricas["auto_pausas"] + (1 if indice_usuario % 6 == 0 else 0))
+            pausas_manuales = int(metricas["pausas_manuales"] + (1 if indice_usuario % 10 == 0 and indice > 0 else 0))
+            duracion_pausa_manual = int(metricas["duracion_pausa_manual"] + pausas_manuales * 12)
+        else:
+            ritmo_movimiento = int(metricas["ritmo_medio_movimiento"] + (indice_usuario % 6) * 11 + indice * 7)
+            ritmo_total = max(ritmo_movimiento + 12, ritmo_movimiento + 28 + indice * 4)
+            ritmo_maximo = max(480, ritmo_movimiento - 78 - (indice_usuario % 5) * 4)
+            velocidad_maxima = max(560, int(metricas["velocidad_max_x100"] + indice * 16 + (indice_usuario % 5) * 9))
+            auto_pausas = int(metricas["auto_pausas"] + (1 if indice_usuario % 4 == 0 else 0))
+            pausas_manuales = int(metricas["pausas_manuales"] + (1 if indice_usuario % 7 == 0 else 0))
+            duracion_pausa_manual = int(metricas["duracion_pausa_manual"] + pausas_manuales * 15)
+
+        duracion_movimiento = int(round(distancia * ritmo_movimiento / 1000))
+        duracion_parado = int(metricas["duracion_parado"] + indice * 18 + (indice_usuario % 4) * 12)
+        velocidad_media = max(1, int(round(360000 / ritmo_movimiento)))
+        calorias = int(metricas["calorias_quemadas"] + distancia * (0.030 if es_correr else 0.018) + indice_usuario * 3)
+        punto_mapa = puntos[len(puntos) // 2]
+
         ruta = dict(metricas)
         ruta.update(
             {
                 "nombre": f"{nombre_provincia} {nombres[indice]}",
-                "distancia": int(metricas["distancia"] + indice * 180),
-                "calorias_quemadas": int(metricas["calorias_quemadas"] + indice * 14),
-                "ruta_polilinea": POLILINEAS_BASE[indice],
+                "distancia": distancia,
+                "duracion_movimiento": duracion_movimiento,
+                "duracion_parado": duracion_parado,
+                "duracion_pausa_manual": duracion_pausa_manual,
+                "calorias_quemadas": calorias,
+                "ritmo_medio_movimiento": ritmo_movimiento,
+                "ritmo_medio_total": ritmo_total,
+                "ritmo_maximo": ritmo_maximo,
+                "velocidad_media_x100": velocidad_media,
+                "velocidad_max_x100": velocidad_maxima,
+                "auto_pausas": auto_pausas,
+                "pausas_manuales": pausas_manuales,
+                "alertas_velocidad": int(metricas["alertas_velocidad"] if es_correr else 0),
+                "ruta_polilinea": codificar_polilinea(puntos),
                 "ruta_mapa_url": (
-                    f"https://www.openstreetmap.org/?mlat={lat + variacion_lat:.5f}"
-                    f"&mlon={lon + variacion_lon:.5f}# map=15/"
-                    f"{lat + variacion_lat:.5f}/{lon + variacion_lon:.5f}"
+                    f"https://www.openstreetmap.org/?mlat={punto_mapa[0]:.5f}"
+                    f"&mlon={punto_mapa[1]:.5f}#map=15/"
+                    f"{punto_mapa[0]:.5f}/{punto_mapa[1]:.5f}"
                 ),
             }
         )
         rutas.append(ruta)  # type: ignore[arg-type]
 
     return rutas
-
-
-RUTAS_POR_PROVINCIA = {
-    clave: generar_rutas_provincia(clave)
-    for clave in RUTAS_PROVINCIA_CONFIG
-}
 
 
 def ahora_utc() -> datetime:
@@ -467,7 +572,7 @@ async def actividad_seed_ya_existe(
 async def crear_actividades_faltantes(db, usuario, indice_usuario: int) -> int:
     """Genera solo las actividades seed que todavía faltan para un usuario."""
     *_perfil, clave_rutas = USUARIOS_BASE[indice_usuario - 1]
-    rutas = RUTAS_POR_PROVINCIA[clave_rutas]
+    rutas = generar_rutas_provincia(clave_rutas, indice_usuario)
 
     creadas = 0
     for indice_actividad in range(1, ACTIVIDADES_POR_USUARIO + 1):
