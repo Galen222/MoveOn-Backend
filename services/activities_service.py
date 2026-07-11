@@ -66,6 +66,13 @@ async def crear_actividad(
             error_code="USER_NOT_FOUND",
         )
 
+    ritmo_maximo_resuelto = calculos.resolver_ritmo_maximo(
+        datos.ritmo_maximo,
+        datos.ritmo_medio_movimiento,
+        datos.velocidad_max_x100,
+        datos.tipo,
+    )
+
     if datos.client_local_id:
         actividad_existente = (
             await db.execute(
@@ -77,6 +84,11 @@ async def crear_actividad(
         ).scalar_one_or_none()
 
         if actividad_existente:
+            if actividad_existente.ritmo_maximo <= 0 and ritmo_maximo_resuelto > 0:
+                actividad_existente.ritmo_maximo = ritmo_maximo_resuelto
+                await db.commit()
+                await db.refresh(actividad_existente)
+
             logger.info(
                 "actividad_idempotente_reutilizada",
                 extra={
@@ -127,7 +139,7 @@ async def crear_actividad(
         pasos=datos.pasos,
         ritmo_medio_movimiento=datos.ritmo_medio_movimiento,
         ritmo_medio_total=datos.ritmo_medio_total,
-        ritmo_maximo=datos.ritmo_maximo,
+        ritmo_maximo=ritmo_maximo_resuelto,
         velocidad_media_x100=datos.velocidad_media_x100,
         velocidad_max_x100=datos.velocidad_max_x100,
         auto_pausas=datos.auto_pausas,
