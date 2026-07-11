@@ -29,9 +29,10 @@ import database  # noqa: E402
 import schemas  # noqa: E402
 from domain.enums import TipoActividad  # noqa: E402
 from services import activities_service  # noqa: E402
+from scripts.seed_catalogo import GALEN_SEED_VERSION  # noqa: E402
 
 SEED_NAME = 'Galen'
-SEED_VERSION = 'galen-v3-60'
+SEED_VERSION = GALEN_SEED_VERSION
 TOTAL_ACTIVIDADES = 60
 
 # Edita esta lista para sembrar una o varias cuentas.

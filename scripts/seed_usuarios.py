@@ -30,6 +30,10 @@ import database  # noqa: E402
 import schemas  # noqa: E402
 from domain.enums import GeneroUsuario, ProvinciaEspaña, TipoActividad  # noqa: E402
 from services import activities_service, user_service  # noqa: E402
+from scripts.seed_catalogo import (  # noqa: E402
+    USUARIOS_SEED_USERNAMES,
+    USUARIOS_SEED_VERSION,
+)
 
 
 RegistrarNuevoUsuarioAsync = Callable[
@@ -51,7 +55,7 @@ crear_actividad_async = cast(
 )
 
 VERSION_TERMINOS = "1.0"
-SEED_VERSION = "usuarios-v2-30"
+SEED_VERSION = USUARIOS_SEED_VERSION
 TOTAL_USUARIOS = 30
 ACTIVIDADES_POR_USUARIO = 4
 UTC = timezone.utc
@@ -120,6 +124,12 @@ USUARIOS_BASE = [
     ('hectornunez', 'Hector Nunez', GeneroUsuario.HOMBRE, provincia_safe('GRANADA'), 'GRANADA'),
     ('mariacrespo', 'Maria Crespo', GeneroUsuario.MUJER, provincia_safe('VALLADOLID'), 'VALLADOLID'),
 ]
+
+
+if tuple(usuario[0] for usuario in USUARIOS_BASE) != USUARIOS_SEED_USERNAMES:
+    raise RuntimeError(
+        "USUARIOS_BASE no coincide con USUARIOS_SEED_USERNAMES de seed_catalogo.py"
+    )
 
 ALTURAS = [178, 165, 182, 168, 176, 163, 180, 170, 183, 167, 179, 164, 181, 169, 177, 166, 184, 171, 175, 168, 180, 166, 177, 169, 182, 164, 179, 167, 181, 165]
 PESOS = [78.5, 58.2, 82.0, 61.4, 76.8, 57.9, 80.6, 60.5, 84.1, 59.8, 77.3, 56.7, 79.5, 62.1, 74.9, 58.8, 83.3, 63.0, 75.4, 60.9, 79.2, 59.1, 76.5, 62.4, 81.0, 58.0, 77.8, 60.2, 80.1, 57.6]
