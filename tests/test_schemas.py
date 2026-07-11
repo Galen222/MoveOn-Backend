@@ -31,6 +31,7 @@ def _payload(**kwargs):
         "duracion_parado": 120,
         "duracion_pausa_manual": 60,
         "calorias_quemadas": 350,
+        "pasos": 4321,
         "ritmo_medio_movimiento": 336,
         "ritmo_medio_total": 360,
         "ritmo_maximo": 290,
@@ -54,7 +55,19 @@ class TestGuardarActividadSchema:
         assert data.duracion_total == 1800
         assert data.duracion_movimiento == 1680
         assert data.duracion_parado == 120
+        assert data.pasos == 4321
         assert data.ritmo_maximo == 290
+
+    def test_pasos_opcionales_para_dispositivos_sin_sensor(self):
+        """Verifica que actividades sin sensor conservan pasos como desconocidos."""
+        data = schemas.GuardarActividad(**_payload(pasos=None))
+        assert data.pasos is None
+
+    @pytest.mark.parametrize("pasos", [-1, 500001])
+    def test_pasos_fuera_de_rango(self, pasos):
+        """Rechaza contadores negativos o físicamente inverosímiles."""
+        with pytest.raises(ValidationError):
+            schemas.GuardarActividad(**_payload(pasos=pasos))
 
     def test_acepta_client_local_id(self):
         """Verifica que acepta client local id opcional."""

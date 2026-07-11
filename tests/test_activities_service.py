@@ -44,6 +44,7 @@ def _make_datos() -> schemas.GuardarActividad:
         duracion_parado=120,
         duracion_pausa_manual=60,
         calorias_quemadas=300,
+        pasos=4321,
         ritmo_medio_movimiento=336,
         ritmo_medio_total=360,
         ritmo_maximo=290,
@@ -92,6 +93,7 @@ class TestCrearActividad:
         actividad_existente.duracion_parado = 120
         actividad_existente.duracion_pausa_manual = 60
         actividad_existente.calorias_quemadas = 300
+        actividad_existente.pasos = 4321
         actividad_existente.ritmo_medio_movimiento = 336
         actividad_existente.ritmo_medio_total = 360
         actividad_existente.ritmo_maximo = 290
@@ -156,11 +158,13 @@ class TestCrearActividad:
         assert actividad.duracion_total == 1800
         assert actividad.duracion_movimiento == 1680
         assert actividad.duracion_parado == 120
+        assert actividad.pasos == 4321
         assert actividad.ritmo_medio_movimiento == 336
         assert actividad.ritmo_medio_total == 360
         assert actividad.ritmo_maximo == 290
         assert resultado["velocidad_max_x100"] == 1840
         assert resultado["ritmo_maximo"] == 290
+        assert resultado["pasos"] == 4321
         assert resultado["nuevo_total_puntos"] == 15
         assert usuario.total_metros == 6000
         assert usuario.total_calorias == 350

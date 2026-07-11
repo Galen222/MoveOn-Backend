@@ -1430,6 +1430,7 @@ class Actividad(Base):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     calorias_quemadas: Mapped[int] = mapped_column(Integer, nullable=False)
+    pasos: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     ritmo_medio_movimiento: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
@@ -1505,6 +1506,10 @@ class Actividad(Base):
         CheckConstraint(
             "calorias_quemadas > 0 AND calorias_quemadas <= 10000",
             name="ck_actividades_calorias_range",
+        ),
+        CheckConstraint(
+            "pasos IS NULL OR (pasos >= 0 AND pasos <= 500000)",
+            name="ck_actividades_pasos_range",
         ),
         CheckConstraint(
             "ritmo_medio_movimiento >= 0 AND ritmo_medio_movimiento <= 3600",
@@ -1784,6 +1789,32 @@ class Actividad(Base):
             AppValidationError: ``CALORIES_MUST_BE_POSITIVE`` o ``CALORIES_OUT_OF_RANGE``.
         """
         return validators.validar_calorias_logica(valor)
+
+    @validates("pasos")
+    def validar_pasos(self, key: str, valor: Optional[int]) -> Optional[int]:
+        """Valida el contador opcional de pasos de la actividad.
+
+        ``None`` identifica actividades antiguas o dispositivos sin sensor de pasos;
+        cero es un conteo válido cuando la sesión termina sin detectar ninguno.
+        """
+        if valor is None:
+            return None
+        if isinstance(valor, bool) or not isinstance(valor, int):
+            raise AppValidationError(
+                "Error: Los pasos deben ser un número entero",
+                "STEPS_MUST_BE_INTEGER",
+            )
+        if valor < 0:
+            raise AppValidationError(
+                "Error: Los pasos no pueden ser negativos",
+                "STEPS_NEGATIVE",
+            )
+        if valor > 500000:
+            raise AppValidationError(
+                "Error: El número de pasos está fuera de rango",
+                "STEPS_OUT_OF_RANGE",
+            )
+        return valor
 
     @validates("ritmo_medio_movimiento")
     def validar_ritmo_medio_movimiento(self, key: str, valor: int) -> int:

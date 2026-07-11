@@ -66,6 +66,7 @@ def _payload(**kwargs):
         "duracion_parado": 120,
         "duracion_pausa_manual": 60,
         "calorias_quemadas": 350,
+        "pasos": 4321,
         "ritmo_medio_movimiento": 336,
         "ritmo_medio_total": 360,
         "ritmo_maximo": 290,
@@ -92,6 +93,7 @@ def _actividad_fake(**kwargs):
         "duracion_parado": 120,
         "duracion_pausa_manual": 60,
         "calorias_quemadas": 350,
+        "pasos": 4321,
         "ritmo_medio_movimiento": 336,
         "ritmo_medio_total": 360,
         "ritmo_maximo": 290,
@@ -133,6 +135,7 @@ class TestGuardarActividadRouter:
         body = response.json()
         assert body["duracion_total"] == 1800
         assert body["duracion_movimiento"] == 1680
+        assert body["pasos"] == 4321
         assert body["ritmo_medio_total"] == 360
         assert body["ritmo_maximo"] == 290
         assert body["velocidad_max_x100"] == 1840

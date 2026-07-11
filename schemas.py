@@ -1898,6 +1898,7 @@ class GuardarActividad(BaseModel):
     duracion_parado: StrictInt = Field(default=0)
     duracion_pausa_manual: StrictInt = Field(default=0)
     calorias_quemadas: StrictInt = Field(...)
+    pasos: Optional[StrictInt] = Field(default=None)
     ritmo_medio_movimiento: StrictInt = Field(default=0)
     ritmo_medio_total: StrictInt = Field(default=0)
     ritmo_maximo: StrictInt = Field(default=0)
@@ -2239,6 +2240,36 @@ class GuardarActividad(BaseModel):
             AppValidationError: ``CALORIES_MUST_BE_POSITIVE`` o ``CALORIES_OUT_OF_RANGE``.
         """
         return validators.validar_calorias_logica(v)
+
+    @field_validator("pasos", mode="wrap")
+    @classmethod
+    def validar_pasos_custom(cls, v, handler):
+        """Traduce a un error canónico los conteos de pasos que no sean enteros."""
+        if v is None:
+            return None
+        return validators.interceptar_error_pydantic(
+            v,
+            handler,
+            "STEPS_MUST_BE_INTEGER",
+            "Error: Los pasos deben ser un número entero",
+        )
+
+    @field_validator("pasos")
+    @classmethod
+    def validar_pasos(cls, v):
+        """Acepta ``None`` para dispositivos sin sensor y limita conteos corruptos."""
+        if v is None:
+            return None
+        if v < 0:
+            raise AppValidationError(
+                "Error: Los pasos no pueden ser negativos", "STEPS_NEGATIVE"
+            )
+        if v > 500000:
+            raise AppValidationError(
+                "Error: El número de pasos está fuera de rango",
+                "STEPS_OUT_OF_RANGE",
+            )
+        return v
 
     @field_validator("ritmo_medio_movimiento", "ritmo_medio_total", mode="wrap")
     @classmethod
@@ -2845,6 +2876,7 @@ class RespuestaObtenerActividad(BaseModel):
     duracion_parado: int
     duracion_pausa_manual: int
     calorias_quemadas: int
+    pasos: Optional[int] = None
     ritmo_medio_movimiento: int
     ritmo_medio_total: int
     ritmo_maximo: int
