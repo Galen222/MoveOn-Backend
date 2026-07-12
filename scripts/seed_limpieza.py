@@ -19,7 +19,7 @@ coincidencia exacta del nombre, por lo que nunca afecta a ``GalenG``.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 import asyncio
@@ -80,21 +80,31 @@ class SeleccionLimpieza:
         return tuple(seleccionados)
 
 
-@dataclass
-class TotalesEliminados:
-    """Acumulados que deben restarse a un usuario por actividades borradas."""
+@dataclass(frozen=True)
+class TotalesActividades:
+    """Acumulados exactos calculados desde las actividades persistidas."""
 
     actividades: int = 0
     metros: int = 0
     calorias: int = 0
     duracion: int = 0
 
-    def agregar(self, actividad: database.Actividad) -> None:
-        """Añade las métricas de una actividad al acumulado."""
-        self.actividades += 1
-        self.metros += int(actividad.distancia or 0)
-        self.calorias += int(actividad.calorias_quemadas or 0)
-        self.duracion += int(actividad.duracion_total or 0)
+
+def aplicar_totales_recalculados(
+    usuario: database.Usuario,
+    totales: TotalesActividades,
+) -> None:
+    """Sustituye los acumulados del perfil por los valores reales calculados.
+
+    No resta diferencias sobre los valores actuales porque esos valores pueden
+    estar desincronizados si hubo una edición manual, una importación antigua o
+    una limpieza previa incompleta. La tabla ``actividades`` es la fuente de
+    verdad para estos cuatro campos derivados.
+    """
+    usuario.total_metros = totales.metros
+    usuario.total_calorias = totales.calorias
+    usuario.total_duracion_segundos = totales.duracion
+    usuario.total_actividades = totales.actividades
 
 
 @dataclass(frozen=True)
@@ -276,43 +286,61 @@ async def obtener_usuarios_seed(
     return eliminables, omitidos
 
 
-async def ajustar_acumulados_usuarios(
+async def recalcular_acumulados_usuarios(
     db: AsyncSession,
-    actividades: list[database.Actividad],
+    usuario_ids: set[int],
     usuarios_que_se_borraran: set[int],
 ) -> None:
-    """Resta de cada perfil las métricas de las actividades seed eliminadas."""
-    acumulados: dict[int, TotalesEliminados] = defaultdict(TotalesEliminados)
-    for actividad in actividades:
-        usuario_id = int(actividad.usuario_id)
-        if usuario_id in usuarios_que_se_borraran:
-            continue
-        acumulados[usuario_id].agregar(actividad)
+    """Reconstruye los acumulados desde las actividades que quedan en la DB.
 
-    if not acumulados:
+    Debe invocarse después de marcar las actividades seed para borrado y hacer
+    ``flush``. Así, aunque el perfil tuviera acumulados antiguos o editados a
+    mano, los cuatro campos derivados quedan exactamente sincronizados con las
+    filas reales de ``actividades``.
+    """
+    ids_recalculables = tuple(sorted(usuario_ids - usuarios_que_se_borraran))
+    if not ids_recalculables:
         return
 
-    result = await db.execute(
+    result_usuarios = await db.execute(
         select(database.Usuario)
-        .where(database.Usuario.id.in_(tuple(acumulados)))
+        .where(database.Usuario.id.in_(ids_recalculables))
         .with_for_update()
     )
-    usuarios = list(result.scalars().all())
+    usuarios = list(result_usuarios.scalars().all())
+
+    result_totales = await db.execute(
+        select(
+            database.Actividad.usuario_id.label("usuario_id"),
+            func.count(database.Actividad.id).label("actividades"),
+            func.coalesce(func.sum(database.Actividad.distancia), 0).label("metros"),
+            func.coalesce(
+                func.sum(database.Actividad.calorias_quemadas),
+                0,
+            ).label("calorias"),
+            func.coalesce(
+                func.sum(database.Actividad.duracion_total),
+                0,
+            ).label("duracion"),
+        )
+        .where(database.Actividad.usuario_id.in_(ids_recalculables))
+        .group_by(database.Actividad.usuario_id)
+    )
+
+    totales_por_usuario = {
+        int(fila.usuario_id): TotalesActividades(
+            actividades=int(fila.actividades or 0),
+            metros=int(fila.metros or 0),
+            calorias=int(fila.calorias or 0),
+            duracion=int(fila.duracion or 0),
+        )
+        for fila in result_totales.all()
+    }
 
     for usuario in usuarios:
-        eliminado = acumulados[int(usuario.id)]
-        usuario.total_metros = max(0, int(usuario.total_metros or 0) - eliminado.metros)
-        usuario.total_calorias = max(
-            0,
-            int(usuario.total_calorias or 0) - eliminado.calorias,
-        )
-        usuario.total_duracion_segundos = max(
-            0,
-            int(usuario.total_duracion_segundos or 0) - eliminado.duracion,
-        )
-        usuario.total_actividades = max(
-            0,
-            int(usuario.total_actividades or 0) - eliminado.actividades,
+        aplicar_totales_recalculados(
+            usuario,
+            totales_por_usuario.get(int(usuario.id), TotalesActividades()),
         )
 
 
@@ -389,14 +417,20 @@ async def ejecutar_limpieza(
             return ResultadoLimpieza(0, 0, omitidos)
 
         try:
-            await ajustar_acumulados_usuarios(
-                db,
-                actividades,
-                usuarios_que_se_borraran,
-            )
+            usuarios_afectados = {
+                int(actividad.usuario_id) for actividad in actividades
+            }
 
             for actividad in actividades:
                 await db.delete(actividad)
+
+            # Fuerza el DELETE antes de agregar las actividades restantes.
+            await db.flush()
+            await recalcular_acumulados_usuarios(
+                db,
+                usuarios_afectados,
+                usuarios_que_se_borraran,
+            )
 
             for usuario in usuarios:
                 await db.delete(usuario)

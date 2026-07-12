@@ -85,3 +85,119 @@ def test_objetivo_cuenta_galen_no_confunde_galeng():
     assert seed_limpieza.es_cuenta_galen_objetivo(galen_minusculas) is True
     assert seed_limpieza.es_cuenta_galen_objetivo(galeng) is False
     assert seed_limpieza.es_cuenta_galen_objetivo(otro) is False
+
+
+def test_aplicar_totales_recalculados_reemplaza_valores_desincronizados():
+    usuario = SimpleNamespace(
+        total_metros=424_905,
+        total_calorias=29_680,
+        total_duracion_segundos=189_359,
+        total_actividades=3,
+    )
+    totales = seed_limpieza.TotalesActividades(
+        actividades=3,
+        metros=6_305,
+        calorias=746,
+        duracion=4_657,
+    )
+
+    seed_limpieza.aplicar_totales_recalculados(usuario, totales)
+
+    assert usuario.total_metros == 6_305
+    assert usuario.total_calorias == 746
+    assert usuario.total_duracion_segundos == 4_657
+    assert usuario.total_actividades == 3
+
+
+def test_aplicar_totales_recalculados_pone_cero_si_no_quedan_actividades():
+    usuario = SimpleNamespace(
+        total_metros=10_000,
+        total_calorias=700,
+        total_duracion_segundos=3_600,
+        total_actividades=2,
+    )
+
+    seed_limpieza.aplicar_totales_recalculados(
+        usuario,
+        seed_limpieza.TotalesActividades(),
+    )
+
+    assert usuario.total_metros == 0
+    assert usuario.total_calorias == 0
+    assert usuario.total_duracion_segundos == 0
+    assert usuario.total_actividades == 0
+
+
+class _ResultadoEscalares:
+    def __init__(self, valores):
+        self._valores = valores
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._valores
+
+
+class _ResultadoFilas:
+    def __init__(self, filas):
+        self._filas = filas
+
+    def all(self):
+        return self._filas
+
+
+class _DbRecalculoFake:
+    def __init__(self, usuarios, filas):
+        self._resultados = [
+            _ResultadoEscalares(usuarios),
+            _ResultadoFilas(filas),
+        ]
+
+    async def execute(self, _consulta):
+        return self._resultados.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_recalcular_acumulados_usa_suma_real_y_pone_cero_sin_filas():
+    galen = SimpleNamespace(
+        id=22,
+        total_metros=424_905,
+        total_calorias=29_680,
+        total_duracion_segundos=189_359,
+        total_actividades=3,
+    )
+    sin_actividades = SimpleNamespace(
+        id=23,
+        total_metros=5_000,
+        total_calorias=300,
+        total_duracion_segundos=2_000,
+        total_actividades=1,
+    )
+    fila_galen = SimpleNamespace(
+        usuario_id=22,
+        actividades=3,
+        metros=6_305,
+        calorias=746,
+        duracion=4_657,
+    )
+    db = _DbRecalculoFake([galen, sin_actividades], [fila_galen])
+
+    await seed_limpieza.recalcular_acumulados_usuarios(
+        db,
+        usuario_ids={22, 23},
+        usuarios_que_se_borraran=set(),
+    )
+
+    assert (
+        galen.total_metros,
+        galen.total_calorias,
+        galen.total_duracion_segundos,
+        galen.total_actividades,
+    ) == (6_305, 746, 4_657, 3)
+    assert (
+        sin_actividades.total_metros,
+        sin_actividades.total_calorias,
+        sin_actividades.total_duracion_segundos,
+        sin_actividades.total_actividades,
+    ) == (0, 0, 0, 0)
